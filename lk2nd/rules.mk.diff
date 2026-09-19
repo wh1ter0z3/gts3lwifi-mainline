@@ -1,0 +1,10 @@
+diff --git a/lk2nd/device/dts/msm8996/rules.mk b/lk2nd/device/dts/msm8996/rules.mk
+index f6410b9f..664709d0 100644
+--- a/lk2nd/device/dts/msm8996/rules.mk
++++ b/lk2nd/device/dts/msm8996/rules.mk
+@@ -10,3 +10,5 @@ ADTBS += \
+ 	$(LOCAL_DIR)/msm8996-xiaomi-mi5s.dtb \
+ 	$(LOCAL_DIR)/msm8996-xiaomi-mi5s-plus.dtb \
+ 	$(LOCAL_DIR)/msm8996-zte-axon7.dtb \
++	$(LOCAL_DIR)/msm8996-samsung-gts3lwifi.dtb \
++	$(LOCAL_DIR)/msm8996-samsung-gts3llte.dtb \

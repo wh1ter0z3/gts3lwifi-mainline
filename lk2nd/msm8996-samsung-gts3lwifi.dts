@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+#include <skeleton64.dtsi>
+#include <lk2nd.dtsi>
+
+/ {
+	/* Values from the stock SM-T820 rev05 DTB: APQ8096 (291), PM8994 + PM8004 */
+	qcom,msm-id = <291 0x30001>;
+	qcom,board-id = <8 0>, <8 2>, <8 4>, <8 5>;
+	qcom,pmic-id = <0x20009 0x1000c 0x0 0x0>;
+};
+
+&lk2nd {
+	model = "Samsung Galaxy Tab S3 (WiFi)";
+	compatible = "samsung,gts3lwifi";
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		/* PM8994 GPIO 2 is the Home key; Volume Up is GPIO 3 */
+		volume-up {
+			lk2nd,code = <KEY_VOLUMEUP>;
+			gpios = <&pmic 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		};
+
+		/* Volume Down is the PM8994 PON RESIN input, not a GPIO */
+		volume-down {
+			lk2nd,code = <KEY_VOLUMEDOWN>;
+			gpios = <&pmic_pon GPIO_PMIC_RESIN 0>;
+		};
+	};
+};

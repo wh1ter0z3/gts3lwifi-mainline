@@ -1,0 +1,24 @@
+#include "../apq8096-samsung-gts3lwifi.dts"
+
+/* Test C: disable CoreSight only */
+&{/soc@0/stm@3002000} { status = "disabled"; };
+&{/soc@0/tpiu@3020000} { status = "disabled"; };
+&{/soc@0/funnel@3021000} { status = "disabled"; };
+&{/soc@0/funnel@3022000} { status = "disabled"; };
+&{/soc@0/funnel@3023000} { status = "disabled"; };
+&{/soc@0/funnel@3025000} { status = "disabled"; };
+&{/soc@0/replicator@3026000} { status = "disabled"; };
+&{/soc@0/etf@3027000} { status = "disabled"; };
+&{/soc@0/etr@3028000} { status = "disabled"; };
+&{/soc@0/debug@3810000} { status = "disabled"; };
+&{/soc@0/etm@3840000} { status = "disabled"; };
+&{/soc@0/debug@3910000} { status = "disabled"; };
+&{/soc@0/etm@3940000} { status = "disabled"; };
+&{/soc@0/funnel@39b0000} { status = "disabled"; };
+&{/soc@0/debug@3a10000} { status = "disabled"; };
+&{/soc@0/etm@3a40000} { status = "disabled"; };
+&{/soc@0/debug@3b10000} { status = "disabled"; };
+&{/soc@0/etm@3b40000} { status = "disabled"; };
+&{/soc@0/funnel@3bb0000} { status = "disabled"; };
+&{/soc@0/funnel@3bc0000} { status = "disabled"; };
+&{/etm} { status = "disabled"; };

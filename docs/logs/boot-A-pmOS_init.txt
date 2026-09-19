@@ -1,0 +1,12 @@
+tee: /dev/: Is a directory
+  ❬❬ PMOS STAGE 1 ❭❭
+initramfs version: 3.12.3-r1
+  ❬❬ PMOS STAGE 2 ❭❭
+  Setting up USB gadget through configfs
+Trying to start server with parameters: Server IP addr: 172.16.42.1:67, client IP addr: 172.16.42.2, interface: usb0
+Trying to mount subpartitions for 10 seconds...
+ERROR: failed to mount subpartitions!
+Creating logs disk
+32+0 records in
+32+0 records out
+33554432 bytes (32.0MB) copied, 0.165456 seconds, 193.4MB/s

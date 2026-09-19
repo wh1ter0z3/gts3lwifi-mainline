@@ -1,0 +1,30 @@
+# Reference: <https://postmarketos.org/devicepkg>
+maintainer="psigod <psigod@example.com>"
+pkgname=device-samsung-gts3lwifi
+pkgdesc="Samsung Galaxy Tab S3 (Wi-Fi)"
+pkgver=1
+pkgrel=0
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck"
+depends="
+	linux-postmarketos-qcom-msm8996
+	mkbootimg
+	postmarketos-base
+	soc-qcom-msm8996
+	"
+makedepends="devicepkg-dev"
+source="deviceinfo"
+
+build() {
+	devicepkg_build $startdir $pkgname
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+}
+
+sha512sums="
+93bc3cfa88faf5dff5f5d6ed17455707b9eb841aa9379deebb905fce6afb3ef3bf92f65d136112fddb29f84382ad3b0537fc5f5327c850d64a74e21f252b9ea1  deviceinfo
+"

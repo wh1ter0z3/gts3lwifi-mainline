@@ -1,0 +1,321 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Samsung Galaxy Tab S3 Wi-Fi (SM-T820), codename gts3lwifi, board rev 05
+ *
+ * SoC / PMIC set, from the live downstream DTB (qcom,pmic-id = <0x20009 0x1000c>):
+ *   APQ8096 (msm-id 291) + PM8994 + PM8004. No PMI8994, no modem.
+ * Internal storage: eMMC on SDHC1 (cmdline: androidboot.bootdevice=7464900.sdhci).
+ *   UFS silicon is present but unpopulated; ufshc/ufsphy stay disabled.
+ *
+ * Minimal bring-up skeleton: reserved memory, PM8994 RPM rails, eMMC rootfs,
+ * dwc3 USB in peripheral mode. Panel, touch, sensors, charger, audio,
+ * Wi-Fi/BT and S-Pen are intentionally absent.
+ *
+ * Sources (all cross-checked against the live DTB with phandles resolved):
+ *   downstream arch/arm64/boot/dts/samsung/msm8996-sec-gts3lwifi-r05.dts{,i}
+ *   downstream arch/arm64/boot/dts/samsung/msm8996-pinctrl-sec-gts3lwifi-r05.dtsi
+ *   downstream arch/arm64/boot/dts/samsung/msm8996-sec-common.dtsi
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include "msm8996.dtsi"
+#include "pm8994.dtsi"
+#include "pm8004.dtsi"
+
+/ {
+	model = "Samsung Galaxy Tab S3 Wi-Fi";
+	compatible = "samsung,gts3lwifi", "qcom,apq8096";
+	chassis-type = "tablet";
+
+	/*
+	 * Bootloader DTB-selection IDs (documented in arm/qcom.yaml).
+	 * lk2nd matches the root compatible instead, so these only matter
+	 * if the DTB is ever offered to the stock bootloader.
+	 */
+	qcom,msm-id = <291 0x30001>;
+	qcom,board-id = <8 5>;
+
+	aliases {
+		mmc0 = &sdhc1;
+	};
+
+	/*
+	 * No memory@ node on purpose: msm8996.dtsi carries the placeholder
+	 * and lk2nd rewrites it from the DDR partition table. The live DTB
+	 * shows 0x80000000 + 2 GiB and 0x100000000 + 0x7e5e0000, i.e. 4 GiB
+	 * with a hole - hardcoding a flat 4 GiB at 0x80000000 overshoots.
+	 */
+
+	/*
+	 * Fixed regions from the downstream tree that msm8996.dtsi does not
+	 * already cover. hyp/xbl/smem/tz (0x85800000-0x88800000) and the PIL
+	 * regions (0x88800000-0x91700000) in msm8996.dtsi are subsets of the
+	 * downstream removed/modem/peripheral carve-outs, so they are kept
+	 * as they are and only the gaps are added here.
+	 */
+	reserved-memory {
+		/* Downstream ss_plog@84700000 */
+		memory@84700000 {
+			reg = <0x0 0x84700000 0x0 0x400000>;
+			no-map;
+		};
+
+		/* Same slot and layout as downstream ramoops@84B00000 */
+		ramoops@84b00000 {
+			compatible = "ramoops";
+			reg = <0x0 0x84b00000 0x0 0x100000>;
+			record-size = <0x40000>;
+			console-size = <0x40000>;
+			ftrace-size = <0x40000>;
+			pmsg-size = <0x40000>;
+		};
+
+		/* Downstream lk_region@0 */
+		memory@84c00000 {
+			reg = <0x0 0x84c00000 0x0 0x400000>;
+			no-map;
+		};
+
+		/*
+		 * Samsung sec_debug: sec_dbg=0x1ff000@0x85000000 and
+		 * sec_log=0x200000@0x85200000 on the downstream cmdline.
+		 * S-Boot reads this back in upload mode, keep it untouched.
+		 */
+		memory@85000000 {
+			reg = <0x0 0x85000000 0x0 0x400000>;
+			no-map;
+		};
+
+		/*
+		 * Tail of the downstream peripheral_region@8f400000
+		 * (0x8f400000-0x92500000) not covered by msm8996.dtsi.
+		 */
+		memory@91700000 {
+			reg = <0x0 0x91700000 0x0 0xe00000>;
+			no-map;
+		};
+
+		/* Bootloader framebuffer, downstream cont_splash_mem */
+		cont_splash_mem: memory@9a400000 {
+			reg = <0x0 0x9a400000 0x0 0x1c00000>;
+			no-map;
+		};
+
+		/* Samsung TIMA (KNOX EL2), downstream tima_region@9C000000 */
+		memory@9c000000 {
+			reg = <0x0 0x9c000000 0x0 0x200000>;
+			no-map;
+		};
+
+		/* Samsung RKP (KNOX EL2), downstream rkp_region@0x9C200000 */
+		memory@9c200000 {
+			reg = <0x0 0x9c200000 0x0 0xf00000>;
+			no-map;
+		};
+
+		/* Pool handed to TrustZone, downstream qseecom_mem */
+		memory@fec00000 {
+			reg = <0x0 0xfec00000 0x0 0x1400000>;
+			no-map;
+		};
+	};
+
+	/* Battery / charger system rail, root of every PM8994 supply below */
+	vph_pwr: regulator-vph-pwr {
+		compatible = "regulator-fixed";
+		regulator-name = "vph_pwr";
+		regulator-min-microvolt = <3800000>;
+		regulator-max-microvolt = <3800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	/*
+	 * SM57xx rails
+	 * ------------
+	 * None on this board feed USB, eMMC or the panel:
+	 *  - SM5703 (msm8996-sm5703.dtsi) is only included by gts2llte,
+	 *    never by any gts3lwifi/gts3llte revision.
+	 *  - SM5705 (msm8996-sm5705.dtsi) is charger + MUIC + fuel gauge +
+	 *    flash LED. The downstream defconfig does not set
+	 *    CONFIG_REGULATOR_SM5705, no such driver exists in that tree,
+	 *    and no *-supply anywhere resolves to an SM5705 node.
+	 *  - USB PHYs: PM8994 L28 / L12 / L24. eMMC: PM8994 L20 / S4.
+	 *    Panel VDD 3.3 V: external LDO gated by LCD_LDO_EN (TLMM 46),
+	 *    modelled downstream as the fake regulator "ssreg-vdd".
+	 * The only non-PMIC rail that therefore needs a stub is that LDO.
+	 */
+	vreg_lcd_vdd_3p3: regulator-lcd-vdd-3p3 {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_lcd_vdd_3p3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&tlmm 46 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
+		vin-supply = <&vph_pwr>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&lcd_ldo_en_default>;
+	};
+};
+
+/*
+ * PM8994 rails via RPM. Only the rails consumed below are declared; the
+ * parent-supply map follows apq8096-db820c.dts (PM8994 + no PMI8994 boost
+ * bypass here, so the battery-fed LDO groups hang off vph_pwr directly).
+ * Voltages match the downstream msm8996-regulator.dtsi / live DTB.
+ */
+&rpm_requests {
+	regulators-0 {
+		compatible = "qcom,rpm-pm8994-regulators";
+
+		vdd_s1-supply = <&vph_pwr>;
+		vdd_s2-supply = <&vph_pwr>;
+		vdd_s3-supply = <&vph_pwr>;
+		vdd_s4-supply = <&vph_pwr>;
+		vdd_s5-supply = <&vph_pwr>;
+		vdd_s6-supply = <&vph_pwr>;
+		vdd_s7-supply = <&vph_pwr>;
+		vdd_s8-supply = <&vph_pwr>;
+		vdd_s9-supply = <&vph_pwr>;
+		vdd_s10-supply = <&vph_pwr>;
+		vdd_s11-supply = <&vph_pwr>;
+		vdd_s12-supply = <&vph_pwr>;
+		vdd_l2_l26_l28-supply = <&vreg_s3a_1p3>;
+		vdd_l6_l12_l32-supply = <&vreg_s5a_2p15>;
+		vdd_l13_l19_l23_l24-supply = <&vph_pwr>;
+		vdd_l20_l21-supply = <&vph_pwr>;
+		vdd_lvs1_2-supply = <&vreg_s4a_1p8>;
+
+		vreg_s3a_1p3: s3 {
+			regulator-name = "vreg_s3a_1p3";
+			regulator-min-microvolt = <1300000>;
+			regulator-max-microvolt = <1300000>;
+		};
+
+		/* eMMC I/O rail; downstream marks it qcom,vdd-io-always-on */
+		vreg_s4a_1p8: s4 {
+			regulator-name = "vreg_s4a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-always-on;
+		};
+
+		vreg_s5a_2p15: s5 {
+			regulator-name = "vreg_s5a_2p15";
+			regulator-min-microvolt = <2150000>;
+			regulator-max-microvolt = <2150000>;
+		};
+
+		/* USB PHY PLL / core 1.8 V (downstream vdda18 / core-supply) */
+		vreg_l12a_1p8: l12 {
+			regulator-name = "vreg_l12a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-allow-set-load;
+		};
+
+		/* eMMC flash rail; downstream marks it qcom,vdd-always-on */
+		vreg_l20a_2p95: l20 {
+			regulator-name = "vreg_l20a_2p95";
+			regulator-min-microvolt = <2950000>;
+			regulator-max-microvolt = <2950000>;
+			regulator-allow-set-load;
+			regulator-always-on;
+		};
+
+		/* USB2 PHY D+/D- 3.075 V (downstream vdda33) */
+		vreg_l24a_3p075: l24 {
+			regulator-name = "vreg_l24a_3p075";
+			regulator-min-microvolt = <3075000>;
+			regulator-max-microvolt = <3075000>;
+		};
+
+		/* USB PHY digital 0.925 V (downstream vdd-supply on both PHYs) */
+		vreg_l28a_0p925: l28 {
+			regulator-name = "vreg_l28a_0p925";
+			regulator-min-microvolt = <925000>;
+			regulator-max-microvolt = <925000>;
+			regulator-allow-set-load;
+		};
+	};
+};
+
+/*
+ * USB
+ * ---
+ * Downstream: ssusb@6a00000 + dwc3@6a00000, maximum-speed "super-speed",
+ * usb-phy = <qusb@7411000 ssphy@7410000>. The mainline equivalents are
+ * usb3 (qcom,msm8996-dwc3) + usb3_dwc3, hsusb_phy1 (QUSB2, 0x7411000) and
+ * usb3phy (QMP, 0x7410000).
+ *
+ * Bring-up goes high-speed only, on hsusb_phy1: SuperSpeed on this Type-C
+ * port needs the s2mm005 CC/PD controller (BLSP1 QUP5 I2C, TLMM 83/84,
+ * IRQ TLMM 73) for lane orientation plus the redriver enable on PM8994
+ * GPIO 14 (downstream usb-notifier qcom,gpios_redriver_en), neither of
+ * which has a mainline driver. usb3phy below keeps its supply routing
+ * documented and stays disabled.
+ *
+ * TLMM: the downstream USB nodes reference no TLMM pinctrl state at all,
+ * and the mainline usb3/PHY nodes need none, so there is nothing to add.
+ *
+ * On v6.19 msm8996.dtsi still uses the child-node form, which binds to
+ * dwc3-qcom-legacy.c. That glue reads dr_mode from the child node and
+ * forces the VBUS-valid override for every non-host mode, so no extcon or
+ * role switch is needed to enumerate as a gadget; dr_mode = "peripheral"
+ * additionally keeps the dwc3 core itself in device mode.
+ */
+&hsusb_phy1 {
+	vdd-supply = <&vreg_l28a_0p925>;
+	vdda-pll-supply = <&vreg_l12a_1p8>;
+	vdda-phy-dpdm-supply = <&vreg_l24a_3p075>;
+	status = "okay";
+};
+
+&usb3phy {
+	vdda-phy-supply = <&vreg_l28a_0p925>;
+	vdda-pll-supply = <&vreg_l12a_1p8>;
+	status = "disabled";
+};
+
+&usb3 {
+	/* usb3phy is off, so clock the core from UTMI instead of the pipe clock */
+	qcom,select-utmi-as-pipe-clk;
+	status = "okay";
+};
+
+&usb3_dwc3 {
+	dr_mode = "peripheral";
+	maximum-speed = "high-speed";
+	phys = <&hsusb_phy1>;
+	phy-names = "usb2-phy";
+	snps,is-utmi-l1-suspend;
+	snps,hird-threshold = /bits/ 8 <0>;
+	snps,usb2-gadget-lpm-disable;
+};
+
+/*
+ * eMMC (rootfs). Downstream sdhci@7464900: bus-width 8, HS400_1p8v /
+ * HS200_1p8v / DDR_1p8v, vdd = PM8994 L20, vdd-io = PM8994 S4, both
+ * always-on. sdc1_state_on / sdc1_state_off pinctrl comes from msm8996.dtsi.
+ */
+&sdhc1 {
+	vmmc-supply = <&vreg_l20a_2p95>;
+	vqmmc-supply = <&vreg_s4a_1p8>;
+	mmc-hs400-1_8v;
+	mmc-hs200-1_8v;
+	status = "okay";
+};
+
+&tlmm {
+	/* LCD_LDO_EN, from downstream mdss_dsi_active (gpio46) */
+	lcd_ldo_en_default: lcd-ldo-en-default-state {
+		pins = "gpio46";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+};

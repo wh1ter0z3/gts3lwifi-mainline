@@ -1,0 +1,192 @@
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x511f2112]
+[    0.000000] Linux version 6.19.5 (pmos@wh1t3r0s3) (Alpine clang version 23.1.1, LLD 23.1.1) #2-postmarketos-qcom-msm8996 SMP PREEMPT Tue Sep 15 07:59:25 UTC
+[    0.000000] KASLR disabled due to lack of seed
+[    0.000000] Machine model: Samsung Galaxy Tab S3 Wi-Fi
+[    0.000000] Malformed early option 'earlycon'
+[    0.000000] efi: UEFI not found.
+[    0.000000] OF: reserved mem: 0x00000000a1e00000..0x00000000a1ffffff (2048 KiB) nomap non-reusable rmtfs
+[    0.000000] OF: reserved mem: 0x00000000bfffc000..0x00000000bfffffff (16 KiB) nomap non-reusable mpss-metadata
+[    0.000000] OF: reserved mem: 0x0000000085800000..0x0000000085dfffff (6144 KiB) nomap non-reusable memory@85800000
+[    0.000000] OF: reserved mem: 0x0000000085e00000..0x0000000085ffffff (2048 KiB) nomap non-reusable memory@85e00000
+[    0.000000] OF: reserved mem: 0x0000000086000000..0x00000000861fffff (2048 KiB) nomap non-reusable smem-mem@86000000
+[    0.000000] OF: reserved mem: 0x0000000086200000..0x00000000887fffff (38912 KiB) nomap non-reusable memory@86200000
+[    0.000000] OF: reserved mem: 0x0000000088800000..0x000000008e9fffff (100352 KiB) nomap non-reusable mpss@88800000
+[    0.000000] OF: reserved mem: 0x000000008ea00000..0x00000000904fffff (27648 KiB) nomap non-reusable adsp@8ea00000
+[    0.000000] OF: reserved mem: 0x0000000090500000..0x0000000090efffff (10240 KiB) nomap non-reusable slpi@90500000
+[    0.000000] Reserved memory: created DMA memory pool at 0x0000000090f00000, size 1 MiB
+[    0.000000] OF: reserved mem: initialized node gpu@90f00000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x0000000090f00000..0x0000000090ffffff (1024 KiB) nomap non-reusable gpu@90f00000
+[    0.000000] OF: reserved mem: 0x0000000091000000..0x00000000914fffff (5120 KiB) nomap non-reusable venus@91000000
+[    0.000000] OF: reserved mem: 0x0000000091500000..0x00000000916fffff (2048 KiB) nomap non-reusable mba@91500000
+[    0.000000] OF: reserved mem: 0x0000000084700000..0x0000000084afffff (4096 KiB) nomap non-reusable memory@84700000
+[    0.000000] OF: reserved mem: 0x00000000b2280000..0x00000000b22fffff (512 KiB) map non-reusable ramoops@84b00000
+[    0.000000] OF: reserved mem: 0x0000000084c00000..0x0000000084ffffff (4096 KiB) nomap non-reusable memory@84c00000
+[    0.000000] OF: reserved mem: 0x0000000085000000..0x00000000853fffff (4096 KiB) nomap non-reusable memory@85000000
+[    0.000000] OF: reserved mem: 0x0000000091700000..0x00000000924fffff (14336 KiB) nomap non-reusable memory@91700000
+[    0.000000] OF: reserved mem: 0x000000009a400000..0x000000009bffffff (28672 KiB) nomap non-reusable memory@9a400000
+[    0.000000] OF: reserved mem: 0x000000009c000000..0x000000009c1fffff (2048 KiB) nomap non-reusable memory@9c000000
+[    0.000000] OF: reserved mem: 0x000000009c200000..0x000000009d0fffff (15360 KiB) nomap non-reusable memory@9c200000
+[    0.000000] OF: reserved mem: 0x00000000fec00000..0x00000000ffffffff (20480 KiB) nomap non-reusable memory@fec00000
+[    0.000000] NUMA: Faking a node at [mem 0x0000000080000000-0x000000017e5dffff]
+[    0.000000] NODE_DATA(0) allocated [mem 0x17de0e180-0x17de102ff]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000080000000-0x00000000ffffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   [mem 0x0000000100000000-0x000000017e5dffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x00000000846fffff]
+[    0.000000]   node   0: [mem 0x0000000084700000-0x0000000084afffff]
+[    0.000000]   node   0: [mem 0x0000000084b00000-0x0000000084bfffff]
+[    0.000000]   node   0: [mem 0x0000000084c00000-0x00000000853fffff]
+[    0.000000]   node   0: [mem 0x0000000085400000-0x00000000857fffff]
+[    0.000000]   node   0: [mem 0x0000000085800000-0x00000000924fffff]
+[    0.000000]   node   0: [mem 0x0000000092500000-0x000000009a3fffff]
+[    0.000000]   node   0: [mem 0x000000009a400000-0x000000009d0fffff]
+[    0.000000]   node   0: [mem 0x000000009d100000-0x00000000a1dfffff]
+[    0.000000]   node   0: [mem 0x00000000a1e00000-0x00000000a1ffffff]
+[    0.000000]   node   0: [mem 0x00000000a2000000-0x00000000bfffbfff]
+[    0.000000]   node   0: [mem 0x00000000bfffc000-0x00000000bfffffff]
+[    0.000000]   node   0: [mem 0x00000000c0000000-0x00000000febfffff]
+[    0.000000]   node   0: [mem 0x00000000fec00000-0x00000000ffffffff]
+[    0.000000]   node   0: [mem 0x0000000100000000-0x000000017e5dffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x000000017e5dffff]
+[    0.000000] On node 0, zone Normal: 6688 pages in unavailable ranges
+[    0.000000] cma: Reserved 32 MiB at 0x00000000fcc00000
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.0 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: MIGRATE_INFO_TYPE not supported.
+[    0.000000] psci: SMC Calling Convention v1.0
+[    0.000000] psci: OSI mode supported.
+[    0.000000] psci: [Firmware Bug]: failed to set PC mode: -1
+[    0.000000] percpu: Embedded 32 pages/cpu s92568 r8192 d30312 u131072
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.000000] CPU features: detected: GICv3 CPU interface
+[    0.000000] CPU features: detected: Spectre-v2
+[    0.000000] CPU features: detected: Spectre-v4
+[    0.000000] CPU features: detected: Spectre-BHB
+[    0.000000] CPU features: detected: Kernel page table isolation (KPTI)
+[    0.000000] CPU features: detected: Qualcomm Technologies Falkor/Kryo erratum 1003
+[    0.000000] CPU features: detected: Qualcomm erratum 1009, or ARM erratum 1286807, 2441009
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: earlycon console=ttyMSM0,115200 lk2nd.pass-ramoops=zap
+[    0.000000] printk: log buffer data + meta data: 131072 + 458752 = 589824 bytes
+[    0.000000] Dentry cache hash table entries: 524288 (order: 10, 4194304 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+[    0.000000] software IO TLB: area num 4.
+[    0.000000] software IO TLB: mapped [mem 0x00000000f8c00000-0x00000000fcc00000] (64MB)
+[    0.000000] Fallback order for Node 0: 0 
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 1041888
+[    0.000000] Policy zone: Normal
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=128, Order=0-3, MinObjects=0, CPUs=4, Nodes=1
+[    0.000000] ftrace: allocating 51182 entries in 200 pages
+[    0.000000] ftrace: allocated 200 pages with 3 groups
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=512 to nr_cpu_ids=4.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Rude variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=4
+[    0.000000] RCU Tasks: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.000000] RCU Tasks Rude: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.000000] RCU Tasks Trace: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] GIC: enabling workaround for GICv3: Qualcomm MSM8996 broken firmware
+[    0.000000] GICv3: 608 SPIs implemented
+[    0.000000] GICv3: 0 Extended SPIs implemented
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GICv3: GICv3 features: 16 PPIs
+[    0.000000] GICv3: GICv4 features: 
+[    0.000000] GICv3: GICD_CTLR.DS=0, SCR_EL3.FIQ=1
+[    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x0000000009c00000
+[    0.000000] ITS: No ITS available, not enabling LPIs
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer running at 19.20MHz (virt).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x46d987e47, max_idle_ns: 440795202767 ns
+[    0.000000] sched_clock: 56 bits at 19MHz, resolution 52ns, wraps every 4398046511078ns
+[    0.000182] Console: colour dummy device 80x25
+[    0.000273] Calibrating delay loop (skipped), value calculated using timer frequency.. 38.40 BogoMIPS (lpj=76800)
+[    0.000283] pid_max: default: 32768 minimum: 301
+[    0.000526] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.000540] Mountpoint-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.003074] rcu: Hierarchical SRCU implementation.
+[    0.003086] rcu: 	Max phase no-delay instances is 1000.
+[    0.003336] Timer migration: 1 hierarchy levels; 8 children per group; 1 crossnode level
+[    0.003915] EFI services will not be available.
+[    0.004327] smp: Bringing up secondary CPUs ...
+[    0.005285] Detected PIPT I-cache on CPU1
+[    0.005419] GICv3: CPU1: found redistributor 1 region 0:0x0000000009c40000
+[    0.005475] CPU1: Booted secondary processor 0x0000000001 [0x511f2112]
+[    0.010195] Detected PIPT I-cache on CPU2
+[    0.015294] GICv3: CPU2: found redistributor 100 region 0:0x0000000009c80000
+[    0.016626] CPU2: Booted secondary processor 0x0000000100 [0x511f2052]
+[    0.028193] Detected PIPT I-cache on CPU3
+[    0.033246] GICv3: CPU3: found redistributor 101 region 0:0x0000000009cc0000
+[    0.034509] CPU3: Booted secondary processor 0x0000000101 [0x511f2052]
+[    0.041838] smp: Brought up 1 node, 4 CPUs
+[    0.041890] SMP: Total of 4 processors activated.
+[    0.041894] CPU: All CPU(s) started at EL1
+[    0.041904] CPU features: detected: 32-bit EL0 Support
+[    0.041920] CPU features: detected: CRC32 instructions
+[    0.041946] CPU features: detected: PMUv3
+[    0.043969] alternatives: applying system-wide alternatives
+[    0.054907] Memory: 3650628K/4167552K available (17344K kernel code, 2798K rwdata, 4712K rodata, 1664K init, 643K bss, 477580K reserved, 32768K cma-reserved)
+[    0.063662] devtmpfs: initialized
+[    0.081140] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.081179] posixtimers hash table entries: 2048 (order: 3, 32768 bytes, linear)
+[    0.081210] futex hash table entries: 1024 (65536 bytes on 1 NUMA nodes, total 64 KiB, linear).
+[    0.081569] 25920 pages in range for non-PLT usage
+[    0.081582] 517440 pages in range for PLT usage
+[    0.082734] DMI not present or invalid.
+[    0.092202] NET: Registered PF_NETLINK/PF_ROETE protocol family
+[    0.094809] DMA: preallocated 512 KiB GFP_KERNEL pool for atomic allocations
+[    0.094932] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.094988] audit: initializing netlink subsys (disabled)
+[    0.097045] audit: type=2000 audit(0.092:1): state=initialized audit_enabled=0 res=1
+[    0.098497] thermal_sys: Registered thermal governor 'step_wise'
+[    0.098514] thermal_sys: Registered thermal governor 'power_allocator'
+[    0.098624] cpuidle: using governor menu
+[    0.098772] NET: Registered PF_QIPCRTR protocol family
+[    0.098959] hw-breakpoint: found 8 breakpoint and 4 watchpoint registers.
+[    0.101432] ASID allocator initialised with 32768 entries
+[    0.101729] Serial: AMBA PL011 UART driver
+[    0.102662] pstore: Using crash dump compression: deflate
+[    0.102680] printk: legacy console [ramoops-1] enabled
+[    0.103282] pstore: Registered ramoops as persistent store backend
+[    0.103290] ramoops: using 0x80000@0xb2280000, ecc: 0
+[    0.111355] /soc@0/stm@3002000: Fixed dependency cycle(s) with /soc@0/funnel@3021000
+[    0.111477] /soc@0/tpiu@3020000: Fixed dependency cycle(s) with /soc@0/replicator@3026000
+[    0.111564] /soc@0/funnel@3021000: Fixed dependency cycle(s) with /soc@0/funnel@3025000
+[    0.111590] /soc@0/funnel@3021000: Fixed dependency cycle(s) with /soc@0/stm@3002000
+[    0.111654] /soc@0/funnel@3022000: Fixed dependency cycle(s) with /soc@0/funnel@3025000
+[    0.111702] /soc@0/funnel@3022000: Fixed dependency cycle(s) with /soc@0/funnel@3bc0000
+[    0.111793] /soc@0/funnel@3023000: Fixed dependency cycle(s) with /soc@0/funnel@3025000
+[    0.111813] /soc@0/funnel@3023000: Fixed dependency cycle(s) with /etm
+[    0.111974] /soc@0/funnel@3025000: Fixed dependency cycle(s) with /soc@0/etf@3027000
+[    0.112000] /soc@0/funnel@3025000: Fixed dependency cycle(s) with /soc@0/funnel@3023000
+[    0.112052] /soc@0/funnel@3025000: Fixed dependency cycle(s) with /soc@0/funnel@3022000
+[    0.112121] /soc@0/funnel@3025000: Fixed dependency cycle(s) with /soc@0/funnel@3021000
+[    0.112166] /soc@0/replicator@3026000: Fixed dependency cycle(s) with /soc@0/tpiu@3020000
+[    0.112190] /soc@0/replicator@3026000: Fixed dependency cycle(s) with /soc@0/etr@3028000
+[    0.112263] /soc@0/replicator@3026000: Fixed dependency cycle(s) with /soc@0/etf@3027000
+[    0.112312] /soc@0/etf@3027000: Fixed dependency cycle(s) with /soc@0/replicator@3026000
+[    0.112379] /soc@0/etf@3027000: Fixed dependency cycle(s) with /soc@0/funnel@3025000
+[    0.112474] /soc@0/etr@3028000: Fixed dependency cycle(s) with /soc@0/replicator@3026000
+[    0.112571] /soc@0/etm@3840000: Fixed dependency cycle(s) with /soc@0/funnel@39b0000
+[    0.112669] /soc@0/etm@3940000: Fixed dependency cycle(s) with /soc@0/funnel@39b0000
+[    0.112751] /soc@0/funnel@39b0000: Fixed dependency cycle(s) with /soc@0/funnel@3bc0000
+[    0.112775] /soc@0/funnel@39b0000: Fixed dependency cycle(s) with /soc@0/etm@3940000
+[    0.112799] /soc@0/funnel@39b0000: Fixed dependency cycle(s) with /soc@0/etm@3840000
+[    0.112901] /soc@0/etm@3a40000: Fixed dependency cycle(s) with /soc@0/funnel@3bb0000
+[    0.112997] /soc@0/etm@3b40000: Fixed dependency cycle(s) with /soc@0/funnel@3bb0000
+[    0.113078] /soc@0/funnel@3bb0000: Fixed dependency cycle(s) with /soc@0/funnel@3bc0000
+[    0.113102] /soc@0/funnel@3bb0000: Fixed dependency cycle(s) with /soc@0/etm@3b40000
+[    0.113125] /soc@0/funnel@3bb0000: Fixed dependency cycle(s) with /soc@0/etm@3a40000
+[    0.113199] /soc@0/funnel@3bc0000: Fixed dependency cycle(s) with /soc@0/funnel@3022000
+[    0.113230] /soc@0/funnel@3bc0000: Fixed dependency cycle(s) with /soc@0/funnel@3bb0000
+[    0.113262] /soc@0/funnel@3bc0000: Fixed dependency cycle(s) with /soc@0/funnel@39b0000
+[    0.113469] /soc@0/interrupt-controller@9bc0000: Fixed dependency cycle(s) with /soc@0/interrupt-controller@9bc0000

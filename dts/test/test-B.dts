@@ -1,0 +1,7 @@
+#include "../apq8096-samsung-gts3lwifi.dts"
+
+/* Test B: reserve TLMM GPIOs only */
+&tlmm {
+	/* Test: keep Linux away from every TLMM GPIO except LCD_LDO_EN (46) */
+	gpio-reserved-ranges = <0 46>, <47 103>;
+};
