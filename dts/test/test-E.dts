@@ -1,0 +1,7 @@
+#include "../apq8096-samsung-gts3lwifi.dts"
+
+/* Test E: reserve GPIO 0-74 (except 46), free 75-149 */
+&tlmm {
+	/delete-property/ gpio-reserved-ranges;
+	gpio-reserved-ranges = <0 46>, <47 28>;
+};

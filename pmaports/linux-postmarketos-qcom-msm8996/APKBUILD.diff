@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..5a900e5c91 100644
+index 601fa9f44e..7877d913ef 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
@@ -23,5 +23,5 @@ index 601fa9f44e..5a900e5c91 100644
  sha512sums="
  dd30dd113ad9f0b4ab3771ea655de2becce7ddaf5066d2f860b7bb1eb78573137313191d9da740b152348f9f89894ace2bb94fb195e340f7b6dabedeebbc929f  linux-v6.19.5-msm8996.tar.gz
  6a1e3a18fb454378ef5569a6951426d118144985c9028e663f46d28cde6784723296601d3756176045e22d706a9195938804c6a82f02fcf548e18d2e66c35b27  config-postmarketos-qcom-msm8996.aarch64
-+9296b5d0e1dd04123ddceaec48f8cd4f35a34b1d03983f943201ef4f4b1f4cddf158d17a87e35e35d21521de43cd53346e0d487c2e5ccfc67cf035e911d83a93  0001-add-samsung-gts3lwifi-dts.patch
++dfb0cba014d7ca85e3275b553774d217c0f38670832bb83e50cccdeeee7b1ccb2780a4501605edc5beb7ef7622611c885d1355cfdbc4f3cb7912721635df26cb  0001-add-samsung-gts3lwifi-dts.patch
  "
