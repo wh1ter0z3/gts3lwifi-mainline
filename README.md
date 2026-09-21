@@ -36,16 +36,12 @@ the tablet about 9 s into boot. The board DTS lists them in
 - `scripts/` - regenerate the kernel patch, build tester packages
 - `docs/` - tester instructions and boot logs
 
-## lk2nd notes
+## lk2nd
 
-Samsung's bootloader only accepts a boot image packed with the stock load
-addresses (base 0x80000000, kernel +0x8000, ramdisk +0x2200000, tags
-+0x2000000, page size 4096) and, so far, only with the stock device trees
-appended. With stock device trees lk2nd shows "Unknown (FIXME!)" but works.
-With such a large lk2nd image, never use `fastboot flash boot` from lk2nd:
-it writes at a 512 KiB offset and would overwrite lk2nd. `fastboot boot` is safe.
-
-Keys: Volume Up = PM8994 GPIO 3, Home = PM8994 GPIO 2, Volume Down = PON RESIN.
+Samsung's bootloader only accepts lk2nd when it is packed like a stock boot
+image. What works, what does not, and a packing script are in
+[docs/lk2nd.md](docs/lk2nd.md). Short version: use `fastboot boot`, not
+`fastboot flash boot`, until the reproducible packing is confirmed.
 
 ## Debugging without a display or UART
 
