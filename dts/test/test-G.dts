@@ -1,0 +1,7 @@
+#include "../apq8096-samsung-gts3lwifi.dts"
+
+/* Test G: reserve only the fingerprint SPI pins (25-28) */
+&tlmm {
+	/delete-property/ gpio-reserved-ranges;
+	gpio-reserved-ranges = <25 4>;
+};

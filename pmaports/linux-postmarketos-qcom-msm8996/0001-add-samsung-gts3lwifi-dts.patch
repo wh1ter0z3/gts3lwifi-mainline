@@ -1,6 +1,6 @@
-From ffada57bbac3542a6632c978d5db3aeff676f76e Mon Sep 17 00:00:00 2001
+From 833bba4e3fa070d8bc48e7f86d86221fd9bcc5c8 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
-Date: Sun, 20 Sep 2026 05:02:25 +0000
+Date: Mon, 21 Sep 2026 08:54:29 +0000
 Subject: [PATCH] arm64: dts: qcom: Add Samsung Galaxy Tab S3 Wi-Fi (gts3lwifi)
 
 Minimal bring-up device tree for the Samsung Galaxy Tab S3 Wi-Fi
@@ -13,8 +13,8 @@ Signed-off-by: psigod <psigod@example.com>
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ---
  arch/arm64/boot/dts/qcom/Makefile             |   1 +
- .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 330 ++++++++++++++++++
- 2 files changed, 331 insertions(+)
+ .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 329 ++++++++++++++++++
+ 2 files changed, 330 insertions(+)
  create mode 100644 arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 
 diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
@@ -31,10 +31,10 @@ index 821146b..15f2e50 100644
  dtb-$(CONFIG_ARCH_QCOM)	+= ipq5018-tplink-archer-ax55-v1.dtb
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 new file mode 100644
-index 0000000..928ebd4
+index 0000000..a5ce2d6
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
-@@ -0,0 +1,330 @@
+@@ -0,0 +1,329 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Samsung Galaxy Tab S3 Wi-Fi (SM-T820), codename gts3lwifi, board rev 05
@@ -349,13 +349,12 @@ index 0000000..928ebd4
 +
 +&tlmm {
 +	/*
-+	 * Samsung's TrustZone owns some TLMM pins; reading them makes the
-+	 * firmware reset the tablet ~9 s into boot (seen on hardware: boots
-+	 * with this, resets without it). The exact secure pins are not known
-+	 * yet, so everything except LCD_LDO_EN is reserved for now.
-+	 * TODO: narrow this down (see dts/test/test-D/E/F).
++	 * Pins owned by Samsung's TrustZone. If Linux reads them, the firmware
++	 * resets the tablet about 9 s into boot (confirmed on hardware).
++	 *   25-28: BLSP1 QUP6 SPI, fingerprint sensor (downstream spi_6 / etspi)
++	 *   58-61: BLSP2 QUP4 SPI, embedded secure element (downstream ese_spi)
 +	 */
-+	gpio-reserved-ranges = <0 46>, <47 103>;
++	gpio-reserved-ranges = <25 4>, <58 4>;
 +
 +	/* LCD_LDO_EN, from downstream mdss_dsi_active (gpio46) */
 +	lcd_ldo_en_default: lcd-ldo-en-default-state {

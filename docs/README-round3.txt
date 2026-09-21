@@ -8,7 +8,7 @@ Do NOT run "fastboot flash boot" - it would overwrite lk2nd.
    fastboot flash userdata rootfs.img
 
 2) Boot the kernel from RAM (plain command, no --cmdline this time):
-   fastboot boot boot-A.img
+   fastboot boot boot.img
 
 3) Screen stays frozen - normal. Wait ~2 minutes (first boot resizes the
    filesystem), then on the PC:

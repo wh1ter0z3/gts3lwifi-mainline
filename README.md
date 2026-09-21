@@ -18,17 +18,15 @@ Early bring-up of mainline Linux / postmarketOS on the Galaxy Tab S3 Wi-Fi.
 | PM8994 regulators via RPM | works (only the rails needed so far) |
 | postmarketOS initramfs + debug shell over USB | works |
 | Full rootfs boot | being tested |
-| TLMM GPIOs | mostly reserved for now, see known issue |
+| TLMM GPIOs | work, 8 TrustZone-owned pins reserved |
 | Display (split-DSI AMOLED), touch, S-Pen | not started |
 | GPU, video codec, audio, Wi-Fi/BT | not started (need Samsung-signed firmware) |
 | Battery / charger (SM5705), Type-C controller (S2MM005) | no mainline drivers |
 
-Known issue: Samsung's TrustZone owns some TLMM GPIOs. If Linux reads them,
-the firmware resets the tablet about 9 s into boot. The board DTS therefore
-reserves every GPIO except LCD_LDO_EN for now (`gpio-reserved-ranges`).
-Confirmed on hardware: reserving the GPIOs fixes the reset, disabling
-CoreSight does not. Narrowing the range down is in progress
-(`dts/test/test-D/E/F.dts`, `docs/README-round4.txt`).
+Solved: Samsung's TrustZone owns the fingerprint SPI pins (TLMM 25-28) and the
+secure-element SPI pins (TLMM 58-61). If Linux reads them, the firmware resets
+the tablet about 9 s into boot. The board DTS lists them in
+`gpio-reserved-ranges`; found by bisecting on hardware (`dts/test/`).
 
 ## Layout
 

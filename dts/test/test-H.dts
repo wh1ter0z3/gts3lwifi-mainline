@@ -1,0 +1,7 @@
+#include "../apq8096-samsung-gts3lwifi.dts"
+
+/* Test H: reserve only the eSE SPI pins (58-61) */
+&tlmm {
+	/delete-property/ gpio-reserved-ranges;
+	gpio-reserved-ranges = <58 4>;
+};

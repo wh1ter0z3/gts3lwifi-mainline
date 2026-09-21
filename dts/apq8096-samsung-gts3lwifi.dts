@@ -312,13 +312,12 @@
 
 &tlmm {
 	/*
-	 * Samsung's TrustZone owns some TLMM pins; reading them makes the
-	 * firmware reset the tablet ~9 s into boot (seen on hardware: boots
-	 * with this, resets without it). The exact secure pins are not known
-	 * yet, so everything except LCD_LDO_EN is reserved for now.
-	 * TODO: narrow this down (see dts/test/test-D/E/F).
+	 * Pins owned by Samsung's TrustZone. If Linux reads them, the firmware
+	 * resets the tablet about 9 s into boot (confirmed on hardware).
+	 *   25-28: BLSP1 QUP6 SPI, fingerprint sensor (downstream spi_6 / etspi)
+	 *   58-61: BLSP2 QUP4 SPI, embedded secure element (downstream ese_spi)
 	 */
-	gpio-reserved-ranges = <0 46>, <47 103>;
+	gpio-reserved-ranges = <25 4>, <58 4>;
 
 	/* LCD_LDO_EN, from downstream mdss_dsi_active (gpio46) */
 	lcd_ldo_en_default: lcd-ldo-en-default-state {
