@@ -38,6 +38,8 @@ the tablet about 9 s into boot. The board DTS lists them in
 
 ## lk2nd
 
+A working prebuilt image is in the GitHub releases.
+
 Samsung's bootloader only accepts lk2nd when it is packed like a stock boot
 image. What works, what does not, and a packing script are in
 [docs/lk2nd.md](docs/lk2nd.md). A working, reproducible lk2nd image is
