@@ -1,0 +1,17 @@
+--- a/drivers/gpu/drm/panel/Kconfig
++++ b/drivers/gpu/drm/panel/Kconfig
+@@ (add next to the other Samsung panels, alphabetically) @@
++config DRM_PANEL_SAMSUNG_AMS968HH01
++	tristate "Samsung AMS968HH01 QXGA dual-DSI command mode panel"
++	depends on OF
++	depends on DRM_MIPI_DSI
++	help
++	  Say Y or M here if you want to enable support for the Samsung
++	  AMS968HH01 2048x1536 AMOLED panel with the Anapass ANA38401 driver
++	  IC, found in the Samsung Galaxy Tab S3. It uses two DSI links in
++	  command mode.
++
+--- a/drivers/gpu/drm/panel/Makefile
++++ b/drivers/gpu/drm/panel/Makefile
+@@ (next to the other panel-samsung-* lines) @@
++obj-$(CONFIG_DRM_PANEL_SAMSUNG_AMS968HH01) += panel-samsung-ams968hh01.o

@@ -1,0 +1,148 @@
+#include "../apq8096-samsung-gts3lwifi.dts"
+#include <dt-bindings/clock/qcom,dsi-phy-28nm.h>
+
+/*
+ * Test: display path for the AMS968HH01 (ANA38401) dual-DSI command-mode
+ * panel. Needs the panel driver from kernel/drivers/gpu/drm/panel/ in the
+ * kernel. UNTESTED.
+ */
+
+&rpm_requests {
+	regulators-0 {
+		vdd_l14_l15-supply = <&vreg_s5a_2p15>;
+
+		/* DSI controller analog (msm8996 "vdda") */
+		vreg_l2a_1p25: l2 {
+			regulator-name = "vreg_l2a_1p25";
+			regulator-min-microvolt = <1250000>;
+			regulator-max-microvolt = <1250000>;
+			regulator-allow-set-load;
+		};
+
+		/* DSI controller I/O (msm8996 "vddio") */
+		vreg_l14a_1p8: l14 {
+			regulator-name = "vreg_l14a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-allow-set-load;
+		};
+	};
+};
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&vreg_l2a_1p25>;
+	vcca-supply = <&vreg_l28a_0p925>;
+	vddio-supply = <&vreg_l14a_1p8>;
+
+	qcom,dual-dsi-mode;
+	qcom,master-dsi;
+
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&mdss_te_default>;
+	pinctrl-1 = <&mdss_te_sleep>;
+
+	status = "okay";
+
+	panel: panel@0 {
+		compatible = "samsung,ams968hh01";
+		reg = <0>;
+
+		vdd-supply = <&vreg_lcd_vdd_3p3>;
+		/* TLMM 143 high = panel running, so "active" (in reset) is low */
+		reset-gpios = <&tlmm 143 GPIO_ACTIVE_LOW>;
+		tcon-ready-gpios = <&tlmm 45 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_default>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				panel_in0: endpoint {
+					remote-endpoint = <&mdss_dsi0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				panel_in1: endpoint {
+					remote-endpoint = <&mdss_dsi1_out>;
+				};
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&panel_in0>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss_dsi0_phy {
+	vcca-supply = <&vreg_l28a_0p925>;
+	status = "okay";
+};
+
+&mdss_dsi1 {
+	vdda-supply = <&vreg_l2a_1p25>;
+	vcca-supply = <&vreg_l28a_0p925>;
+	vddio-supply = <&vreg_l14a_1p8>;
+
+	qcom,dual-dsi-mode;
+	/* DSI1 is the slave link, clock it from the DSI0 PHY */
+	assigned-clock-parents = <&mdss_dsi0_phy DSI_BYTE_PLL_CLK>,
+				 <&mdss_dsi0_phy DSI_PIXEL_PLL_CLK>;
+
+	status = "okay";
+};
+
+&mdss_dsi1_out {
+	remote-endpoint = <&panel_in1>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss_dsi1_phy {
+	vcca-supply = <&vreg_l28a_0p925>;
+	status = "okay";
+};
+
+&tlmm {
+	/* TE from the panel, downstream mdss_te_active */
+	mdss_te_default: mdss-te-default-state {
+		pins = "gpio10";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	mdss_te_sleep: mdss-te-sleep-state {
+		pins = "gpio10";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	/* reset (143) and TCON_RDY (45), downstream mdss_dsi_active / tcon_rdy_active */
+	panel_default: panel-default-state {
+		reset-pins {
+			pins = "gpio143";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		tcon-ready-pins {
+			pins = "gpio45";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
+};
