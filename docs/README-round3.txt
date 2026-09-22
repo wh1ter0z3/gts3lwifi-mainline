@@ -22,5 +22,9 @@ Do NOT run "fastboot flash boot" - it would overwrite lk2nd.
    sudo dmesg | tail -60
    systemctl --failed
 
-Every boot needs step 2 again (the kernel is not installed on the tablet yet).
+Every boot needs step 2 again, UNLESS you run the new lk2nd
+(lk2nd-gts3lwifi.img / "T3"). With that one you may install the kernel
+permanently, and the tablet then boots postmarketOS on its own:
+   fastboot flash boot boot.img
+(Do NOT do this with the old 72 MB lk2nd - it would overwrite lk2nd.)
 To go back to Android: flash stock firmware with Odin.
