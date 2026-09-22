@@ -40,8 +40,8 @@ the tablet about 9 s into boot. The board DTS lists them in
 
 Samsung's bootloader only accepts lk2nd when it is packed like a stock boot
 image. What works, what does not, and a packing script are in
-[docs/lk2nd.md](docs/lk2nd.md). Short version: use `fastboot boot`, not
-`fastboot flash boot`, until the reproducible packing is confirmed.
+[docs/lk2nd.md](docs/lk2nd.md). A working, reproducible lk2nd image is
+attached to the GitHub releases (`lk2nd-gts3lwifi.img`).
 
 ## Debugging without a display or UART
 

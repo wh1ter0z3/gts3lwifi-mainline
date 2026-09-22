@@ -20,13 +20,21 @@ works). Its image is larger than the 512 KiB lk2nd reserves in the boot
 partition, so **never use `fastboot flash boot`** with it - it overwrites
 lk2nd. `fastboot boot` is safe.
 
-## Reproducible packing (not yet confirmed on hardware)
+## Reproducible packing (confirmed on hardware, 2026-09-22)
 
 `scripts/pack-lk2nd-samsung.sh <donor-boot.img> <out.img>` builds lk2nd with a
 4 MiB reserved area, merges the lk2nd node into the stock device trees taken
 from any boot image for this tablet, and packs it like the booting variant
-with an empty ramdisk. If S-Boot accepts it, lk2nd identifies the tablet,
-uses the correct keys and `fastboot flash boot` becomes safe.
+with an empty ramdisk. Tested on an SM-T820: boots to the lk2nd menu, keys,
+reboot and power-off work. Released as `lk2nd-gts3lwifi.img` (Odin tar:
+`lk2nd-gts3lwifi-odin.tar`).
+
+With this image `fastboot flash boot` is safe: lk2nd keeps the first 4 MiB of
+the boot partition for itself and stores the OS image behind it, so pmOS can
+be installed normally and boots without a PC.
+
+Known limitation: the "Recovery" menu entry only reboots. Use the key combo
+(Power + Volume Up + Home) to reach the stock recovery / TWRP instead.
 
 Keys: Volume Up = PM8994 GPIO 3, Home = PM8994 GPIO 2, Volume Down = PON RESIN.
 
