@@ -1,0 +1,89 @@
+diff --git a/lk2nd/display/cont-splash/refresh.c b/lk2nd/display/cont-splash/refresh.c
+index 9b71a92b..48fe74b8 100644
+--- a/lk2nd/display/cont-splash/refresh.c
++++ b/lk2nd/display/cont-splash/refresh.c
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ /* Copyright (c) 2020-2022, Stephan Gerhold <stephan@gerhold.net> */
+ 
++#include <arch/defines.h>
+ #include <bits.h>
+ #include <debug.h>
+ #include <dev/fbcon.h>
+@@ -109,14 +110,48 @@ bool mdp_setup_refresh(struct fbcon_config *fb)
+ 
+ #ifdef MDSS_MDP_REG_PP_AUTOREFRESH_CONFIG /* MDP5 */
+ 
++#define MDP_PP_TEAR_CHECK_EN		0x000
+ #define MDP_PP_SYNC_CONFIG_VSYNC	0x004
++#define MDP_PP_SYNC_CONFIG_HEIGHT	0x008
++#define MDP_PP_SYNC_WRCOUNT		0x00C
++#define MDP_PP_VSYNC_INIT_VAL		0x010
++#define MDP_PP_SYNC_THRESH		0x018
++#define MDP_PP_START_POS		0x01C
++#define MDP_PP_RD_PTR_IRQ		0x020
+ #define MDP_PP_AUTOREFRESH_CONFIG	0x030
+ 
++#define MDP5_CTL_TOP_CMD_MODE		BIT(17)
++#define MDP5_SPLIT_DPL_EN		REG_MDP(0x12F4)
++
++/*
++ * Program the ping-pong tear check so that its internal vsync counter
++ * emits a frame trigger at ~60 Hz, then let autorefresh kick a frame on
++ * every trigger. Some bootloaders (e.g. Samsung S-Boot) never configure
++ * tear check and kick every frame by hand, so setting SYNC_CONFIG_VSYNC
++ * alone leaves the counter without a frame height and nothing happens.
++ */
++static void mdp5_pp_enable_auto_refresh(uint32_t pp_base, uint32_t height)
++{
++	/* ~18 blanking lines, as the panel timings usually have */
++	uint32_t vtotal = height + 18;
++	uint32_t vclks_line = 19200000 / (vtotal * 60); /* 60 fps */
++
++	writel(vclks_line | BIT(19), pp_base + MDP_PP_SYNC_CONFIG_VSYNC);
++	writel(vtotal, pp_base + MDP_PP_SYNC_CONFIG_HEIGHT);
++	writel(height, pp_base + MDP_PP_VSYNC_INIT_VAL);
++	writel(height + 1, pp_base + MDP_PP_RD_PTR_IRQ);
++	writel(height, pp_base + MDP_PP_START_POS);
++	writel((4 << 16) | 4, pp_base + MDP_PP_SYNC_THRESH);
++	writel(height + 4 + 1, pp_base + MDP_PP_SYNC_WRCOUNT);
++	writel(1, pp_base + MDP_PP_TEAR_CHECK_EN);
++	writel(BIT(31) | 1, pp_base + MDP_PP_AUTOREFRESH_CONFIG);
++}
++
+ static void mdp5_enable_auto_refresh(struct fbcon_config *fb)
+ {
+-	uint32_t vsync_count = 19200000 / (fb->height * 60); /* 60 fps */
+ 	uint32_t mdss_mdp_rev = readl(MDP_HW_REV);
+ 	uint32_t pp0_base;
++	bool ctl1_cmd;
+ 
+ 	if (mdss_mdp_rev >= MDSS_MDP_HW_REV_105)
+ 		pp0_base = REG_MDP(0x71000);
+@@ -125,9 +160,24 @@ static void mdp5_enable_auto_refresh(struct fbcon_config *fb)
+ 	else
+ 		pp0_base = REG_MDP(0x21B00);
+ 
+-	writel(vsync_count | BIT(19), pp0_base + MDP_PP_SYNC_CONFIG_VSYNC);
+-	writel(BIT(31) | 1, pp0_base + MDP_PP_AUTOREFRESH_CONFIG);
++	mdp5_pp_enable_auto_refresh(pp0_base, fb->height);
++
++	/*
++	 * Split displays (dual DSI) drive the other half of the panel through
++	 * control path 1 and ping-pong 1. Give that half its own autorefresh
++	 * as well, otherwise only one half keeps updating.
++	 */
++	ctl1_cmd = !!(readl(MDP_CTL_1_BASE + CTL_TOP) & MDP5_CTL_TOP_CMD_MODE);
++	if (ctl1_cmd) {
++		dprintf(INFO, "Split display: enabling autorefresh on ping-pong 1 too\n");
++		mdp5_pp_enable_auto_refresh(pp0_base + 0x800, fb->height);
++	}
++	dsb();
++
+ 	writel(1, MDP_CTL_0_BASE + CTL_START);
++	/* Without the split-display link, control path 1 needs its own kick */
++	if (ctl1_cmd && !(readl(MDP5_SPLIT_DPL_EN) & BIT(0)))
++		writel(1, MDP_CTL_1_BASE + CTL_START);
+ }
+ #endif
+ 
