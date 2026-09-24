@@ -1,0 +1,18 @@
+#include "../apq8096-samsung-gts3lwifi.dts"
+
+/*
+ * Test: boot on lk2nd's framebuffer (lk2nd.pass-simplefb=autorefresh).
+ * The MDSS IOMMU driver switches its clock off after probing while the
+ * display engine is still fetching the framebuffer through it, and the
+ * firmware resets the tablet. Keep the kernel away from it. Also drop our
+ * splash reservation, lk2nd passes its own.
+ */
+&mdp_smmu {
+	status = "disabled";
+};
+
+/ {
+	reserved-memory {
+		/delete-node/ memory@9a400000;
+	};
+};

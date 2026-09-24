@@ -97,11 +97,12 @@
 			no-map;
 		};
 
-		/* Bootloader framebuffer, downstream cont_splash_mem */
-		cont_splash_mem: memory@9a400000 {
-			reg = <0x0 0x9a400000 0x0 0x1c00000>;
-			no-map;
-		};
+		/*
+		 * The bootloader framebuffer (downstream cont_splash_mem,
+		 * 0x9a400000, 28 MiB) is not reserved here: lk2nd adds its own
+		 * reservation for it when lk2nd.pass-simplefb is used, and the
+		 * two would overlap.
+		 */
 
 		/* Samsung TIMA (KNOX EL2), downstream tima_region@9C000000 */
 		memory@9c000000 {
@@ -308,6 +309,17 @@
 	mmc-hs400-1_8v;
 	mmc-hs200-1_8v;
 	status = "okay";
+};
+
+/*
+ * Until the panel driver works, the display is driven by lk2nd's framebuffer
+ * (lk2nd.pass-simplefb=autorefresh). The MDSS IOMMU driver gates its clock
+ * after probing while the display engine still fetches through it, which
+ * makes the firmware reset the tablet, so keep the kernel away from it.
+ * TODO: re-enable together with the panel driver.
+ */
+&mdp_smmu {
+	status = "disabled";
 };
 
 &tlmm {

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build a RAM-bootable test boot image from a DTS, reusing the kernel and
 # initramfs of the boot.img that pmbootstrap already built (no kernel rebuild).
-# Usage: make-test-image.sh <board.dts> <out.img>
+# Usage: [EXTRA_CMDLINE="..."] make-test-image.sh <board.dts> <out.img>
 set -eu
 [ $# -eq 2 ] || { echo "usage: $0 <board.dts> <out.img>" >&2; exit 1; }
 DTS=$(readlink -f "$1"); OUT=$2
@@ -23,6 +23,10 @@ open(w+'/Image.gz', 'wb').write(gz); open(w+'/ramdisk', 'wb').write(b[off:off+rs
 open(w+'/cmdline', 'w').write(b[64:576].rstrip(bytes(1)).decode())
 PY
 cat "$W/Image.gz" "$W/board.dtb" > "$W/kernel"
+# EXTRA_CMDLINE replaces the console/earlycon part of the original cmdline
+# and keeps the pmOS partition parameters that follow it.
+[ -z "${EXTRA_CMDLINE:-}" ] || printf '%s %s' "$EXTRA_CMDLINE" \
+	"$(sed -E 's/(^| )(earlycon|console=[^ ]+)//g; s/^ +//' "$W/cmdline")" > "$W/cmdline"
 python3 "$MKBOOTIMG" --kernel "$W/kernel" --ramdisk "$W/ramdisk" --cmdline "$(cat "$W/cmdline")" \
 	--base 0x80000000 --kernel_offset 0x00008000 --ramdisk_offset 0x02200000 \
 	--tags_offset 0x02000000 --second_offset 0x00f00000 --pagesize 4096 --output "$OUT"
