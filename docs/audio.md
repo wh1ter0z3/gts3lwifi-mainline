@@ -156,6 +156,20 @@ commands (`q6asm-dai ... CMD 10bcd timeout`, 5 s each) while WirePlumber
 probes the PCMs. It also happens with the headphones-only profile and the
 unpatched q6routing, so it predates the speakers. Playback works afterwards.
 
+The same timeout sometimes delays the start of a recording by 5 s:
+PipeWire prepares a capture PCM twice, and the second prepare closes the
+DSP stream that the first one opened (2 of 20 camera recordings at 120 fps,
+2026-10-31). The likely cause, from reading q6asm.c:
+`q6asm_stream_callback()` stores every basic response in `ac->result`,
+including the DSP's rejections of the reads still queued when a capture
+stream closes (`ASM_DATA_CMD_READ_V2`, which nothing waits for). If one
+lands after the close's own response, it hides that response from
+`q6asm_ac_send_cmd_sync()`, which then waits out its 5 s. Upstream
+a354f030dbce ("ASoC: qcom: q6asm: handle the responses after closing")
+only silenced the "not expecting rsp" message for these. A fix that leaves
+`ac->result` alone for the `READ_V2` and `EOS` responses is written but not
+yet tested on the tablet.
+
 ## Testing headless
 
 `tests/audio/` has the scripts that were used:

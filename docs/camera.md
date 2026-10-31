@@ -61,9 +61,14 @@ dma-bufs go straight into the Venus encoder, which converts them to YUV
 LIBCAMERA_SOFTISP_MODE=gpu gst-launch-1.0 -e libcamerasrc af-mode=continuous \
 	! video/x-raw,width=3840,height=2160,format=RGBA \
 	! v4l2h265enc output-io-mode=dmabuf-import \
-	  extra-controls=encode,video_bitrate=40000000,hevc_level=8 \
-	! h265parse ! queue ! mp4mux ! filesink location=uhd.mp4
+	  extra-controls=encode,video_bitrate=40000000 \
+	! video/x-h265,level=(string)5.1 ! h265parse ! queue ! mp4mux \
+	! filesink location=uhd.mp4
 ```
+
+The level goes in the caps after the encoder: v4l2h265enc and
+v4l2h264enc set the level control from the negotiated caps, over a level
+in `extra-controls` (with `hevc_level=8` there, the stream said level 1).
 
 - HEVC 3840x2160: 29.8 fps with the GPU held at 624 MHz, 29.5 fps
   without; about 1.5 CPU cores.
@@ -71,6 +76,54 @@ LIBCAMERA_SOFTISP_MODE=gpu gst-launch-1.0 -e libcamerasrc af-mode=continuous \
   490 MHz with camera content whatever the profile, entropy coding or
   bitrate; MMPLL3 is left at 980 MHz by the bootloader, so the 520 MHz
   table entry gives 490 MHz, and nothing votes for CX.
+
+## Applications (2026-10-31)
+
+- [Ocellus](https://github.com/jaydens-tasty-slop/ocellus), a camera app
+  written for this tablet: photos, and video with sound in the modes in
+  the table below, encoded by Venus from the ISP's RGBA buffers without a
+  copy.
+- Firefox 154 and Chromium 155 reach both cameras through PipeWire's
+  libcamera nodes and the camera portal. Chromium needs
+  `--enable-features=WebRtcPipeWireCamera`, and its first `getUserMedia()`
+  right after start can fail with NotFoundError: the cameras turn up about
+  10 ms after it calls its PipeWire enumeration complete. Chromium ran
+  30 fps at 640x480, 1280x720 and 1920x1080; Firefox painted 14 to 21 fps
+  (its window was in the background).
+- PipeWire clients (browsers, Snapshot) never set `AfMode`, so the rear
+  lens stays where it is.
+
+### Video modes in Ocellus
+
+Recorded for 8 s in the Plasma session with the viewfinder on and sound,
+with the frame rate measured from the frame timestamps after the first
+second:
+
+| Camera | Size | Codec | Frame rates measured |
+|---|---|---|---|
+| Rear | 3840x2160 | H.265 | 24.0 |
+| Rear | 1920x1080 | H.264 | 30.0; 59.6 to 60.0 |
+| Rear | 1280x720 | H.264 | 59.6 |
+| Rear | 1024x576 | H.264 | 59.6; 119.3 to 120.0 |
+| Front | 1920x1080 | H.264 | 29.9 |
+| Front | 1152x864 | H.264 | 59.8 to 59.9 |
+| Front | 512x384 | H.264 | 59.8 to 60.7; 119.6 to 120.1 |
+
+Ocellus also offers 30 fps at every size; the 30 fps modes missing from
+the table weren't measured. Photos are viewfinder frames: 3840x2160
+(rear), 2568x1932 (front).
+
+- The simple pipeline has no `FrameDurationLimits`, so libcamera can't set
+  the frame rate. For 60 and 120 fps, Ocellus shortens the sensor's
+  `vertical_blanking` with `v4l2-ctl` once the stream runs (frame length =
+  pixel rate / (line length x fps)).
+- With sound, a GStreamer pipeline runs on the microphone's clock, and
+  libcamerasrc maps the frame timestamps onto it. When the microphone
+  started late (see the q6asm item under Open), the video froze after a
+  second or two, which looked like a 120 fps problem. Ocellus records on
+  the monotonic system clock: since then, 18 of 20 test recordings at
+  120 fps were clean. In the other two, the video kept running but
+  dropped frames until the sound started.
 
 ## Kernel fixes found on the way
 
@@ -113,3 +166,14 @@ LIBCAMERA_SOFTISP_MODE=gpu gst-launch-1.0 -e libcamerasrc af-mode=continuous \
   frame sequence at the time of the move would be exact.
 - Venus at its full clock (MMPLL3 at 1040 MHz, CX votes, the 512 KB VMEM
   the vendor gives it) for 4K H.264 at 30 fps.
+- Venus with imported RGBA dma-bufs refuses a buffer whose width is not a
+  multiple of 128 pixels ("Failed to process frame" when it is queued;
+  seen at 1216x912 and 576x432): it sizes the input for the aligned width.
+  The software ISP's output is 8 pixels narrower than the sensor mode,
+  so Ocellus's video modes use widths that are multiples of 128 and fit
+  in a sensor mode: 3840, 1920, 1280, 1152, 1024 and 512.
+- The encoder refused 25 fps at every size tried; 24 and 30 work.
+- **q6asm: the microphone sometimes starts 5 s late.** In 2 of 20
+  recordings the capture stream started 5 s late, with
+  `q6asm-dai ...: CMD 10bcd timeout`. This is the known issue in
+  [audio.md](audio.md); a fix is written and waiting for a test.
