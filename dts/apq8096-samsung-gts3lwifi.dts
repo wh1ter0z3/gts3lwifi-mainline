@@ -1676,7 +1676,7 @@
 		pinctrl-0 = <&cam_rear_default>;
 
 		orientation = <1>;
-		rotation = <90>;
+		rotation = <0>;
 		lens-focus = <&rear_lens>;
 
 		port {
@@ -1710,7 +1710,7 @@
 		pinctrl-0 = <&cam_front_default>;
 
 		orientation = <0>;
-		rotation = <270>;
+		rotation = <0>;
 
 		port {
 			front_camera_ep: endpoint {

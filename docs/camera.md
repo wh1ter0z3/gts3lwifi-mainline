@@ -19,6 +19,12 @@ both through the CAMSS RDI path and its software ISP (GPU).
 The camera drivers probe at boot; they keep the sensors off until a
 stream starts.
 
+Both sensors read out upright with the tablet in landscape, the
+orientation the board DT describes (the panel has `rotation = <270>`), so
+both cameras have `rotation = <0>`. Samsung's mount angles, 90 and 270,
+are measured against the portrait panel. With those values, PipeWire
+clients such as Firefox and Chromium turned the picture a quarter turn.
+
 ## libcamera
 
 postmarketOS's libcamera (temp/libcamera, 0.7.2) lists both cameras, but

@@ -1,6 +1,6 @@
-From 5471ac6e3843efd48a723f5bc921c6cc0f258950 Mon Sep 17 00:00:00 2001
+From 21c5c3f22452aa0dc2fcbe7b04edf69913456543 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
-Date: Sat, 31 Oct 2026 17:25:51 +0000
+Date: Sat, 31 Oct 2026 18:50:02 +0000
 Subject: [PATCH] arm64: dts: qcom: Add Samsung Galaxy Tab S3 (gts3lwifi,
  gts3llte)
 
@@ -57,7 +57,7 @@ index 821146b..39b7195 100644
  dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-keyaki.dtb
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 new file mode 100644
-index 0000000..e13a495
+index 0000000..e17e7c7
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 @@ -0,0 +1,2039 @@
@@ -1739,7 +1739,7 @@ index 0000000..e13a495
 +		pinctrl-0 = <&cam_rear_default>;
 +
 +		orientation = <1>;
-+		rotation = <90>;
++		rotation = <0>;
 +		lens-focus = <&rear_lens>;
 +
 +		port {
@@ -1773,7 +1773,7 @@ index 0000000..e13a495
 +		pinctrl-0 = <&cam_front_default>;
 +
 +		orientation = <0>;
-+		rotation = <270>;
++		rotation = <0>;
 +
 +		port {
 +			front_camera_ep: endpoint {
