@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..f69bda2223 100644
+index 601fa9f44e..fad92f000a 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
@@ -11,7 +11,7 @@ index 601fa9f44e..f69bda2223 100644
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
-@@ -32,6 +32,113 @@ _tag=v${pkgver//_/-}-msm8996
+@@ -32,6 +32,115 @@ _tag=v${pkgver//_/-}-msm8996
  source="
  	linux-$_tag.tar.gz::$url/-/archive/$_tag/linux-$_tag.tar.gz
  	config-$_flavor.$arch
@@ -122,10 +122,12 @@ index 601fa9f44e..f69bda2223 100644
 +	0111-slimbus-qcom-ngd-pm-runtime-balance.patch
 +	0112-slimbus-qcom-ngd-tx-lock-abba.patch
 +	0113-asoc-q6asm-drop-closed-stream-responses.patch
++	0122-drm-msm-locking-put-iova-spaces.patch
++	0123-drm-msm-shared-vm-keep-mappings-on-close.patch
  "
  builddir="$srcdir/linux-$_tag"
  
-@@ -62,5 +169,112 @@ package() {
+@@ -62,5 +171,114 @@ package() {
  }
  sha512sums="
  dd30dd113ad9f0b4ab3771ea655de2becce7ddaf5066d2f860b7bb1eb78573137313191d9da740b152348f9f89894ace2bb94fb195e340f7b6dabedeebbc929f  linux-v6.19.5-msm8996.tar.gz
@@ -238,4 +240,6 @@ index 601fa9f44e..f69bda2223 100644
 +9d5fd9c8f3981e01279b1b9a5bda278649a81936cb60e153a8d33eed90d1c40a096aa617c7931ce3cd28c25d733aa0952c5ed87ff56e018be2ef539380bc94bb  0111-slimbus-qcom-ngd-pm-runtime-balance.patch
 +3b1326eb6e2f64da5ff537ae6796410f178374a7bb3ade198d2c272698d8e2250135538a3d3a8f8629d348dd16f2cd01d5493204424ee2db48b57fcbc567023e  0112-slimbus-qcom-ngd-tx-lock-abba.patch
 +93af951ae3679707f697ac89df28172a081329dbb4e5f7fe57b288c79ebc18adb33cd20f8f81d4eb8f20b8e292dc838e9e01486b38fae91d861b7b9302d9c02a  0113-asoc-q6asm-drop-closed-stream-responses.patch
++014236501dbf2fd474e1bfead8bf5f18bc53f8235ae328a126fb12e43cf4a32ec8bf149ec06dfff722f0bfe993aa6b838d7b13d431614b393ffcab1d8bc103c6  0122-drm-msm-locking-put-iova-spaces.patch
++03d8c5d5e0ddcf7e58502a975ba2eca13decf840e25b95a37366fb1899f6fad26dec27e93e9cea9dabfa78cc18569b32714a2f8be8cec47bd896c6bfedcd13ac  0123-drm-msm-shared-vm-keep-mappings-on-close.patch
  "

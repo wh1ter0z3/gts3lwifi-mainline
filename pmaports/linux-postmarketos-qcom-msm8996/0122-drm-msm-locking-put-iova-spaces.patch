@@ -1,0 +1,126 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dmitry Baryshkov <dmitry.baryshkov@oss.qualcomm.com>
+Date: Sat, 22 Aug 2026 11:48:58 +0300
+Subject: [PATCH] drm/msm: factor out a locking put_iova_spaces() wrapper
+
+put_iova_spaces() asserts that the caller already holds the VM and object
+locks, but is not named accordingly.  Both of the callers which do not
+hold those locks yet -- msm_gem_close() and msm_gem_vma_put() -- open-code
+the same lock, tear down, unlock sequence around it.
+
+Rename it to put_iova_spaces_locked() and give the plain name to a wrapper
+taking both locks, mirroring the get_and_pin_iova_range_locked() /
+msm_gem_get_and_pin_iova_range() pair in the same file.  No functional
+change.
+
+Assisted-by: LLM
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@oss.qualcomm.com>
+Link: https://patch.msgid.link/20260822-msm-fix-export-v1-0-917b3cbedd43@oss.qualcomm.com
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/gpu/drm/msm/msm_gem.c | 32 ++++++++++++++++++--------------
+ 1 file changed, 18 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/msm_gem.c b/drivers/gpu/drm/msm/msm_gem.c
+index 017411a0bf45..89d4f12f6fe0 100644
+--- a/drivers/gpu/drm/msm/msm_gem.c
++++ b/drivers/gpu/drm/msm/msm_gem.c
+@@ -46,13 +46,23 @@ static int msm_gem_open(struct drm_gem_object *obj, struct drm_file *file)
+ 	return 0;
+ }
+ 
++static void put_iova_spaces_locked(struct drm_gem_object *obj,
++				   struct drm_gpuvm *vm, bool close,
++				   const char *reason);
++
+ static void put_iova_spaces(struct drm_gem_object *obj, struct drm_gpuvm *vm,
+-			    bool close, const char *reason);
++			    bool close, const char *reason)
++{
++	struct drm_exec exec;
++
++	msm_gem_lock_vm_and_obj(&exec, obj, vm);
++	put_iova_spaces_locked(obj, vm, close, reason);
++	drm_exec_fini(&exec);     /* drop locks */
++}
+ 
+ static void msm_gem_close(struct drm_gem_object *obj, struct drm_file *file)
+ {
+ 	struct msm_context *ctx = file->driver_priv;
+-	struct drm_exec exec;
+ 
+ 	update_ctx_mem(file, -obj->size);
+ 	msm_gem_vma_put(obj);
+@@ -80,9 +90,7 @@ static void msm_gem_close(struct drm_gem_object *obj, struct drm_file *file)
+ 	dma_resv_wait_timeout(obj->resv, DMA_RESV_USAGE_BOOKKEEP, false,
+ 			      MAX_SCHEDULE_TIMEOUT);
+ 
+-	msm_gem_lock_vm_and_obj(&exec, obj, ctx->vm);
+ 	put_iova_spaces(obj, ctx->vm, true, "close");
+-	drm_exec_fini(&exec);     /* drop locks */
+ }
+ 
+ /*
+@@ -105,11 +113,7 @@ void msm_gem_vma_put(struct drm_gem_object *obj)
+ 		return;
+ 
+ #ifdef CONFIG_DRM_MSM_KMS
+-	struct drm_exec exec;
+-
+-	msm_gem_lock_vm_and_obj(&exec, obj, priv->kms->vm);
+ 	put_iova_spaces(obj, priv->kms->vm, true, "vma_put");
+-	drm_exec_fini(&exec);     /* drop locks */
+ #endif
+ }
+ 
+@@ -436,8 +440,8 @@ static struct drm_gpuva *lookup_vma(struct drm_gem_object *obj,
+  * mapping.
+  */
+ static void
+-put_iova_spaces(struct drm_gem_object *obj, struct drm_gpuvm *vm,
+-		bool close, const char *reason)
++put_iova_spaces_locked(struct drm_gem_object *obj, struct drm_gpuvm *vm,
++		       bool close, const char *reason)
+ {
+ 	struct drm_gpuvm_bo *vm_bo, *tmp;
+ 
+@@ -693,7 +697,7 @@ void msm_gem_unpin_iova(struct drm_gem_object *obj, struct drm_gpuvm *vm)
+ 		msm_gem_unpin_locked(obj);
+ 	}
+ 	if (!is_kms_vm(vm))
+-		put_iova_spaces(obj, vm, true, "close");
++		put_iova_spaces_locked(obj, vm, true, "close");
+ 	drm_exec_fini(&exec);     /* drop locks */
+ }
+ 
+@@ -877,7 +881,7 @@ void msm_gem_purge(struct drm_gem_object *obj)
+ 	GEM_WARN_ON(!is_purgeable(msm_obj));
+ 
+ 	/* Get rid of any iommu mapping(s): */
+-	put_iova_spaces(obj, NULL, false, "purge");
++	put_iova_spaces_locked(obj, NULL, false, "purge");
+ 
+ 	msm_gem_vunmap(obj);
+ 
+@@ -915,7 +919,7 @@ void msm_gem_evict(struct drm_gem_object *obj)
+ 	GEM_WARN_ON(is_unevictable(msm_obj));
+ 
+ 	/* Get rid of any iommu mapping(s): */
+-	put_iova_spaces(obj, NULL, false, "evict");
++	put_iova_spaces_locked(obj, NULL, false, "evict");
+ 
+ 	drm_vma_node_unmap(&obj->vma_node, dev->anon_inode->i_mapping);
+ 
+@@ -1128,7 +1132,7 @@ static void msm_gem_free_object(struct drm_gem_object *obj)
+ 				drm_exec_retry_on_contention(&exec);
+ 			}
+ 		}
+-		put_iova_spaces(obj, NULL, true, "free");
++		put_iova_spaces_locked(obj, NULL, true, "free");
+ 		drm_exec_fini(&exec);     /* drop locks */
+ 	}
+ 
+-- 
+2.56.0
+
