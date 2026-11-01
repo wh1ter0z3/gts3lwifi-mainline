@@ -1,10 +1,10 @@
 # GNSS (GPS)
 
-## Status (2026-11-01): both models have GNSS, in the modem DSP; test DT and tools ready, nothing tested on mainline yet
+## Status (2026-11-01): GNSS works on the SM-T820 on mainline (test DT); geoclue bridge not written yet
 
 | Model | Where the GNSS engine is | Stock | Mainline |
 |---|---|---|---|
-| SM-T820 (Wi-Fi, APQ8096) | modem DSP (MSS), which runs a GNSS-only modem image ("modemlite") | works: satellites and position reports at 1 Hz in LineageOS | `dts/test/test-gnss.dts`, not tested |
+| SM-T820 (Wi-Fi, APQ8096) | modem DSP (MSS), which runs a GNSS-only modem image ("modemlite") | works: satellites and position reports at 1 Hz in LineageOS | **works** with `dts/test/test-gnss.dts`: modem up, QMI LOC fix in about 6 min from a cold start (see "Results") |
 | SM-T825 (LTE, MSM8996) | modem DSP, in the full LTE modem image | should work the same way (same location HAL) | `dts/test/test-gnss-lte.dts`, untested; we have no dump of its modem partition |
 
 "APQ8096 has no modem" is only true of the cellular part. The modem
@@ -19,6 +19,49 @@ service (QMI LOC, QRTR service 16) is reached over QRTR. Every part of
 this chain is upstream and in the kernel package's config; the first test
 needs no kernel patch and no config change. What the test DT adds is the
 memory layout that the modem image needs (below).
+
+## Results (SM-T820, 2026-11-01)
+
+Kernel 6.19.5 from the installed pmOS package, RAM-booted with
+`dts/test/test-gnss.dts` from lk2nd's fastboot. Nothing in the kernel was
+changed.
+
+- **Modem:** `MBA booted without debug policy, loading mpss`, then
+  `remote processor 2080000.remoteproc is now up`. ADSP and SLPI came up as
+  usual with the moved regions.
+- **Services on the modem's QRTR node (0):** 16 (location, QMI LOC v2),
+  21 (modem EFS), 22 (time), 23/24 (thermal), 43, 55 (QMI-SLIM), 66, 227
+  and 232. There's no WDS, DMS or NAS, so ModemManager can't take this modem
+  and geoclue needs a QMI LOC bridge.
+- **rmtfs starts by itself:** the `rmtfs` package's udev rule starts
+  `rmtfs -r -P -s` as soon as `/dev/qcom_rmtfs_mem1` appears, even with the
+  service disabled. `-s` then boots the modem. Mask the service (`systemctl
+  mask rmtfs`) to keep it off. tqftpserv must be started by hand: the
+  modem only asked it for `/readwrite/server_check.txt`.
+- **qmicli can't hold a session:** `--client-no-release-cid` plus
+  `--client-cid` through `qmi-proxy` times out on QRTR ("Transaction timed
+  out" for every follow and stop call), so `gnss-test.sh fix` doesn't work.
+  A single process that keeps one QRTR socket does. The test used a small
+  Python client: REG_EVENTS (0x21), SET_OPERATION_MODE (0x4a, standalone),
+  START (0x22, periodic 1 s, intermediate reports on) and INJECT_UTC_TIME
+  (0x38) from the NTP-synced clock, all on one socket.
+- **Engine:** indoors at a desk, the session runs and NMEA flows
+  (about 6 sentences/s), but no satellite is seen and there is no fix. The
+  engine asks for time (0x28), predicted orbits (0x29) and a position
+  (0x2a); after the time injection it no longer asks for time. Mode `msb`
+  is the default; standalone (4) is accepted.
+- **At a window/outdoors (cold start, time injected, no orbit data):** first
+  satellite after about 340 s, first fix after about 380 s. Then 13 GPS and
+  about 10 GLONASS satellites in view, 6-8 used, C/N0 up to 37-38 dB-Hz,
+  HDOP 0.8-1.0, and a horizontal uncertainty of 10 m most of the time
+  (4-11 m). 229 successful position reports in 15 minutes. QMI SV info and
+  position report indications arrive once satellites are tracked.
+- **Memshare** was not needed for a fix.
+
+Next: a geoclue source (QMI LOC to NMEA, e.g. feeding geoclue's
+`nmea-socket`), injecting time at session start; then idle/sleep checks
+(the modem stays up while rmtfs runs); then MSS into the main DT with the
+moved regions, after a normal-boot regression pass.
 
 ## Evidence
 

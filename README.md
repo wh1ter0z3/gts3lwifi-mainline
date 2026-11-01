@@ -49,7 +49,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | USB device mode | Works | network, serial, storage |
 | USB host / OTG, USB 3 | Works | 5 Gbit/s as a host ([usb](docs/usb.md)) |
 | USB-C power (PD) | Works | 5 V / 3 A or 9 V / 1.65 A sink, 5 V / 1.5 A source ([usb](docs/usb.md)) |
-| GPS / GNSS (both models) | Not yet | in the modem DSP on both models (the SM-T820 runs a GNSS-only modem image); test DT, firmware copy and test plan ready ([gnss](docs/gnss.md)) |
+| GPS / GNSS (both models) | Partial | SM-T820: fix on mainline with the test DT (modem DSP, QMI LOC, about 10 m); no geoclue source yet. SM-T825 untested ([gnss](docs/gnss.md)) |
 | LTE modem, SIM (SM-T825) | Not yet | planned |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
