@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=6.19.5
-pkgrel=8
+pkgrel=9
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -146,6 +146,7 @@ source="
 	0118-i2c-hotplug-gpio-extcon-presence.patch
 	0119-extcon-sm5705-cover-with-vbus.patch
 	0120-mfd-stmpe-irq-domain-after-children.patch
+	0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -291,4 +292,5 @@ bbd5ea368244dc4a207d17be244beb75a48bd3c427de660136a0091314db6cc3f9b0afd84bed08a8
 f0e4c91db4c2395adff8e2e4c4f9c2c7e10b3eade605754863f939957a683dbb559d829a15c422f99187039c8d91b351cadec661a27cd88ea431a903ea2b5a99  0118-i2c-hotplug-gpio-extcon-presence.patch
 3d648bf9253bd6bb7a6819b965a3d4ee7d5dc676170a79c670624eaf310a00ebb13cf27ba265b14285bc2cc2b0f1c759058cf93f19125c233e787412184085e0  0119-extcon-sm5705-cover-with-vbus.patch
 bbecdbf485ef8d9b4148ee1645319347916a8be06b0ee7596f695c6098ab424191ce782c494dd6c1c2574d5ebd735954757b5880738ee5c79ec96bb6ddee8f72  0120-mfd-stmpe-irq-domain-after-children.patch
+23596e25a689a7e0a4b261ffb79475f8175b6a8b5348cadbdd489ffad47235879ea0c6c9d225269a435cf8280756f206d9faa458bf557c1d47e189550cc25b77  0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
 "

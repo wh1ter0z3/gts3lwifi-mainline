@@ -9,10 +9,12 @@
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
+#include <linux/jiffies.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/input/matrix_keypad.h>
 #include <linux/mfd/stmpe.h>
+#include <linux/workqueue.h>
 #include <kunit/visibility.h>
 
 #include "stmpe-keypad.h"
@@ -246,6 +248,8 @@ struct stmpe_keypad {
 	unsigned int row_shift;
 	int overflow_irq;
 	unsigned short *keymap;
+	struct delayed_work health_work;
+	bool present;
 };
 
 VISIBLE_IF_KUNIT
@@ -591,6 +595,62 @@ err_disable:
 	return ret;
 }
 
+#define STMPE_KEYPAD_HEALTH_INTERVAL	msecs_to_jiffies(2000)
+
+/*
+ * The keypad can sit in a detachable accessory (Samsung's Book Cover
+ * Keyboard, for example), where a detach cuts the STMPE's power and a
+ * quick reattach can be debounced away by the accessory detection. This
+ * driver is then bound to a chip that is either gone or has silently
+ * lost all its configuration. Poll a canary register that chip init set
+ * to a known non-default value: a read failure means the keypad is
+ * detached right now, the reset default means the chip power cycled and
+ * has to be set up from scratch.
+ */
+static void stmpe_keypad_health_work(struct work_struct *work)
+{
+	struct stmpe_keypad *keypad = container_of(to_delayed_work(work),
+						   struct stmpe_keypad,
+						   health_work);
+	struct device *dev = keypad->input->dev.parent;
+	int error;
+	int ret;
+
+	ret = stmpe_reg_read(keypad->stmpe, keypad->variant->col_lsb_reg);
+	if (ret < 0) {
+		if (keypad->present) {
+			keypad->present = false;
+			dev_info(dev, "keypad unreachable, assuming detached\n");
+		}
+		goto out;
+	}
+
+	if (ret == (keypad->cols & 0xff)) {
+		keypad->present = true;
+		goto out;
+	}
+
+	/* The chip answers but with the reset default: it power cycled. */
+	dev_info(dev, "keypad reset detected, reinitializing\n");
+
+	error = stmpe_restore_irq_setup(keypad->stmpe);
+	if (!error)
+		error = stmpe_keypad_chip_init(keypad);
+	if (!error)
+		error = stmpe_keypad_start(&stmpe_keypad_lifecycle_ops, keypad);
+	if (error) {
+		/* Leave present false; the next poll retries. */
+		keypad->present = false;
+		dev_warn(dev, "keypad reinit failed: %d\n", error);
+	} else {
+		keypad->present = true;
+	}
+
+out:
+	schedule_delayed_work(&keypad->health_work,
+			      STMPE_KEYPAD_HEALTH_INTERVAL);
+}
+
 static void stmpe_keypad_fill_used_pins(struct stmpe_keypad *keypad,
 					u32 used_rows, u32 used_cols)
 {
@@ -710,6 +770,13 @@ static int stmpe_keypad_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, keypad);
 
+	keypad->present = true;
+	INIT_DELAYED_WORK(&keypad->health_work, stmpe_keypad_health_work);
+	/* The canary needs a non-default value in the low column register. */
+	if (keypad->cols & 0xff)
+		schedule_delayed_work(&keypad->health_work,
+				      STMPE_KEYPAD_HEALTH_INTERVAL);
+
 	return 0;
 
 err_disable:
@@ -721,6 +788,7 @@ static void stmpe_keypad_remove(struct platform_device *pdev)
 {
 	struct stmpe_keypad *keypad = platform_get_drvdata(pdev);
 
+	cancel_delayed_work_sync(&keypad->health_work);
 	stmpe_keypad_stop(&stmpe_keypad_lifecycle_ops, keypad);
 }
 
