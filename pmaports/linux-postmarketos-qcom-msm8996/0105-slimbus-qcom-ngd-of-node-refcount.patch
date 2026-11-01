@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <bartosz.golaszewski@oss.qualcomm.com>
+Date: Sat, 30 May 2026 20:44:14 +0000
+Subject: [PATCH] slimbus: qcom-ngd-ctrl: fix OF node refcount
+
+commit 120134fe75c6b0ae38f14eb8b548ad1e5761f912 upstream.
+
+Platform devices created with platform_device_alloc() call
+platform_device_release() when the last reference to the device's
+kobject is dropped. This function calls of_node_put() unconditionally.
+This works fine for devices created with platform_device_register_full()
+but users of the split approach (platform_device_alloc() +
+platform_device_add()) must bump the reference of the of_node they
+assign manually. Add the missing call to of_node_get().
+
+Cc: stable@vger.kernel.org
+Fixes: 917809e2280b ("slimbus: ngd: Add qcom SLIMBus NGD driver")
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@oss.qualcomm.com>
+Signed-off-by: Srinivas Kandagatla <srini@kernel.org>
+Link: https://patch.msgid.link/20260530204421.116824-2-srini@kernel.org
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+[jm: v6.19 iterates with for_each_available_child_of_node(), whose
+ reference on the node is now no longer handed to the device: put it
+ on the success path too]
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/slimbus/qcom-ngd-ctrl.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/slimbus/qcom-ngd-ctrl.c b/drivers/slimbus/qcom-ngd-ctrl.c
+index a4c0e7447b27..7bd612f20c25 100644
+--- a/drivers/slimbus/qcom-ngd-ctrl.c
++++ b/drivers/slimbus/qcom-ngd-ctrl.c
+@@ -1549,7 +1549,7 @@ static int of_qcom_slim_ngd_register(struct device *parent,
+ 			of_node_put(node);
+ 			return ret;
+ 		}
+-		ngd->pdev->dev.of_node = node;
++		ngd->pdev->dev.of_node = of_node_get(node);
+ 		ctrl->ngd = ngd;
+ 
+ 		ret = platform_device_add(ngd->pdev);
+@@ -1562,6 +1562,7 @@ static int of_qcom_slim_ngd_register(struct device *parent,
+ 		ngd->base = ctrl->base + ngd->id * data->offset +
+ 					(ngd->id - 1) * data->size;
+ 
++		of_node_put(node);
+ 		return 0;
+ 	}
+ 
+-- 
+2.56.0
+

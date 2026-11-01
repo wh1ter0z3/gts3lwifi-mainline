@@ -73,6 +73,15 @@ the mix volume left at 0 dB and the compander off, the tone was distorted.
    context. Tearing the shared ADSP routes down when one context closed cut
    the other direction off mid-stream (an intermittent beep), so the verb has
    no disable sequence.
+6. **An oops in the SLIMbus controller at boot** (1 boot in 5):
+   `qcom_slim_ngd_runtime_resume()`, run by `qcom_slim_ngd_up_worker()`,
+   dereferenced a NULL pointer. The PDR and SSR callbacks that queue the
+   worker were registered before the NGD device existed. The oops left
+   logind hanging, so ssh logins timed out (`CreateSession ... Device
+   timeout`) while ping worked, and shutdown hung. Patches 0105-0112
+   backport the mainline (7.1) fixes by Bjorn Andersson and Bartosz
+   Golaszewski; 0109 is the one that registers the callbacks after
+   creating the NGD. 11 boots in a row were clean with them.
 
 Also seen: unbinding and rebinding the sound card fails because wcd9335 does
 not free its SLIM slave interrupt (`request_irq ... -EBUSY`). Reboot instead

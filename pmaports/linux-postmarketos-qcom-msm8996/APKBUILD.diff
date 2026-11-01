@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..1843d0f097 100644
+index 601fa9f44e..db9ae2ef32 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
@@ -11,7 +11,7 @@ index 601fa9f44e..1843d0f097 100644
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
-@@ -32,6 +32,104 @@ _tag=v${pkgver//_/-}-msm8996
+@@ -32,6 +32,112 @@ _tag=v${pkgver//_/-}-msm8996
  source="
  	linux-$_tag.tar.gz::$url/-/archive/$_tag/linux-$_tag.tar.gz
  	config-$_flavor.$arch
@@ -113,10 +113,18 @@ index 601fa9f44e..1843d0f097 100644
 +	0102-media-venus-venc-cavlc-baseline.patch
 +	0103-media-camss-vfe-frame-drop-period.patch
 +	0104-extcon-sm5705-keyboard-dock.patch
++	0105-slimbus-qcom-ngd-of-node-refcount.patch
++	0106-slimbus-qcom-ngd-platform-driver-registration.patch
++	0107-slimbus-qcom-ngd-probe-error-path.patch
++	0108-slimbus-qcom-ngd-pdr-ssr-cleanup.patch
++	0109-slimbus-qcom-ngd-callbacks-after-ngd.patch
++	0110-slimbus-qcom-ngd-resources-in-controller.patch
++	0111-slimbus-qcom-ngd-pm-runtime-balance.patch
++	0112-slimbus-qcom-ngd-tx-lock-abba.patch
  "
  builddir="$srcdir/linux-$_tag"
  
-@@ -62,5 +160,103 @@ package() {
+@@ -62,5 +168,111 @@ package() {
  }
  sha512sums="
  dd30dd113ad9f0b4ab3771ea655de2becce7ddaf5066d2f860b7bb1eb78573137313191d9da740b152348f9f89894ace2bb94fb195e340f7b6dabedeebbc929f  linux-v6.19.5-msm8996.tar.gz
@@ -220,4 +228,12 @@ index 601fa9f44e..1843d0f097 100644
 +bc46f571124ea1a340219cadd209bb5a5d7780afb8f18c9d7e40b7b79581529dce46479a595d04bc74ad4b396190eb41dd9b62660603b8f85c6dd022070a9115  0102-media-venus-venc-cavlc-baseline.patch
 +63c08fb449f33620b825d95d2bd9734487c9782db49e699e5670827c643933e3b0e28356ba9bc6ac0f5f0984c31893ad1ef44db10e3ad539eeba91d610c0ea7b  0103-media-camss-vfe-frame-drop-period.patch
 +fbeb6128ee792b8bbdcbb403d65a1296588d0ee62da0192d21be3d39aa64858b22f7b0d1141b00c2cafff349fd20c78dccad99aa8dbb6b19ade7ad6ce1ec4ad7  0104-extcon-sm5705-keyboard-dock.patch
++99f92a99b5e80f39f4b5f1fc434965e98b084cae3f31edfade3e4dc638fc004c1295513768e74d6bf2cc2f15d898d14aa36871c3f2f9c1f29050752ab784c761  0105-slimbus-qcom-ngd-of-node-refcount.patch
++d1f0b8bdaab403897f878f5d9393a5c825dfc239b392ddac7585eb587ad28cf7b871983917565e0b6e0634dc391bcbd675bf9125927021b15c0146d643ef81d9  0106-slimbus-qcom-ngd-platform-driver-registration.patch
++bbd5ea368244dc4a207d17be244beb75a48bd3c427de660136a0091314db6cc3f9b0afd84bed08a8f20273048e4b187b7fb808e666abc0e291c45a4245b55917  0107-slimbus-qcom-ngd-probe-error-path.patch
++6cc69e701ab65f7a547d4c313f625a823e8127fb35b2445ecb8897fbe285ccbf9a99e81baee0ec56e2ede6f35c13cb67dec85cf6624d58b445417b2bdd306cc1  0108-slimbus-qcom-ngd-pdr-ssr-cleanup.patch
++45eaeacfc177c4cca880216cfed8512b7e490fd01844f300af25bbaf3fca55fa7ceb1fd7cadb79f54cea4fade3028ee6233c7b86afda18f7514c98ecb9fef5ed  0109-slimbus-qcom-ngd-callbacks-after-ngd.patch
++68d5114909fb9e2f3c9e3ff7622ddfb0137b94e2d47588238a6549525d0d23c0fbad59349329096c8224ac7951424b42e298579536f9eeb7a42a0d2caf7869d0  0110-slimbus-qcom-ngd-resources-in-controller.patch
++9d5fd9c8f3981e01279b1b9a5bda278649a81936cb60e153a8d33eed90d1c40a096aa617c7931ce3cd28c25d733aa0952c5ed87ff56e018be2ef539380bc94bb  0111-slimbus-qcom-ngd-pm-runtime-balance.patch
++3b1326eb6e2f64da5ff537ae6796410f178374a7bb3ade198d2c272698d8e2250135538a3d3a8f8629d348dd16f2cd01d5493204424ee2db48b57fcbc567023e  0112-slimbus-qcom-ngd-tx-lock-abba.patch
  "
