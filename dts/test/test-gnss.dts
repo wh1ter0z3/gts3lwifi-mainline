@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Test: GNSS on the SM-T820 - the main DT plus the modem DSP and the
+ * stock memory layout that its firmware needs (gnss.dtsi). Hardware test
+ * plan in docs/gnss.md.
+ */
+
+#include "../apq8096-samsung-gts3lwifi.dts"
+#include "gnss.dtsi"
