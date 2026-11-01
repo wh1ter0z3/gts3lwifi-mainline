@@ -11,7 +11,8 @@ the command line below. Since 2026-10-31 the kernel package lists patches
 sets the camera sensor and lens options; 0105-0112 fix an oops in the
 SLIMbus controller at boot and 0113 a 5 s timeout when the DSP closes an
 audio stream (docs/audio.md). The keyboard cover joined the
-main DTS on 2026-10-31 (attached at boot; no hotplug yet); only the panel
+main DTS on 2026-10-31, and since 2026-11-01 0114-0120 and
+`CONFIG_I2C_HOTPLUG_GPIO=m` hot-plug it (docs/input.md); only the panel
 temperature channel (`dts/test/test-display-temp.dts`) is still a test DT.
 The rest of this page records the original install.
 
@@ -141,7 +142,6 @@ energy-aware scheduling is not active although
 - **X11 hardware cursor:** needs patch 0068, and then lags; use
   `Option "SWcursor"` under X (docs/display.md, round 21). Wayland is not
   affected.
-- **Keyboard cover:** only when attached at boot (docs/input.md).
 
 ## TODO
 
@@ -151,7 +151,8 @@ energy-aware scheduling is not active although
 - Energy model: `dynamic-power-coefficient` for both clusters (measured
   with the fuel gauge, or from the downstream energy tables), which turns
   energy-aware scheduling on.
-- Keyboard cover hotplug through the SM5705 MUIC (docs/input.md).
+- Keyboard cover: measure the suspend drain with the cover attached
+  (L6 and the STMPE1801 stay powered, as in stock; docs/input.md).
 - The USB 3.0 redriver stays enabled (PM8994 GPIO 14): measure its
   suspend drain once suspend is reliable (docs/usb.md).
 - An image built with pmbootstrap (or a recovery zip for TWRP) instead of

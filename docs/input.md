@@ -217,21 +217,65 @@ Again with the main DT and patches 0001-0104 (2026-10-31): the
 STMPE1801 probes at boot (chip ID 0xc110), "STMPE keypad" registers, and
 typing works (keypad interrupts and key events on the event device).
 
-With the cover attached the MUIC does no BC1.2 detection: its device
-type and charger type registers read 0 next to the cover's ID, so a
-USB-A wall charger plugged in at the same time charges at the Type-C
-default current (500 mA) instead of as a DCP. Samsung's MUIC driver
-needs checking for what it does with VBUS on `ADC_KEYBOARDDOCK`.
+### Hotplug (patches 0114-0120)
 
-Not done: hotplug. The STMPE1801 only probes when the cover is attached
-at boot, and stays gone after a detach. Stock detects the cover through
-the SM5705 MUIC: an ID ADC reading of 0x11 (49.9 kOhm, `ADC_KEYBOARDDOCK`
-in the Samsung kernel's `include/linux/muic/muic.h`;
+The STMPE1801 only answers while the cover is attached, so until
+2026-11-01 it probed only when the cover was there at boot. Stock detects
+the cover through the SM5705 MUIC: an ID ADC reading of 0x11 (49.9 kOhm,
+`ADC_KEYBOARDDOCK` in the Samsung kernel's `include/linux/muic/muic.h`;
 `drivers/muic/universal/muic_vps.c`) means attached, and
 `drivers/muic/keyboard_notifier.c` then powers L6 and starts the
-keyboard. Patch 0104 does the first half: `extcon-sm5705` reads the ADC
-register (0x09) with the other detection registers, on the ADC change
-interrupt too, and reports EXTCON_DOCK for 0x11 (DOCK=1 with the cover
-attached, 2026-10-31). Left: a small glue driver (or the STMPE node with
-a supply switched by that event) that enables L6 and binds or unbinds
-the 0x40 client. Check that a plain USB cable never reads 0x11.
+keyboard. Patch 0104 reports that reading as EXTCON_DOCK
+(`extcon-sm5705` reads the ADC register, 0x09, with the other detection
+registers). The main DT now puts the keyboard behind an I2C bus that
+follows the dock state:
+
+| Patch | Change |
+|---|---|
+| 0114-0115 | `i2c-hotplug-gpio`: an I2C bus whose devices are added while a GPIO reports the accessory (Michał Mirosław, Svyatoslav Ryhel; posted 2025-10-13, not merged) |
+| 0116 | its parent adapter lookup: NULL checks, and `of_get_i2c_adapter_by_node()` to pair with `i2c_put_adapter()` |
+| 0117-0118 | the same bus driven by an extcon device's EXTCON_DOCK (`i2c-hotplug-extcon`), and its binding |
+| 0119 | `extcon-sm5705`: the cover also while VBUS is present |
+| 0120 | MFD core: the IRQ domain removed after the child devices |
+
+When the MUIC reports the cover, the bus registers and the STMPE1801
+probes, which enables L6; when the cover goes, the client is removed and
+L6 is off again. The keypad's stop fails at removal (-ENXIO: the chip is
+already gone); that is expected.
+
+With a USB cable in, the MUIC did not see a cover that came later: the
+ADC kept reading open (0x1f), and the charger type was dropped, so
+EXTCON_USB went off too. Samsung's driver, with
+`CONFIG_MUIC_SUPPORT_KEYBOARDDOCK` (set in the gts3lwifi defconfig), sets
+bit 7 of RSVD_ID1 (0x15) at init ("attach RID when VBUS exists") and,
+when the cover and VBUS are there without a charger type, reruns charger
+detection with BCD_RESCAN (bit 4 of RSVD_ID2, 0x16). The result comes
+with the RID charger interrupt (INT2 bit 6), which was masked. Patch 0119
+does the same. The missing charger type is also why a USB-A wall charger
+next to the cover charged at the Type-C default (500 mA) instead of as a
+DCP; with the rerun it should be detected, but that is not tested yet.
+
+Patch 0120: mainline 57bf2a312ab2 ("mfd: stmpe: Remove IRQ domain upon
+removal", v6.18) removes the IRQ domain before the keypad, whose
+`free_irq()` then walks the freed domain. The second removal, with a key
+held, oopsed in `__irq_domain_deactivate_irq()` and killed the hotplug
+worker. The patch removes the domain in a devm action, after the
+children and the parent interrupt are gone; it is meant for upstream.
+
+The keyboard node is a `wakeup-source`: the I2C core arms its interrupt
+for wakeup when the client probes, so a key press wakes the tablet from
+s2idle while the cover is attached. Stock arms the same interrupt in
+suspend while the cover is connected.
+
+Seen on an SM-T820 (2026-11-01): with a USB host connected, five
+detach/attach cycles, the keypad back 110-150 ms after each attach and L6
+off after each detach, including detaches with a key held (no oops, no
+stuck key reported); USB unplugged and plugged back with the cover on
+(the rerun brought EXTCON_USB and SDP back 130 ms after VBUS); the cover
+taken off without USB, USB plugged back without it (plain SDP, ADC open)
+and the cover attached again; a 20 s s2idle suspend with the cover on;
+and a key press waking the tablet. A plain USB cable never read 0x11.
+
+Not done: the wall charger (DCP) case next to the cover; the suspend
+drain with the cover attached (L6 and the STMPE1801 stay on, as in
+stock).

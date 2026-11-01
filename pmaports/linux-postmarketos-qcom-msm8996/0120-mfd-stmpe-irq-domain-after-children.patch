@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sun, 1 Nov 2026 00:37:15 -0600
+Subject: [PATCH] mfd: stmpe: Remove the IRQ domain after the child devices
+
+stmpe_remove() removes the IRQ domain before mfd_remove_devices(), so the
+children still hold interrupts from the domain when they go away, and
+their free_irq() deactivates the interrupt through the freed domain:
+
+  Unable to handle kernel NULL pointer dereference at virtual address 0000000000000040
+  pc : __irq_domain_deactivate_irq+0x30/0x7c
+  Call trace:
+   __irq_domain_deactivate_irq+0x30/0x7c (P)
+   irq_domain_deactivate_irq+0x34/0x58
+   free_irq+0x1a8/0x33c
+   devm_irq_release+0x28/0x3c
+   ...
+   platform_device_unregister+0x3c/0xc0
+   mfd_remove_devices_fn+0xe4/0x108 [mfd_core]
+   ...
+   stmpe_remove+0x68/0x80 [stmpe]
+   stmpe_i2c_remove+0x24/0x38 [stmpe_i2c]
+
+The parent interrupt has the same problem: it is devm-managed, so it is
+only freed after stmpe_remove() returns, and its handler looks up the
+child interrupts in the domain until then.
+
+Remove the domain from a devm action added right after it is created.
+devres runs it after the driver's remove callback has removed the
+children and, in reverse order, after the parent interrupt is freed. It
+also disposes of the mappings that mfd_add_devices() created, which
+irq_domain_remove() expects to be gone, and covers the probe error paths,
+where the domain was left behind.
+
+Seen on a Galaxy Tab S3, whose keyboard cover carries an STMPE1801 that
+is removed whenever the cover is taken off: the second removal, with a
+key held, oopsed as above.
+
+Fixes: 57bf2a312ab2 ("mfd: stmpe: Remove IRQ domain upon removal")
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/mfd/stmpe.c | 21 +++++++++++++++++----
+ 1 file changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/mfd/stmpe.c b/drivers/mfd/stmpe.c
+index 2fc28708d2c7..974108cf9384 100644
+--- a/drivers/mfd/stmpe.c
++++ b/drivers/mfd/stmpe.c
+@@ -1219,6 +1219,17 @@ static const struct irq_domain_ops stmpe_irq_ops = {
+         .xlate  = irq_domain_xlate_twocell,
+ };
+ 
++static void stmpe_irq_remove(void *data)
++{
++	struct stmpe *stmpe = data;
++	irq_hw_number_t hwirq;
++
++	for (hwirq = 0; hwirq < stmpe->variant->num_irqs; hwirq++)
++		irq_dispose_mapping(irq_find_mapping(stmpe->domain, hwirq));
++
++	irq_domain_remove(stmpe->domain);
++}
++
+ static int stmpe_irq_init(struct stmpe *stmpe, struct device_node *np)
+ {
+ 	int base = 0;
+@@ -1231,7 +1242,12 @@ static int stmpe_irq_init(struct stmpe *stmpe, struct device_node *np)
+ 		return -ENOSYS;
+ 	}
+ 
+-	return 0;
++	/*
++	 * Released after stmpe_remove() has removed the child devices and,
++	 * as it is added before the parent interrupt is requested, after
++	 * that interrupt is freed, so nothing uses the domain any more.
++	 */
++	return devm_add_action_or_reset(stmpe->dev, stmpe_irq_remove, stmpe);
+ }
+ 
+ static int stmpe_chip_init(struct stmpe *stmpe)
+@@ -1508,9 +1524,6 @@ EXPORT_SYMBOL_GPL(stmpe_probe);
+ 
+ void stmpe_remove(struct stmpe *stmpe)
+ {
+-	if (stmpe->domain)
+-		irq_domain_remove(stmpe->domain);
+-
+ 	__stmpe_disable(stmpe, STMPE_BLOCK_ADC);
+ 
+ 	mfd_remove_devices(stmpe->dev);
+-- 
+2.56.0
+

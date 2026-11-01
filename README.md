@@ -41,7 +41,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Touchscreen | Works | [input](docs/input.md) |
 | S-Pen | Works | pressure, hover, side button ([input](docs/input.md)) |
 | Power, Volume, Home keys | Works | |
-| Book Cover Keyboard | Partial | main DT; works when attached at boot; no hotplug yet |
+| Book Cover Keyboard | Works | hotplug through the MUIC; a key press wakes the tablet ([input](docs/input.md)) |
 | Back/Recent touch keys | Not yet | separate controller (TC305K) |
 | **Connectivity** | | |
 | Wi-Fi | Works | 2.4 and 5 GHz ([wifi](docs/wifi.md)) |

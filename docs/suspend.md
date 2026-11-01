@@ -4,7 +4,8 @@
 
 The kernel offers only suspend-to-idle (`/sys/power/mem_sleep`: `[s2idle]`;
 no PSCI `SYSTEM_SUSPEND`). Wake-up sources: the PM8994 RTC (`rtcwake`) and
-the power key (`pm8941_pwrkey`).
+the power key (`pm8941_pwrkey`); since 2026-11-01 also the keyboard
+cover, while it is attached (docs/input.md).
 
 | Test (20 s, `rtcwake -m freeze`) | Result |
 |---|---|

@@ -17,9 +17,9 @@
  * sm5705_muic_hold_5v(): for a USB-C source, and while the flash LED is on.
  *
  * Of the accessories that the ID pin identifies by their resistor, only
- * Samsung's keyboard covers are reported, as EXTCON_DOCK. The manual switch
- * is not supported. Register layout and the AFC sequence follow the Samsung
- * vendor driver (muic_regmap_sm5705.c).
+ * Samsung's keyboard covers are reported, as EXTCON_DOCK, also while VBUS is
+ * present. The manual switch is not supported. Register layout and the AFC
+ * sequence follow the Samsung vendor driver (muic_regmap_sm5705.c).
  */
 
 #include <linux/delay.h>
@@ -37,6 +37,7 @@
 #define SM5705_MUIC_REG_INTMASK1	0x06
 #define SM5705_MUIC_REG_ADC		0x09
 #define SM5705_MUIC_REG_RSVD_ID1	0x15
+#define SM5705_MUIC_REG_RSVD_ID2	0x16
 #define SM5705_MUIC_REG_CHG_TYPE	0x17
 #define SM5705_MUIC_REG_AFC_CNTL	0x18
 #define SM5705_MUIC_REG_AFC_TXD		0x19
@@ -65,6 +66,8 @@
 
 #define SM5705_MUIC_CONTROL_MASK_INT	BIT(0)
 #define SM5705_MUIC_RSVD_ID1_VBUS_VALID	BIT(0)
+#define SM5705_MUIC_RSVD_ID1_RID_VBUS	BIT(7)	/* ID resistor attach with VBUS */
+#define SM5705_MUIC_RSVD_ID2_BCD_RESCAN	BIT(4)	/* rerun charger detection */
 #define SM5705_MUIC_CHG_TYPE_MASK	GENMASK(4, 0)
 #define SM5705_MUIC_ADC_MASK		GENMASK(4, 0)
 
@@ -103,11 +106,35 @@ struct sm5705_muic {
 	bool qc20;
 	bool afc_ta;		/* an AFC or QC 2.0 charger answered */
 	bool hold_5v;		/* the charger driver needs 5 V */
+	bool chgdet_rerun;	/* charger detection rerun for the cover */
 	unsigned int afc_retries;
 	unsigned int vbus_retries;
 };
 
 static struct i2c_driver sm5705_muic_driver;
+
+/*
+ * With a keyboard cover on the ID pin the MUIC does not run charger
+ * detection when VBUS comes, so CHG_TYPE stays empty. Rerun it once; the
+ * RID charger interrupt follows with the result.
+ */
+static void sm5705_muic_rerun_chgdet(struct sm5705_muic *muic, bool vbus,
+				     unsigned int type, unsigned int adc)
+{
+	if (!vbus || adc != SM5705_MUIC_ADC_KEYBOARD_DOCK) {
+		muic->chgdet_rerun = false;
+		return;
+	}
+	if (type || muic->chgdet_rerun)
+		return;
+
+	muic->chgdet_rerun = true;
+	regmap_set_bits(muic->regmap, SM5705_MUIC_REG_RSVD_ID2,
+			SM5705_MUIC_RSVD_ID2_BCD_RESCAN);
+	fsleep(1000);
+	regmap_clear_bits(muic->regmap, SM5705_MUIC_REG_RSVD_ID2,
+			  SM5705_MUIC_RSVD_ID2_BCD_RESCAN);
+}
 
 static int sm5705_muic_detect(struct sm5705_muic *muic)
 {
@@ -155,6 +182,9 @@ static int sm5705_muic_detect(struct sm5705_muic *muic)
 
 	dev_dbg(muic->dev, "vbus %#04x chg type %#04x adc %#04x afc %d\n", vbus,
 		type, adc, muic->afc_9v);
+
+	sm5705_muic_rerun_chgdet(muic, vbus & SM5705_MUIC_RSVD_ID1_VBUS_VALID,
+				 type, adc);
 
 	extcon_set_state_sync(muic->edev, EXTCON_DOCK,
 			      adc == SM5705_MUIC_ADC_KEYBOARD_DOCK);
@@ -418,10 +448,11 @@ static const struct regmap_config sm5705_muic_regmap_config = {
 static int sm5705_muic_probe(struct i2c_client *client)
 {
 	/*
-	 * attach/detach; VBUS on, ADC change, VBUS off; with afc also AFC TA
-	 * attached, accepted, VBUS update and error
+	 * attach/detach; VBUS on, charger detected with an ID resistor, ADC
+	 * change, VBUS off; with afc also AFC TA attached, accepted, VBUS
+	 * update and error
 	 */
-	u8 int_mask[3] = { 0xfc, 0x7a, afc ? 0xd8 : 0xff };
+	u8 int_mask[3] = { 0xfc, 0x3a, afc ? 0xd8 : 0xff };
 	struct device *dev = &client->dev;
 	struct sm5705_muic *muic;
 	unsigned int id;
@@ -457,9 +488,16 @@ static int sm5705_muic_probe(struct i2c_client *client)
 		return dev_err_probe(dev, ret,
 				     "failed to register extcon device\n");
 
-	/* clear what the bootloader left, then unmask our events */
-	ret = regmap_bulk_read(muic->regmap, SM5705_MUIC_REG_INT1, ints,
-			       sizeof(ints));
+	/*
+	 * report a cover attached while VBUS is present, as Samsung's
+	 * firmware does; clear what the bootloader left, then unmask our
+	 * events
+	 */
+	ret = regmap_set_bits(muic->regmap, SM5705_MUIC_REG_RSVD_ID1,
+			      SM5705_MUIC_RSVD_ID1_RID_VBUS);
+	if (!ret)
+		ret = regmap_bulk_read(muic->regmap, SM5705_MUIC_REG_INT1, ints,
+				       sizeof(ints));
 	if (!ret)
 		ret = regmap_bulk_write(muic->regmap, SM5705_MUIC_REG_INTMASK1,
 					int_mask, sizeof(int_mask));

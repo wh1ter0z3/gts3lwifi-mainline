@@ -14,7 +14,7 @@
  * amplifiers), SM5705 fuel gauge, charger, MUIC and flash LED (torch),
  * S2MM005 USB Type-C/PD (sink up to 9 V, source), accelerometer, gyroscope
  * and magnetometer (through the SLPI sensor core), CPU/cluster/system idle,
- * both cameras, the Book Cover Keyboard (attached at boot; no hotplug yet).
+ * both cameras, the Book Cover Keyboard (hot-plugged through the MUIC).
  * The panel's temperature input has a test DT; the cover's hall sensor is
  * not here yet.
  *
@@ -273,13 +273,26 @@
 	};
 
 	/* Book Cover Keyboard (EJ-FT820) on the pogo pins */
-	i2c-pogo {
+	pogo_i2c: i2c-pogo {
 		compatible = "i2c-gpio";
 		sda-gpios = <&tlmm 2 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 		scl-gpios = <&tlmm 3 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 		i2c-gpio,delay-us = <2>;
 		pinctrl-0 = <&pogo_i2c_default>;
 		pinctrl-names = "default";
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+
+	/*
+	 * The keyboard's controller is only there while the cover is
+	 * attached, which the MUIC reports as a dock (49.9 kOhm on the ID
+	 * pin, ADC_KEYBOARDDOCK in Samsung's muic.h).
+	 */
+	i2c-cover {
+		compatible = "i2c-hotplug-extcon";
+		extcon = <&muic>;
+		i2c-parent = <&pogo_i2c>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
@@ -292,6 +305,8 @@
 			pinctrl-0 = <&pogo_kbd_int_default>;
 			pinctrl-names = "default";
 			vcc-supply = <&vreg_l6a_1p8>;
+			/* a key press wakes the tablet, while the cover is on */
+			wakeup-source;
 
 			keyboard-controller {
 				compatible = "st,stmpe-keypad";

@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sun, 1 Nov 2026 00:01:14 -0600
+Subject: [PATCH] i2c: muxes: i2c-hotplug-gpio: Fix the parent adapter lookup
+
+of_parse_phandle() and of_find_i2c_adapter_by_node() return NULL when
+they find nothing, not an error pointer, so a missing i2c-parent or a
+parent adapter that has not been registered yet went past the IS_ERR()
+checks and probe dereferenced a NULL adapter. Return -ENODEV for the
+missing property and defer while the parent adapter is not there, like
+i2c-mux-pinctrl does.
+
+of_find_i2c_adapter_by_node() also takes no reference on the parent's
+module, which i2c_put_adapter() then drops. Use
+of_get_i2c_adapter_by_node(), which takes both references that
+i2c_put_adapter() releases.
+
+The parent can come later, for example an i2c-gpio bus built as a
+module.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/i2c/muxes/i2c-hotplug-gpio.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/i2c/muxes/i2c-hotplug-gpio.c b/drivers/i2c/muxes/i2c-hotplug-gpio.c
+index 7f56964e285e..9688d1be9242 100644
+--- a/drivers/i2c/muxes/i2c-hotplug-gpio.c
++++ b/drivers/i2c/muxes/i2c-hotplug-gpio.c
+@@ -179,14 +179,14 @@ static int i2c_hotplug_gpio_probe(struct platform_device *pdev)
+ 	priv->dev = &pdev->dev;
+ 
+ 	parent_np = of_parse_phandle(pdev->dev.of_node, "i2c-parent", 0);
+-	if (IS_ERR(parent_np))
+-		return dev_err_probe(&pdev->dev, PTR_ERR(parent_np),
++	if (!parent_np)
++		return dev_err_probe(&pdev->dev, -ENODEV,
+ 				     "cannot parse i2c-parent\n");
+ 
+-	parent = of_find_i2c_adapter_by_node(parent_np);
++	parent = of_get_i2c_adapter_by_node(parent_np);
+ 	of_node_put(parent_np);
+-	if (IS_ERR(parent))
+-		return dev_err_probe(&pdev->dev, PTR_ERR(parent),
++	if (!parent)
++		return dev_err_probe(&pdev->dev, -EPROBE_DEFER,
+ 				     "failed to get parent I2C adapter\n");
+ 	priv->parent = parent;
+ 
+-- 
+2.56.0
+
