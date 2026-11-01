@@ -29,19 +29,20 @@ clients such as Firefox and Chromium turned the picture a quarter turn.
 
 postmarketOS's libcamera (temp/libcamera, 0.7.2) lists both cameras, but
 has no autofocus and no sensor helper for the S5K5E3. `pmaports/libcamera/`
-is that package plus our series (patches 0007-0016, pkgrel 106):
+is that package plus our series (patches 0007-0018, pkgrel 107):
 
 - S5K5E3 sensor helper and properties;
-- focus statistics from the software ISP, lens controls passed to the
-  IPA, a contrast detection autofocus algorithm in libipa (with a test)
-  and its use in the simple IPA: `AfMode` Manual (default, as on the
-  Raspberry Pi: the lens stays at `LensPosition`), Auto with
-  `AfTrigger`, and Continuous;
+- focus statistics from the software ISP, lens controls passed to the IPA,
+  a contrast detection autofocus algorithm in libipa (ported from the
+  Raspberry Pi one, BSD-2-Clause, with a test) and its use in the simple
+  IPA: `AfMode` Manual (default, as on the Raspberry Pi: the lens stays at
+  `LensPosition`), Auto with `AfTrigger`, and Continuous;
 - IMX258 and S5K5E3 tuning files;
 - output buffers padded to 32-line groups, so that 3840x2160 frames can go
   to the Venus encoder as dma-bufs;
-- an IMX258 lens settle wait that covers the software ISP's buffer lag
-  (without it, continuous AF rescanned every 1.6 s at 4K).
+- the lens settle wait counted from the frames captured after a move,
+  so that it covers the software ISP's buffer lag (counted in processed
+  frames, continuous AF rescanned every 1.6 s at 4K).
 
 Applications that don't set `AfMode` (Plasma Camera, and PipeWire clients
 such as Snapshot) get a fixed lens. GStreamer:
@@ -163,8 +164,11 @@ at about 17 fps there), 2568x1932 (front).
 - The rear camera's EEPROM (0x58, calibration and AF data) is not
   described: there is no binding for it. Focus positions are therefore
   uncalibrated (about `LensPosition` 5 at monitor distance).
-- The AF settle wait counts processed frames; counting from the sensor
-  frame sequence at the time of the move would be exact.
+- Continuous AF rescans once, 6 to 7 s after the start (3 runs at 4K). The
+  first scan ends after about 2 s, while the software ISP's AGC is still
+  raising the exposure (by up to 4% every 4 frames), and the brightness
+  change passes the 25% retrigger ratio. Comparing the brightness divided
+  by exposure and gain, or waiting for the AGC, would avoid it.
 - Venus at its full clock (MMPLL3 at 1040 MHz, CX votes, the 512 KB VMEM
   the vendor gives it) for 4K H.264 at 30 fps.
 - Venus with imported RGBA dma-bufs refuses a buffer whose width is not a

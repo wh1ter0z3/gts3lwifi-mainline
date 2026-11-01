@@ -1,0 +1,370 @@
+From dfd10dd7a0657673baac115fca0fabe4fe655488 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sat, 31 Oct 2026 16:26:51 -0600
+Subject: [PATCH 17/18] ipa: libipa: af_contrast: Time lens movements against
+ captured frames
+
+Deploy-branch counterpart of the AfContrast change folded into the
+softisp-af series: frames are counted from the last frame captured
+before a lens movement, as recorded by prepare(), so the statistics of
+a frame can be processed any number of frames after its capture. The
+IMX258 tuning file goes back to step_frames 4, the wait of 8 frames is
+no longer needed.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+---
+ src/ipa/libipa/af_contrast.cpp   | 44 ++++++++++++-----
+ src/ipa/libipa/af_contrast.h     |  4 +-
+ src/ipa/simple/algorithms/af.cpp | 12 ++---
+ src/ipa/simple/data/imx258.yaml  |  9 +---
+ test/ipa/libipa/af_contrast.cpp  | 81 +++++++++++++++++++++++++++-----
+ 5 files changed, 112 insertions(+), 38 deletions(-)
+
+diff --git a/src/ipa/libipa/af_contrast.cpp b/src/ipa/libipa/af_contrast.cpp
+index 5084f6fa..9e08f49d 100644
+--- a/src/ipa/libipa/af_contrast.cpp
++++ b/src/ipa/libipa/af_contrast.cpp
+@@ -74,8 +74,10 @@ namespace af {
+  *
+  * The statistics must be measured on frames captured after the lens has
+  * settled. The algorithm ignores statistics until the configured number of
+- * frames has elapsed after each lens movement, counted with the frame numbers
+- * passed to process().
++ * frames has elapsed after each lens movement, counted from the last frame
++ * captured before the movement as recorded by prepare(). The statistics of a
++ * frame can thus be processed any number of frames after its capture, as with
++ * a software ISP that falls behind the sensor.
+  *
+  * The tuning data supports the following keys, all of them optional:
+  *
+@@ -84,7 +86,8 @@ namespace af {
+  * - speeds: The normal and fast speeds, each with step_coarse and step_fine
+  *   (in dioptres), contrast_ratio, retrigger_ratio, retrigger_delay (in
+  *   frames), max_slew (in dioptres per frame) and step_frames (the number of
+- *   frames to wait after a lens movement)
++ *   frames to wait after a lens movement, counted from the last frame
++ *   captured before the movement)
+  * - skip_frames: The number of frames to skip at start
+  * - map: A piecewise linear function from dioptres to lens driver units
+  */
+@@ -257,6 +260,7 @@ int AfContrast::configure(const ControlInfoMap &lensControls, const Size &grid,
+ 
+ 	skipCount_ = skipFrames_;
+ 	lastFrame_.reset();
++	lastCapturedFrame_.reset();
+ 	lastMoveFrame_.reset();
+ 	sceneContrast_.reset();
+ 	sceneChangeFrame_.reset();
+@@ -318,13 +322,22 @@ void AfContrast::queueRequest(const ControlList &controls)
+ 
+ /**
+  * \brief Record the lens position for a frame
++ * \param[in] frame The frame number
+  * \param[out] frameContext The frame context
+  *
+- * This function shall be called when a frame is captured, to record the lens
+- * position reported in the frame metadata.
++ * This function shall be called when a frame is captured, in capture order, to
++ * record the lens position reported in the frame metadata. The algorithm also
++ * times lens movements against the frames captured: the statistics of the
++ * frames captured until the lens has settled are ignored, whenever they are
++ * processed.
+  */
+-void AfContrast::prepare(af::FrameContext &frameContext) const
++void AfContrast::prepare(uint32_t frame, af::FrameContext &frameContext)
+ {
++	/* Frame numbers restart from zero when the camera is restarted. */
++	if (lastCapturedFrame_ && frame < *lastCapturedFrame_)
++		restart();
++	lastCapturedFrame_ = frame;
++
+ 	frameContext.lensPosition = position_;
+ }
+ 
+@@ -357,12 +370,8 @@ void AfContrast::process(uint32_t frame, const af::FrameContext &frameContext,
+ 	if (!lensPresent_)
+ 		return;
+ 
+-	/* Frame numbers restart from zero when the camera is restarted. */
+-	if (lastFrame_ && frame < *lastFrame_) {
+-		lastMoveFrame_.reset();
+-		sceneChangeFrame_.reset();
+-		skipCount_ = skipFrames_;
+-	}
++	if (lastFrame_ && frame < *lastFrame_)
++		restart();
+ 	lastFrame_ = frame;
+ 
+ 	if (skipCount_)
+@@ -805,10 +814,19 @@ void AfContrast::updateLensPosition(uint32_t frame)
+ 
+ 	if (!known || position_ != previous) {
+ 		lensChanged_ = true;
+-		lastMoveFrame_ = frame;
++		/* The lens moves after the last frame captured so far. */
++		lastMoveFrame_ = lastCapturedFrame_.value_or(frame);
+ 	}
+ }
+ 
++/* Frame numbers restarted from zero, forget the ones recorded. */
++void AfContrast::restart()
++{
++	lastMoveFrame_.reset();
++	sceneChangeFrame_.reset();
++	skipCount_ = skipFrames_;
++}
++
+ bool AfContrast::scanning() const
+ {
+ 	return scanState_ != ScanState::Idle;
+diff --git a/src/ipa/libipa/af_contrast.h b/src/ipa/libipa/af_contrast.h
+index e45f7675..371edef5 100644
+--- a/src/ipa/libipa/af_contrast.h
++++ b/src/ipa/libipa/af_contrast.h
+@@ -47,7 +47,7 @@ public:
+ 		      const Rectangle &statsRegion);
+ 
+ 	void queueRequest(const ControlList &controls);
+-	void prepare(af::FrameContext &frameContext) const;
++	void prepare(uint32_t frame, af::FrameContext &frameContext);
+ 	void process(uint32_t frame, const af::FrameContext &frameContext,
+ 		     std::span<const RegionStats> stats, ControlList &metadata);
+ 
+@@ -95,6 +95,7 @@ private:
+ 	void trigger();
+ 	void cancel();
+ 	void goIdle();
++	void restart();
+ 
+ 	void computeWeights();
+ 	bool combineStats(std::span<const RegionStats> stats,
+@@ -138,6 +139,7 @@ private:
+ 	double position_ = 0.0;
+ 	bool lensChanged_ = false;
+ 	std::optional<uint32_t> lastFrame_;
++	std::optional<uint32_t> lastCapturedFrame_;
+ 	std::optional<uint32_t> lastMoveFrame_;
+ 	uint32_t skipCount_ = 0;
+ 
+diff --git a/src/ipa/simple/algorithms/af.cpp b/src/ipa/simple/algorithms/af.cpp
+index 59956ee0..9487c2cc 100644
+--- a/src/ipa/simple/algorithms/af.cpp
++++ b/src/ipa/simple/algorithms/af.cpp
+@@ -40,9 +40,10 @@ static constexpr double kContrastScale = 1e6;
+  * Without a focus lens, it only reports the FocusFoM metadata.
+  *
+  * The software ISP computes statistics every SwStatsCpu::kStatPerNumFrames
+- * frames. The step_frames tuning parameter, which counts frames, should be at
+- * least that value so that the statistics used after a lens movement are
+- * measured on a frame captured with the lens in its new position.
++ * frames, and can process a frame several frames after its capture when
++ * debayering takes most of the frame time. Lens movements are timed against
++ * the frames captured: prepare() runs when a captured frame is queued to the
++ * software ISP.
+  */
+ 
+ /**
+@@ -84,12 +85,11 @@ void Af::queueRequest([[maybe_unused]] IPAContext &context,
+ /**
+  * \copydoc libcamera::ipa::Algorithm::prepare
+  */
+-void Af::prepare([[maybe_unused]] IPAContext &context,
+-		 [[maybe_unused]] const uint32_t frame,
++void Af::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
+ 		 IPAFrameContext &frameContext,
+ 		 [[maybe_unused]] DebayerParams *params)
+ {
+-	af_.prepare(frameContext.af);
++	af_.prepare(frame, frameContext.af);
+ }
+ 
+ bool Af::computeRegions(const IPAContext &context, const SwIspStats *stats)
+diff --git a/src/ipa/simple/data/imx258.yaml b/src/ipa/simple/data/imx258.yaml
+index 9c4b345f..bdaa4f9b 100644
+--- a/src/ipa/simple/data/imx258.yaml
++++ b/src/ipa/simple/data/imx258.yaml
+@@ -18,11 +18,6 @@ algorithms:
+           min: 3.0
+           max: 10.0
+           default: 5.0
+-      # Statistics come from the software ISP, which can process a frame
+-      # up to four frames after its capture when debayering takes most of
+-      # the frame time (the simple pipeline handler has four internal raw
+-      # buffers). step_frames covers that, the frame being exposed and the
+-      # lens settling time.
+       speeds:
+         normal:
+           step_coarse: 1.0
+@@ -31,7 +26,7 @@ algorithms:
+           retrigger_ratio: 0.75
+           retrigger_delay: 12
+           max_slew: 2.0
+-          step_frames: 8
++          step_frames: 4
+         fast:
+           step_coarse: 1.5
+           step_fine: 0.0
+@@ -39,7 +34,7 @@ algorithms:
+           retrigger_ratio: 0.75
+           retrigger_delay: 8
+           max_slew: 4.0
+-          step_frames: 8
++          step_frames: 4
+       skip_frames: 5
+       # Lens positions in dioptres to focus lens driver units. This linear
+       # map over the full range of the voice coil motor driver has not been
+diff --git a/test/ipa/libipa/af_contrast.cpp b/test/ipa/libipa/af_contrast.cpp
+index 30d96ae9..e773564c 100644
+--- a/test/ipa/libipa/af_contrast.cpp
++++ b/test/ipa/libipa/af_contrast.cpp
+@@ -8,6 +8,7 @@
+ #include "../src/ipa/libipa/af_contrast.h"
+ 
+ #include <cmath>
++#include <deque>
+ #include <functional>
+ #include <iostream>
+ #include <memory>
+@@ -116,24 +117,31 @@ public:
+ 	void setFlat(bool flat) { flat_ = flat; }
+ 	void setAverage(double average) { average_ = average; }
+ 
++	/* Process the statistics of each frame this many frames after its capture. */
++	void setIspLatency(unsigned int frames) { ispLatency_ = frames; }
++
+ 	/* Restart streaming, the lens stays where it is. */
+ 	void restart()
+ 	{
+ 		frame_ = 0;
++		pending_.clear();
+ 		commands_ = { { 0, lastSetting_ } };
+ 	}
+ 
+ 	const ControlInfoMap::Map &controls() const { return controls_; }
+ 
+-	/* Run one frame, with optional request controls. */
++	/*
++	 * Capture one frame, with optional request controls, and process the
++	 * statistics of the frame captured ispLatency_ frames earlier.
++	 */
+ 	const ControlList &step(const ControlList &request = ControlList(controls::controls))
+ 	{
+ 		af_.queueRequest(request);
+ 
+-		af::FrameContext context;
+-		af_.prepare(context);
++		Frame &captured = pending_.emplace_back();
++		captured.frame = frame_;
++		af_.prepare(frame_, captured.context);
+ 
+-		vector<AfContrast::RegionStats> stats;
+ 		if (frame_ % kStatsInterval == 0) {
+ 			double position = exposedPosition();
+ 
+@@ -141,17 +149,24 @@ public:
+ 				double defocus = position - subject_(i);
+ 				double contrast = flat_ ? 100.0
+ 							: 10.0 + 1000.0 * exp(-defocus * defocus / 2.0);
+-				stats.push_back({ contrast, average_ });
++				captured.stats.push_back({ contrast, average_ });
+ 			}
+ 		}
+ 
+-		metadata_ = ControlList(controls::controls);
+-		af_.process(frame_, context, stats, metadata_);
++		if (pending_.size() > ispLatency_) {
++			const Frame &processed = pending_.front();
+ 
+-		if (optional<int32_t> setting = af_.lensSetting()) {
+-			commands_.push_back({ frame_ + kLensLatency, *setting });
+-			lastSetting_ = *setting;
+-			moves_++;
++			metadata_ = ControlList(controls::controls);
++			af_.process(processed.frame, processed.context,
++				    processed.stats, metadata_);
++			pending_.pop_front();
++
++			/* The lens moves while the next frame is being captured. */
++			if (optional<int32_t> setting = af_.lensSetting()) {
++				commands_.push_back({ frame_ + kLensLatency, *setting });
++				lastSetting_ = *setting;
++				moves_++;
++			}
+ 		}
+ 
+ 		frame_++;
+@@ -184,6 +199,12 @@ private:
+ 		int32_t setting;
+ 	};
+ 
++	struct Frame {
++		unsigned int frame;
++		af::FrameContext context;
++		vector<AfContrast::RegionStats> stats;
++	};
++
+ 	/* Lens position, in dioptres, during the exposure of the current frame. */
+ 	double exposedPosition() const
+ 	{
+@@ -206,6 +227,8 @@ private:
+ 	double average_ = 100.0;
+ 
+ 	unsigned int frame_ = 0;
++	unsigned int ispLatency_ = 0;
++	deque<Frame> pending_;
+ 	vector<Command> commands_;
+ 	int32_t lastSetting_ = 0;
+ 	unsigned int moves_ = 0;
+@@ -497,6 +520,30 @@ protected:
+ 		return TestPass;
+ 	}
+ 
++	int testIspLatency(unsigned int latency)
++	{
++		Simulator camera;
++		EXPECT(camera.init(true) == 0);
++		camera.setIspLatency(latency);
++		camera.setSubject([](unsigned int) { return 6.3; });
++
++		ControlList ctrls = request();
++		ctrls.set(controls::AfMode, controls::AfModeContinuous);
++		camera.step(ctrls);
++
++		EXPECT(camera.runUntil(controls::AfStateFocused, 400));
++		EXPECT_NEAR(camera.lensPosition(), 6.3, 0.1);
++
++		/* The statistics measured during the scan match the settled ones. */
++		unsigned int moves = camera.moves();
++		for (unsigned int i = 0; i < 200; i++)
++			camera.step();
++		EXPECT(camera.afState() == controls::AfStateFocused);
++		EXPECT(camera.moves() == moves);
++
++		return TestPass;
++	}
++
+ 	int run() override
+ 	{
+ 		if (testNoLens() != TestPass)
+@@ -517,6 +564,18 @@ protected:
+ 		if (testWindows() != TestPass)
+ 			return TestFail;
+ 
++		/*
++		 * A software ISP can process a frame several frames after its
++		 * capture when it falls behind.
++		 */
++		for (unsigned int latency = 1; latency <= 4; latency++) {
++			if (testIspLatency(latency) != TestPass) {
++				cerr << "With an ISP latency of " << latency
++				     << " frames" << endl;
++				return TestFail;
++			}
++		}
++
+ 		return TestPass;
+ 	}
+ };
+-- 
+2.56.0
+

@@ -3,11 +3,13 @@
 # (S5K5E3, lens control, contrast AF, IMX258/S5K5E3 tuning), 0007-0014,
 # output buffers padded to 32-line groups (Venus dma-buf import), 0015,
 # IMX258 lens settle wait covering the soft ISP's buffer lag, 0016
+# AfContrast counts the settle wait from the captured frame, which
+# undoes 0016's longer wait, 0017; Raspberry Pi licence kept, 0018
 maintainer="Robert Mader <robert.mader@collabora.com>"
 pkgname=libcamera
 _pkgver=0.7.2
 pkgver=9999$_pkgver
-pkgrel=106
+pkgrel=107
 pkgdesc="Linux camera framework"
 url="https://libcamera.org/"
 arch="all"
@@ -78,6 +80,8 @@ source="https://gitlab.freedesktop.org/camera/libcamera/-/archive/v$_pkgver/libc
 	0014-ipa-simple-Add-IMX258-and-S5K5E3-tuning-files.patch
 	0015-libcamera-software_isp-Pad-the-output-frame-size-to-.patch
 	0016-ipa-simple-imx258-Wait-longer-for-the-focus-lens-to-.patch
+	0017-ipa-libipa-af_contrast-Time-lens-movements-against-c.patch
+	0018-ipa-libipa-af_contrast-Keep-the-Raspberry-Pi-copyrig.patch
 	qcam.desktop
 	$_tuning_files
 	"
@@ -208,6 +212,8 @@ ff11b1c6451c9f3961185dbf63e1914e868759ca66e48e07977d4dcba2b596bd8184286ff070ecde
 c3d813e524b2b6cea2bf921a7c71a53dbb1b43a3ec2a924fdcb068f5ff055a696d226a848e13d250e512ef16c707f2859b17f2c650805d82db733826258fe750  0014-ipa-simple-Add-IMX258-and-S5K5E3-tuning-files.patch
 26947192cf3f6aa1ef2e47209aa12dace0bbf63f4cb12da2c6479b3ec3673307a91f7c13eeaf976e8df94c371dac95e6f41ef8385fc415fb91fd3403310a5942  0015-libcamera-software_isp-Pad-the-output-frame-size-to-.patch
 813c2dfe9c53f07848b10e17bdb4b125285f350ac513bf112012cb75d635c05bfd28a8583fef324999d2f00ba0c4ae71612aaa8432cd718cbeec494c62b4a5bb  0016-ipa-simple-imx258-Wait-longer-for-the-focus-lens-to-.patch
+83cace9b4e565dbdec6cd102fd1ff105aeb4a8961c6dd42998f6e89df7e565e584ebcbb0369cd58c3978776d45dc8cbd3df809c8560732b51e7f2f501ae7ee3d  0017-ipa-libipa-af_contrast-Time-lens-movements-against-c.patch
+c0ce684340fdd31a6775c6edc819cbf6b1b6f2d75028202b5e3d940a5fca3e8063a90ecc2e973aa3b6b6f3837986235f6736ee5bac47ce26545276d668ed76d4  0018-ipa-libipa-af_contrast-Keep-the-Raspberry-Pi-copyrig.patch
 22167a4eceb6d1b40b0b7c45fdf116c71684f5340de7f767535cb8e160ad9d2ae0f00cb3d461f73a344520a48a4641cf46226841d78bee06bfbfd2a91337f754  qcam.desktop
 2ee566653b17d565d2c0de67cbe6ebad25df5aac6051cad78e6bae52016fa2ca0247e964d735ac776b3e0bd447ead9c4fcb26cd7629228cdba3ceb91b46f378f  hi846.yaml
 4942edd551dcf51630246f71e600c17760d3574d5d45e5530d6cfeefe2c9ab1a812fbe220f8e89d92e19a499c592b2507c801ca4eb74cd15fcecb60bff5c650b  imx355.yaml
