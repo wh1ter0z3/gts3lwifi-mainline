@@ -20,7 +20,7 @@ depends="
 	soc-qcom-msm8996
 	"
 makedepends="devicepkg-dev"
-subpackages="$pkgname-openrc $pkgname-waydroid:_waydroid"
+subpackages="$pkgname-openrc $pkgname-waydroid:_waydroid $pkgname-gnss:_gnss"
 source="
 	deviceinfo
 	modules-load.conf
@@ -39,6 +39,11 @@ source="
 	waydroid-firewall.nft
 	gts3-waydroid-session
 	waydroid-fullscreen.desktop
+	gnss-share-qmi-loc.conf
+	gts3-gnss-gnss-share.conf
+	gts3-gnss-rmtfs.conf
+	gts3-gnss-tqftpserv.conf
+	90-gts3-gnss.rules
 	"
 
 build() {
@@ -95,6 +100,29 @@ _waydroid() {
 		"$subpkgdir"/usr/share/wayland-sessions/waydroid-fullscreen.desktop
 }
 
+_gnss() {
+	pkgdesc="GNSS (GPS) on the Galaxy Tab S3 for geoclue: the modem DSP's services and gnss-share's qmi_loc driver"
+	# gnss-share with the qmi_loc driver is pmaports/gnss-share
+	depends="geoclue gnss-share>=99990.8.2 rmtfs tqftpserv"
+
+	# Only with a device tree that enables the modem DSP (MSS): rmtfs
+	# (boots the modem) once its remoteproc exists, tqftpserv before it,
+	# gnss-share with the qmi_loc driver; see the drop-ins and docs/gnss.md
+	install -Dm644 "$srcdir"/gts3-gnss-rmtfs.conf \
+		"$subpkgdir"/usr/lib/systemd/system/rmtfs.service.d/gts3-gnss.conf
+	install -Dm644 "$srcdir"/gts3-gnss-tqftpserv.conf \
+		"$subpkgdir"/usr/lib/systemd/system/tqftpserv.service.d/gts3-gnss.conf
+	install -Dm644 "$srcdir"/gts3-gnss-gnss-share.conf \
+		"$subpkgdir"/usr/lib/systemd/system/gnss-share.service.d/gts3-gnss.conf
+	install -Dm644 "$srcdir"/90-gts3-gnss.rules \
+		"$subpkgdir"/usr/lib/udev/rules.d/90-gts3-gnss.rules
+	install -Dm644 "$srcdir"/gnss-share-qmi-loc.conf \
+		"$subpkgdir"/etc/gnss-share-qmi-loc.conf
+	mkdir -p "$subpkgdir"/usr/lib/systemd/system/multi-user.target.wants
+	ln -s ../gnss-share.service \
+		"$subpkgdir"/usr/lib/systemd/system/multi-user.target.wants/gnss-share.service
+}
+
 openrc() {
 	install_if="$pkgname=$pkgver-r$pkgrel openrc"
 	install="$subpkgname.post-install"
@@ -120,4 +148,9 @@ d7cc869bec360cd95ada6241a1eb85bc704b8bd7514ccd1c56fc7c278f8ff109b0dcbb57f7d0e668
 cf9b543a487e4c4a2f578dde576189da1c90c852b4a5eb49257df5a8ce09f6f132c82fb14067865674ce203a187c7e9af5c844ea3520efe5cf1988dde0442964  waydroid-firewall.nft
 a80a0dbd4b86de00ae5c147b785215274384dad50319c3f6c7f332b407874b27a73f2987dbdc68479073fd7f9e10242831bad9730be270e5b4c69407b591bca5  gts3-waydroid-session
 be4208211112f3e4b0950b490819de2bcf9760d45a1d5b390de5b7fd60e2a6ea8cee3cb6202ef52bbbb0030dbd14b3ab6a38d788f80c18bbdd29a13d1681e3f3  waydroid-fullscreen.desktop
+3e96a644a5e8aac1c54c8ebd3e5100d4d5cc2f0c8b44df80b124d74e652cb50335ff6e87ae46c3f8e04a8734030c7f7106d2c287a667d8e6d91adafe8a2f58b3  gnss-share-qmi-loc.conf
+fd8abda8bd2add3d7767a7c11ec6b1e6ed70460d52355819662839e100aaae5af1b77a4c9c564e054ed67d9a4f9517cb18e2494e2676629e1936dccdc1e42f57  gts3-gnss-gnss-share.conf
+c6096e2160f61ec3dc1972e439554fb18ed65cc5e88799151d3c2f3e5db1ada2226d499dc651a81c1da86be56e97b8c9458ea09af0e83be3b690a8fb87f2ae89  gts3-gnss-rmtfs.conf
+a4bb2c2ac1d26655b352bd8a5db4d64abc27ac494cde34343061ae43f227f125625e95a664e8e196811977cd1a6550e6332e780c836a27d7f8b7a7fe29acdb97  gts3-gnss-tqftpserv.conf
+17121aa9e94150b45002c245654dbc35174e118c26ced70d986d878b33b00b187ae9d5f723035e29f8ec9f3dcee10b95077413c45e9ed2ed7b2f4f62cd0c311d  90-gts3-gnss.rules
 "
