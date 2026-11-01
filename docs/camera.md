@@ -29,7 +29,7 @@ clients such as Firefox and Chromium turned the picture a quarter turn.
 
 postmarketOS's libcamera (temp/libcamera, 0.7.2) lists both cameras, but
 has no autofocus and no sensor helper for the S5K5E3. `pmaports/libcamera/`
-is that package plus our series (patches 0007-0018, pkgrel 107):
+is that package plus our series (patches 0007-0019, pkgrel 108):
 
 - S5K5E3 sensor helper and properties;
 - focus statistics from the software ISP, lens controls passed to the IPA,
@@ -42,7 +42,13 @@ is that package plus our series (patches 0007-0018, pkgrel 107):
   to the Venus encoder as dma-bufs;
 - the lens settle wait counted from the frames captured after a move,
   so that it covers the software ISP's buffer lag (counted in processed
-  frames, continuous AF rescanned every 1.6 s at 4K).
+  frames, continuous AF rescanned every 1.6 s at 4K);
+- continuous AF allows for exposure changes when it watches for a scene
+  change. The software ISP's AGC takes up to 8 s to settle after the
+  start or a change of brightness, and raising the exposure by 50 to
+  120% lowered the contrast at the same lens position by 25 to 44%
+  (noise and clipping), past the 25% retrigger ratio, so the lens
+  scanned again a few seconds after focusing.
 
 Applications that don't set `AfMode` (Plasma Camera, and PipeWire clients
 such as Snapshot) get a fixed lens. GStreamer:
@@ -164,11 +170,12 @@ at about 17 fps there), 2568x1932 (front).
 - The rear camera's EEPROM (0x58, calibration and AF data) is not
   described: there is no binding for it. Focus positions are therefore
   uncalibrated (about `LensPosition` 5 at monitor distance).
-- Continuous AF rescans once, 6 to 7 s after the start (3 runs at 4K). The
-  first scan ends after about 2 s, while the software ISP's AGC is still
-  raising the exposure (by up to 4% every 4 frames), and the brightness
-  change passes the 25% retrigger ratio. Comparing the brightness divided
-  by exposure and gain, or waiting for the AGC, would avoid it.
+- Continuous AF in a low-contrast scene (the test pattern with its
+  Siemens star replaced by grey) scanned again twice after focusing: the
+  contrast measured once the lens had reached the peak was about 27%
+  lower than in the next frames at the same position, which looked like
+  a scene change. Probably the lens still settling, or its hysteresis,
+  after the last move of the scan.
 - Venus at its full clock (MMPLL3 at 1040 MHz, CX votes, the 512 KB VMEM
   the vendor gives it) for 4K H.264 at 30 fps.
 - Venus with imported RGBA dma-bufs refuses a buffer whose width is not a

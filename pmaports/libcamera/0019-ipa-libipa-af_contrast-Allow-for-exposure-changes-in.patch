@@ -1,0 +1,364 @@
+From 162dce8c3e98a73dcedea469e8fda34d99322a06 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sat, 31 Oct 2026 20:26:08 -0600
+Subject: [PATCH] ipa: libipa: af_contrast: Allow for exposure changes in scene
+ detection
+
+In continuous mode, a scan that finished before the exposure control had
+converged could be followed by a second scan a few seconds later. With
+the IMX258 of the Galaxy Tab S3 at 3840x2160, the exposure of the
+software ISP went up by 90% in steps of 1 to 3% after the first scan,
+and the contrast at the same lens position dropped by 44%, through noise
+and clipping, which crossed the retrigger ratio.
+
+The brightness and the contrast change with the exposure by up to the
+ratio of the exposures. In another run, with clipped highlights, a 39%
+higher exposure raised the average brightness of the focus area by 6%
+and lowered the contrast by 21%. Take the exposure of each frame in
+process(), and widen the retrigger ratio by the ratio of the exposure
+of the frame to that of the reference measurements. Once the exposure
+settles at a new value, take new reference measurements, so that later
+scene changes are detected without that allowance.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+---
+ src/ipa/libipa/af_contrast.cpp   | 55 ++++++++++++++++++++++++-----
+ src/ipa/libipa/af_contrast.h     | 13 ++++---
+ src/ipa/simple/algorithms/af.cpp |  7 +++-
+ test/ipa/libipa/af_contrast.cpp  | 60 ++++++++++++++++++++++++++++++--
+ 4 files changed, 119 insertions(+), 16 deletions(-)
+
+diff --git a/src/ipa/libipa/af_contrast.cpp b/src/ipa/libipa/af_contrast.cpp
+index 1ac88c79..c4ef1f25 100644
+--- a/src/ipa/libipa/af_contrast.cpp
++++ b/src/ipa/libipa/af_contrast.cpp
+@@ -36,6 +36,12 @@ constexpr double kDefaultMapMax = 15.0;
+ /* Number of positions sampled by the fine scan. */
+ constexpr unsigned int kFineSteps = 5;
+ 
++/*
++ * Relative change of the exposure between two measurements below which the
++ * exposure is considered stable, to ignore rounding and small adjustments.
++ */
++constexpr double kExposureTolerance = 0.01;
++
+ } /* namespace */
+ 
+ namespace af {
+@@ -71,7 +77,9 @@ namespace af {
+  * In continuous mode, the algorithm watches the contrast and brightness of
+  * the focus area once a scan completes. When either changes by more than a
+  * configurable ratio and then stays stable for a number of frames, a new scan
+- * is started.
++ * is started. A change of exposure changes both, by up to the ratio of the
++ * exposures, which is allowed for, so that the exposure control converging
++ * after a scan doesn't look like a scene change.
+  *
+  * The statistics must be measured on frames captured after the lens has
+  * settled. The algorithm ignores statistics until the configured number of
+@@ -348,6 +356,9 @@ void AfContrast::prepare(uint32_t frame, af::FrameContext &frameContext)
+  * \param[in] frameContext The frame context
+  * \param[in] stats The focus statistics, empty if none are available for
+  * the frame
++ * \param[in] exposure The exposure of the frame, the product of its exposure
++ * time and gain, positive and in any unit as long as it is the same for all
++ * frames
+  * \param[out] metadata The frame metadata
+  *
+  * The \a stats regions are stored in raster scan order and their number must
+@@ -356,7 +367,8 @@ void AfContrast::prepare(uint32_t frame, af::FrameContext &frameContext)
+  * limited on a per-frame basis.
+  */
+ void AfContrast::process(uint32_t frame, const af::FrameContext &frameContext,
+-			 std::span<const RegionStats> stats, ControlList &metadata)
++			 std::span<const RegionStats> stats, double exposure,
++			 ControlList &metadata)
+ {
+ 	double contrast = 0.0;
+ 	double average = 0.0;
+@@ -384,7 +396,7 @@ void AfContrast::process(uint32_t frame, const af::FrameContext &frameContext,
+ 	if (scanState_ == ScanState::Trigger)
+ 		startScan();
+ 	else if (mode_ != controls::AfModeManual && valid && settled && !skipCount_)
+-		doAf(frame, contrast, average);
++		doAf(frame, contrast, average, exposure);
+ 
+ 	updateLensPosition(frame);
+ 
+@@ -578,12 +590,13 @@ bool AfContrast::combineStats(std::span<const RegionStats> stats,
+ 	return true;
+ }
+ 
+-void AfContrast::doAf(uint32_t frame, double contrast, double average)
++void AfContrast::doAf(uint32_t frame, double contrast, double average,
++		      double exposure)
+ {
+ 	switch (scanState_) {
+ 	case ScanState::Idle:
+ 		if (mode_ == controls::AfModeContinuous && !pauseFlag_)
+-			checkSceneChange(frame, contrast, average);
++			checkSceneChange(frame, contrast, average, exposure);
+ 		break;
+ 
+ 	case ScanState::Coarse1:
+@@ -595,7 +608,7 @@ void AfContrast::doAf(uint32_t frame, double contrast, double average)
+ 
+ 	case ScanState::Settle:
+ 		if (position_ == target_)
+-			finishScan(contrast, average);
++			finishScan(contrast, average, exposure);
+ 		break;
+ 
+ 	case ScanState::Trigger:
+@@ -699,7 +712,7 @@ void AfContrast::doScan(double contrast)
+ 	target_ = peak;
+ }
+ 
+-void AfContrast::finishScan(double contrast, double average)
++void AfContrast::finishScan(double contrast, double average, double exposure)
+ {
+ 	const double ratio = speeds_[speed_].contrastRatio;
+ 
+@@ -716,6 +729,8 @@ void AfContrast::finishScan(double contrast, double average)
+ 
+ 	sceneContrast_ = contrast;
+ 	sceneAverage_ = average;
++	sceneExposure_ = exposure;
++	lastExposure_ = exposure;
+ 	sceneChangeFrame_.reset();
+ 
+ 	LOG(AfContrast, Debug)
+@@ -724,17 +739,27 @@ void AfContrast::finishScan(double contrast, double average)
+ 		<< " - " << scanMaxContrast_ << ")";
+ }
+ 
+-void AfContrast::checkSceneChange(uint32_t frame, double contrast, double average)
++void AfContrast::checkSceneChange(uint32_t frame, double contrast,
++				  double average, double exposure)
+ {
+ 	const SpeedParams &speed = speeds_[speed_];
++	const double previousExposure = lastExposure_;
++	lastExposure_ = exposure;
+ 
+ 	if (!sceneContrast_) {
+ 		sceneContrast_ = contrast;
+ 		sceneAverage_ = average;
++		sceneExposure_ = exposure;
+ 		return;
+ 	}
+ 
+-	const double ratio = speed.retriggerRatio;
++	/*
++	 * A change of exposure changes the brightness and, through noise and
++	 * clipping, the contrast, by up to the ratio of the exposures.
++	 */
++	const double exposureRatio = std::max(exposure / sceneExposure_,
++					      sceneExposure_ / exposure);
++	const double ratio = speed.retriggerRatio / exposureRatio;
+ 	const bool changed = contrast < ratio * *sceneContrast_ ||
+ 			     *sceneContrast_ < ratio * contrast ||
+ 			     average < ratio * sceneAverage_ ||
+@@ -744,10 +769,22 @@ void AfContrast::checkSceneChange(uint32_t frame, double contrast, double averag
+ 	if (changed) {
+ 		sceneContrast_ = contrast;
+ 		sceneAverage_ = average;
++		sceneExposure_ = exposure;
+ 		sceneChangeFrame_ = frame;
+ 		return;
+ 	}
+ 
++	/*
++	 * Once the exposure has settled at a new value, compare the next frames
++	 * with this one, without the allowance for the exposure change.
++	 */
++	const bool settled = std::abs(exposure / previousExposure - 1.0) < kExposureTolerance;
++	if (settled && exposureRatio > 1.0 + kExposureTolerance) {
++		sceneContrast_ = contrast;
++		sceneAverage_ = average;
++		sceneExposure_ = exposure;
++	}
++
+ 	if (sceneChangeFrame_ && frame >= *sceneChangeFrame_ + speed.retriggerDelay) {
+ 		LOG(AfContrast, Debug) << "Scene changed, rescanning";
+ 		startScan();
+diff --git a/src/ipa/libipa/af_contrast.h b/src/ipa/libipa/af_contrast.h
+index fcb94969..fef4b238 100644
+--- a/src/ipa/libipa/af_contrast.h
++++ b/src/ipa/libipa/af_contrast.h
+@@ -50,7 +50,8 @@ public:
+ 	void queueRequest(const ControlList &controls);
+ 	void prepare(uint32_t frame, af::FrameContext &frameContext);
+ 	void process(uint32_t frame, const af::FrameContext &frameContext,
+-		     std::span<const RegionStats> stats, ControlList &metadata);
++		     std::span<const RegionStats> stats, double exposure,
++		     ControlList &metadata);
+ 
+ 	std::optional<int32_t> lensSetting();
+ 
+@@ -102,11 +103,13 @@ private:
+ 	bool combineStats(std::span<const RegionStats> stats,
+ 			  double *contrast, double *average) const;
+ 
+-	void doAf(uint32_t frame, double contrast, double average);
++	void doAf(uint32_t frame, double contrast, double average,
++		  double exposure);
+ 	void startScan();
+ 	void doScan(double contrast);
+-	void finishScan(double contrast, double average);
+-	void checkSceneChange(uint32_t frame, double contrast, double average);
++	void finishScan(double contrast, double average, double exposure);
++	void checkSceneChange(uint32_t frame, double contrast, double average,
++			      double exposure);
+ 	static double findPeak(std::vector<ScanRecord> records);
+ 
+ 	void updateLensPosition(uint32_t frame);
+@@ -151,6 +154,8 @@ private:
+ 
+ 	std::optional<double> sceneContrast_;
+ 	double sceneAverage_ = 0.0;
++	double sceneExposure_ = 0.0;
++	double lastExposure_ = 0.0;
+ 	std::optional<uint32_t> sceneChangeFrame_;
+ };
+ 
+diff --git a/src/ipa/simple/algorithms/af.cpp b/src/ipa/simple/algorithms/af.cpp
+index 9487c2cc..605a14d2 100644
+--- a/src/ipa/simple/algorithms/af.cpp
++++ b/src/ipa/simple/algorithms/af.cpp
+@@ -147,7 +147,12 @@ void Af::process(IPAContext &context, const uint32_t frame,
+ 	if (stats->valid && computeRegions(context, stats))
+ 		regions = regions_;
+ 
+-	af_.process(frame, frameContext.af, regions, metadata);
++	/*
++	 * Agc may already have replaced the exposure and gain of the frame with
++	 * those for the next frames, which differ by one exposure step at most.
++	 */
++	const double exposure = frameContext.sensor.exposure * frameContext.sensor.gain;
++	af_.process(frame, frameContext.af, regions, exposure, metadata);
+ 
+ 	if (std::optional<int32_t> setting = af_.lensSetting())
+ 		context.activeState.lens.focusPosition = *setting;
+diff --git a/test/ipa/libipa/af_contrast.cpp b/test/ipa/libipa/af_contrast.cpp
+index e773564c..ad53519c 100644
+--- a/test/ipa/libipa/af_contrast.cpp
++++ b/test/ipa/libipa/af_contrast.cpp
+@@ -117,6 +117,16 @@ public:
+ 	void setFlat(bool flat) { flat_ = flat; }
+ 	void setAverage(double average) { average_ = average; }
+ 
++	/*
++	 * Change the exposure, which scales the average brightness, and scale
++	 * the contrast as noise and clipping would.
++	 */
++	void setExposure(double exposure, double contrastScale = 1.0)
++	{
++		exposure_ = exposure;
++		contrastScale_ = contrastScale;
++	}
++
+ 	/* Process the statistics of each frame this many frames after its capture. */
+ 	void setIspLatency(unsigned int frames) { ispLatency_ = frames; }
+ 
+@@ -140,6 +150,7 @@ public:
+ 
+ 		Frame &captured = pending_.emplace_back();
+ 		captured.frame = frame_;
++		captured.exposure = exposure_;
+ 		af_.prepare(frame_, captured.context);
+ 
+ 		if (frame_ % kStatsInterval == 0) {
+@@ -149,7 +160,8 @@ public:
+ 				double defocus = position - subject_(i);
+ 				double contrast = flat_ ? 100.0
+ 							: 10.0 + 1000.0 * exp(-defocus * defocus / 2.0);
+-				captured.stats.push_back({ contrast, average_ });
++				captured.stats.push_back({ contrast * contrastScale_,
++							   average_ * exposure_ });
+ 			}
+ 		}
+ 
+@@ -158,7 +170,7 @@ public:
+ 
+ 			metadata_ = ControlList(controls::controls);
+ 			af_.process(processed.frame, processed.context,
+-				    processed.stats, metadata_);
++				    processed.stats, processed.exposure, metadata_);
+ 			pending_.pop_front();
+ 
+ 			/* The lens moves while the next frame is being captured. */
+@@ -203,6 +215,7 @@ private:
+ 		unsigned int frame;
+ 		af::FrameContext context;
+ 		vector<AfContrast::RegionStats> stats;
++		double exposure;
+ 	};
+ 
+ 	/* Lens position, in dioptres, during the exposure of the current frame. */
+@@ -225,6 +238,8 @@ private:
+ 	Scene subject_;
+ 	bool flat_ = false;
+ 	double average_ = 100.0;
++	double exposure_ = 1.0;
++	double contrastScale_ = 1.0;
+ 
+ 	unsigned int frame_ = 0;
+ 	unsigned int ispLatency_ = 0;
+@@ -453,6 +468,44 @@ protected:
+ 		return TestPass;
+ 	}
+ 
++	int testExposureChange()
++	{
++		Simulator camera;
++		EXPECT(camera.init(true) == 0);
++		camera.setSubject([](unsigned int) { return 4.5; });
++
++		ControlList ctrls = request();
++		ctrls.set(controls::AfMode, controls::AfModeContinuous);
++		camera.step(ctrls);
++		EXPECT(camera.runUntil(controls::AfStateFocused, 400));
++
++		/*
++		 * The exposure control converges after the scan: the exposure
++		 * doubles in steps of 4%, and noise and clipping take the
++		 * contrast down to 55%. The scene is the same, the lens stays.
++		 */
++		unsigned int moves = camera.moves();
++		for (double exposure = 1.0; exposure < 2.0; exposure *= 1.04) {
++			camera.setExposure(exposure, 1.45 - 0.45 * exposure);
++			for (unsigned int i = 0; i < kStatsInterval; i++)
++				camera.step();
++		}
++		/* It settles, with rounding errors. */
++		for (unsigned int i = 0; i < 100; i++) {
++			camera.setExposure(i / kStatsInterval % 2 ? 2.0 : 2.0001, 0.55);
++			camera.step();
++		}
++		EXPECT(camera.moves() == moves);
++
++		/* A change of brightness alone still triggers a new scan. */
++		camera.setAverage(50.0);
++		EXPECT(camera.runUntil(controls::AfStateScanning, 100));
++		EXPECT(camera.runUntil(controls::AfStateFocused, 400));
++		EXPECT_NEAR(camera.lensPosition(), 4.5, 0.1);
++
++		return TestPass;
++	}
++
+ 	int testRestart()
+ 	{
+ 		Simulator camera;
+@@ -558,6 +611,9 @@ protected:
+ 		if (testContinuous() != TestPass)
+ 			return TestFail;
+ 
++		if (testExposureChange() != TestPass)
++			return TestFail;
++
+ 		if (testRestart() != TestPass)
+ 			return TestFail;
+ 
+-- 
+2.56.0
+

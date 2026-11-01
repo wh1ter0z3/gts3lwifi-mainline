@@ -5,11 +5,13 @@
 # IMX258 lens settle wait covering the soft ISP's buffer lag, 0016
 # AfContrast counts the settle wait from the captured frame, which
 # undoes 0016's longer wait, 0017; Raspberry Pi licence kept, 0018
+# Continuous AF allows for exposure changes, no rescan while the
+# exposure control converges, 0019
 maintainer="Robert Mader <robert.mader@collabora.com>"
 pkgname=libcamera
 _pkgver=0.7.2
 pkgver=9999$_pkgver
-pkgrel=107
+pkgrel=108
 pkgdesc="Linux camera framework"
 url="https://libcamera.org/"
 arch="all"
@@ -82,6 +84,7 @@ source="https://gitlab.freedesktop.org/camera/libcamera/-/archive/v$_pkgver/libc
 	0016-ipa-simple-imx258-Wait-longer-for-the-focus-lens-to-.patch
 	0017-ipa-libipa-af_contrast-Time-lens-movements-against-c.patch
 	0018-ipa-libipa-af_contrast-Keep-the-Raspberry-Pi-copyrig.patch
+	0019-ipa-libipa-af_contrast-Allow-for-exposure-changes-in.patch
 	qcam.desktop
 	$_tuning_files
 	"
@@ -214,6 +217,7 @@ c3d813e524b2b6cea2bf921a7c71a53dbb1b43a3ec2a924fdcb068f5ff055a696d226a848e13d250
 813c2dfe9c53f07848b10e17bdb4b125285f350ac513bf112012cb75d635c05bfd28a8583fef324999d2f00ba0c4ae71612aaa8432cd718cbeec494c62b4a5bb  0016-ipa-simple-imx258-Wait-longer-for-the-focus-lens-to-.patch
 83cace9b4e565dbdec6cd102fd1ff105aeb4a8961c6dd42998f6e89df7e565e584ebcbb0369cd58c3978776d45dc8cbd3df809c8560732b51e7f2f501ae7ee3d  0017-ipa-libipa-af_contrast-Time-lens-movements-against-c.patch
 c0ce684340fdd31a6775c6edc819cbf6b1b6f2d75028202b5e3d940a5fca3e8063a90ecc2e973aa3b6b6f3837986235f6736ee5bac47ce26545276d668ed76d4  0018-ipa-libipa-af_contrast-Keep-the-Raspberry-Pi-copyrig.patch
+3f3060e31f4cdc20c95e518b937278b8e859178ba181cb0ec102858bbee0e452badd345fe127d2919af64da1750ffd6263eb2782bbcbacaae4d70d471edefdb0  0019-ipa-libipa-af_contrast-Allow-for-exposure-changes-in.patch
 22167a4eceb6d1b40b0b7c45fdf116c71684f5340de7f767535cb8e160ad9d2ae0f00cb3d461f73a344520a48a4641cf46226841d78bee06bfbfd2a91337f754  qcam.desktop
 2ee566653b17d565d2c0de67cbe6ebad25df5aac6051cad78e6bae52016fa2ca0247e964d735ac776b3e0bd447ead9c4fcb26cd7629228cdba3ceb91b46f378f  hi846.yaml
 4942edd551dcf51630246f71e600c17760d3574d5d45e5530d6cfeefe2c9ab1a812fbe220f8e89d92e19a499c592b2507c801ca4eb74cd15fcecb60bff5c650b  imx355.yaml
