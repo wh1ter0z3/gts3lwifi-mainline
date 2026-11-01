@@ -110,8 +110,9 @@ second:
 | Front | 512x384 | H.264 | 59.8 to 60.7; 119.6 to 120.1 |
 
 Ocellus also offers 30 fps at every size; the 30 fps modes missing from
-the table weren't measured. Photos are viewfinder frames: 3840x2160
-(rear), 2568x1932 (front).
+the table weren't measured. Photos are viewfinder frames: 4200x3120
+(rear, the full sensor less the ISP's 8-pixel border; the viewfinder runs
+at about 17 fps there), 2568x1932 (front).
 
 - The simple pipeline has no `FrameDurationLimits`, so libcamera can't set
   the frame rate. For 60 and 120 fps, Ocellus shortens the sensor's
