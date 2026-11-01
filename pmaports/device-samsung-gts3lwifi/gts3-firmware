@@ -3,14 +3,18 @@
 # partitions into /lib/firmware/updates (searched before /lib/firmware):
 #  - apnhlos: Samsung-signed GPU zap shader, Venus and SLPI (sensor core)
 #    firmware
-#  - modem: Samsung-signed ADSP (audio DSP) firmware
+#  - modem: Samsung-signed ADSP (audio DSP) firmware, and the modem DSP's
+#    (MSS: GNSS, on the SM-T825 also LTE) MBA and modem images with the
+#    modem_pr configuration tree it fetches over QRTR TFTP (tqftpserv).
+#    Only used by a device tree that enables the MSS (dts/test/gnss.dtsi)
 #  - system (Android): the Wi-Fi board data, etc/firmware/bdwlan30.bin ->
 #    ath10k board.bin. apnhlos has a bdwlan30.bin too, but a different one;
 #    Wi-Fi was brought up with this one (docs/wifi.md)
 #  - efs: the sensor registry with this unit's factory calibration
 # Only missing or changed files are written. Remote processors that could
-# not start for lack of firmware are started afterwards; Wi-Fi picks up its
-# board data on the next boot.
+# not start for lack of firmware are started afterwards, except the modem
+# DSP, which rmtfs starts once it serves the modem's file system; Wi-Fi
+# picks up its board data on the next boot.
 set -eu
 
 DEST=/lib/firmware/updates
@@ -53,8 +57,13 @@ if mount_part apnhlos; then
 fi
 
 if mount_part modem; then
-	for f in "$tmp"/modem/image/adsp.*; do
+	for f in "$tmp"/modem/image/adsp.* "$tmp"/modem/image/mba.mbn \
+		 "$tmp"/modem/image/modem.*; do
 		copy "$f" "$FW/${f##*/}"
+	done
+	# Paths have no spaces (mcfg_hw/.../7+5_mode/...)
+	for f in $(cd "$tmp/modem/image" && find modem_pr -type f 2>/dev/null); do
+		copy "$tmp/modem/image/$f" "$FW/$f"
 	done
 fi
 
@@ -74,6 +83,9 @@ fi
 
 for r in /sys/class/remoteproc/remoteproc*; do
 	[ -e "$r/state" ] || continue
+	case "$(readlink "$r/device/driver" 2>/dev/null)" in
+	*/qcom-q6v5-mss) continue ;;
+	esac
 	if [ "$(cat "$r/state")" = offline ]; then
 		echo start > "$r/state" || echo "gts3-firmware: could not start $(cat "$r/name")" >&2
 	fi
