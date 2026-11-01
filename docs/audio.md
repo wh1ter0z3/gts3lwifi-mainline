@@ -82,6 +82,25 @@ the mix volume left at 0 dB and the compander off, the tone was distorted.
    backport the mainline (7.1) fixes by Bjorn Andersson and Bartosz
    Golaszewski; 0109 is the one that registers the callbacks after
    creating the NGD. 11 boots in a row were clean with them.
+7. **Closing a stream in the DSP timed out** (`q6asm-dai ... CMD 10bcd
+   timeout`, 5 s): at the PipeWire start in 6 of 24 boots, while
+   WirePlumber probed the PCMs, and before the sound of about one camera
+   recording in ten. PipeWire prepares a capture PCM twice, and the second
+   prepare closes the DSP stream that the first one opened, with reads
+   still queued. The DSP rejects those reads, and `q6asm_stream_callback()`
+   stored the rejections in `ac->result` like any other response. One that
+   landed after the close's own response hid it from
+   `q6asm_ac_send_cmd_sync()`, which waited out its 5 s, or which read the
+   rejection's status instead (`DSP returned error[a]`, seen once). Patch
+   0113 backports the upstream fix, 8a066a81ee0c ("ASoC: qcom: q6asm: drop
+   DSP responses for closed data streams", in v7.0 and the 6.12, 6.18 and
+   6.19 stable branches, after our v6.19.5 base), which drops the `EOS`,
+   `READ_V2` and `WRITE_V2` responses without touching `ac->result`. We had
+   written the same change for `EOS` and `READ_V2` before finding it. With
+   a debug print in that version, a rejection arrived after the close's
+   response in 8 of 20 recordings at 120 fps, and all 20 started their
+   sound on time; 10 more did on its final build and 10 of 10 on the
+   backport, and no boot with either had the timeout.
 
 Also seen: unbinding and rebinding the sound card fails because wcd9335 does
 not free its SLIM slave interrupt (`request_irq ... -EBUSY`). Reboot instead
@@ -157,27 +176,6 @@ the empty slot 1 and then the slot each channel lands in.
 `tools/pinsample.c` samples TLMM inputs through `/dev/mem` and counts ones
 and edges; with a tone playing, the clock pins read ~50 % and a data pin
 ~24 % ones, an idle data pin 0 %.
-
-### Known issue
-
-At every PipeWire start the DSP times out on two `ASM_STREAM_CMD_CLOSE`
-commands (`q6asm-dai ... CMD 10bcd timeout`, 5 s each) while WirePlumber
-probes the PCMs. It also happens with the headphones-only profile and the
-unpatched q6routing, so it predates the speakers. Playback works afterwards.
-
-The same timeout sometimes delays the start of a recording by 5 s:
-PipeWire prepares a capture PCM twice, and the second prepare closes the
-DSP stream that the first one opened (2 of 20 camera recordings at 120 fps,
-2026-10-31). The likely cause, from reading q6asm.c:
-`q6asm_stream_callback()` stores every basic response in `ac->result`,
-including the DSP's rejections of the reads still queued when a capture
-stream closes (`ASM_DATA_CMD_READ_V2`, which nothing waits for). If one
-lands after the close's own response, it hides that response from
-`q6asm_ac_send_cmd_sync()`, which then waits out its 5 s. Upstream
-a354f030dbce ("ASoC: qcom: q6asm: handle the responses after closing")
-only silenced the "not expecting rsp" message for these. A fix that leaves
-`ac->result` alone for the `READ_V2` and `EOS` responses is written but not
-yet tested on the tablet.
 
 ## Testing headless
 

@@ -138,6 +138,7 @@ source="
 	0110-slimbus-qcom-ngd-resources-in-controller.patch
 	0111-slimbus-qcom-ngd-pm-runtime-balance.patch
 	0112-slimbus-qcom-ngd-tx-lock-abba.patch
+	0113-asoc-q6asm-drop-closed-stream-responses.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -275,4 +276,5 @@ bbd5ea368244dc4a207d17be244beb75a48bd3c427de660136a0091314db6cc3f9b0afd84bed08a8
 68d5114909fb9e2f3c9e3ff7622ddfb0137b94e2d47588238a6549525d0d23c0fbad59349329096c8224ac7951424b42e298579536f9eeb7a42a0d2caf7869d0  0110-slimbus-qcom-ngd-resources-in-controller.patch
 9d5fd9c8f3981e01279b1b9a5bda278649a81936cb60e153a8d33eed90d1c40a096aa617c7931ce3cd28c25d733aa0952c5ed87ff56e018be2ef539380bc94bb  0111-slimbus-qcom-ngd-pm-runtime-balance.patch
 3b1326eb6e2f64da5ff537ae6796410f178374a7bb3ade198d2c272698d8e2250135538a3d3a8f8629d348dd16f2cd01d5493204424ee2db48b57fcbc567023e  0112-slimbus-qcom-ngd-tx-lock-abba.patch
+93af951ae3679707f697ac89df28172a081329dbb4e5f7fe57b288c79ebc18adb33cd20f8f81d4eb8f20b8e292dc838e9e01486b38fae91d861b7b9302d9c02a  0113-asoc-q6asm-drop-closed-stream-responses.patch
 "

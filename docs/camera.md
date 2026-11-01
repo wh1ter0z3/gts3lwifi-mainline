@@ -127,11 +127,13 @@ at about 17 fps there), 2568x1932 (front).
   pixel rate / (line length x fps)).
 - With sound, a GStreamer pipeline runs on the microphone's clock, and
   libcamerasrc maps the frame timestamps onto it. When the microphone
-  started late (see the q6asm item under Open), the video froze after a
+  started late (the q6asm close timeout, fixed by kernel patch 0113, see
+  [audio.md](audio.md)), the video froze after a
   second or two, which looked like a 120 fps problem. Ocellus records on
   the monotonic system clock: since then, 18 of 20 test recordings at
   120 fps were clean. In the other two, the video kept running but
-  dropped frames until the sound started.
+  dropped frames until the sound started. With patch 0113, all were
+  clean.
 
 ## Kernel fixes found on the way
 
@@ -185,7 +187,3 @@ at about 17 fps there), 2568x1932 (front).
   so Ocellus's video modes use widths that are multiples of 128 and fit
   in a sensor mode: 3840, 1920, 1280, 1152, 1024 and 512.
 - The encoder refused 25 fps at every size tried; 24 and 30 work.
-- **q6asm: the microphone sometimes starts 5 s late.** In 2 of 20
-  recordings the capture stream started 5 s late, with
-  `q6asm-dai ...: CMD 10bcd timeout`. This is the known issue in
-  [audio.md](audio.md); a fix is written and waiting for a test.
