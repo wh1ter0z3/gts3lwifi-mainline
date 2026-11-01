@@ -12,7 +12,8 @@ sets the camera sensor and lens options; 0105-0112 fix an oops in the
 SLIMbus controller at boot and 0113 a 5 s timeout when the DSP closes an
 audio stream (docs/audio.md). The keyboard cover joined the
 main DTS on 2026-10-31, and since 2026-11-01 0114-0120 and
-`CONFIG_I2C_HOTPLUG_GPIO=m` hot-plug it (docs/input.md); only the panel
+`CONFIG_I2C_HOTPLUG_GPIO=m` hot-plug it, with 0121 for power cycles the
+MUIC misses (docs/input.md); only the panel
 temperature channel (`dts/test/test-display-temp.dts`) is still a test DT.
 The rest of this page records the original install.
 

@@ -279,3 +279,16 @@ and a key press waking the tablet. A plain USB cable never read 0x11.
 Not done: the wall charger (DCP) case next to the cover; the suspend
 drain with the cover attached (L6 and the STMPE1801 stay on, as in
 stock).
+
+### Power cycles the MUIC misses (patch 0121)
+
+Patch 0121 is by Nazim Aghabayov, from PR #2 (tested on an SM-T825). A
+detach and reattach quick enough for the MUIC to debounce away gives no
+dock event, so the STMPE1801 stays bound while it has lost its
+configuration. The keypad driver reads its low column register every 2 s
+while it is bound. A NAK means the cover is away right now, logged once.
+The reset default means the chip power cycled: a new MFD helper,
+`stmpe_restore_irq_setup()`, rewrites ICR, autosleep and the cached IER
+bits, and the keypad block is set up and started again. With the hotplug
+above, a detach the MUIC sees removes the device, which stops the poll;
+the next attach probes it fresh.
