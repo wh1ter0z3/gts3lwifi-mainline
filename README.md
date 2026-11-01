@@ -19,7 +19,7 @@ only changes the SoC ID, the modem memory and the pins TrustZone may own.
 | Model | State |
 |---|---|
 | SM-T820 (Wi-Fi, `gts3lwifi`) | main target, everything below is tested on it |
-| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM, GPS) not supported; top speakers left out until checked |
+| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM) and GPS not supported yet; top speakers left out until checked |
 
 ## Status
 
@@ -49,7 +49,8 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | USB device mode | Works | network, serial, storage |
 | USB host / OTG, USB 3 | Works | 5 Gbit/s as a host ([usb](docs/usb.md)) |
 | USB-C power (PD) | Works | 5 V / 3 A or 9 V / 1.65 A sink, 5 V / 1.5 A source ([usb](docs/usb.md)) |
-| LTE modem, SIM, GPS (SM-T825) | Not yet | planned |
+| GPS / GNSS (both models) | Not yet | in the modem DSP on both models (the SM-T820 runs a GNSS-only modem image); test DT, firmware copy and test plan ready ([gnss](docs/gnss.md)) |
+| LTE modem, SIM (SM-T825) | Not yet | planned |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
 | Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
@@ -75,7 +76,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 - `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage), the kernel patches, libcamera with autofocus, KWin with rotation fixes, and iio-sensor-proxy with a restart fix
 - `lk2nd/` - lk2nd device entries for the Wi-Fi and LTE models
 - `scripts/` - regenerate the kernel patch, build tester packages
-- `tools/` - on-device debugging aids: MMIO and PMIC (SPMI) register access, manual PCIe link retrain, TLMM pin sampling, RT5508 amplifier probe
+- `tools/` - on-device debugging aids: MMIO and PMIC (SPMI) register access, manual PCIe link retrain, TLMM pin sampling, RT5508 amplifier probe, GNSS test helper
 - `kernel/` - out-of-tree kernel additions (panel, fuel gauge, charger and MUIC drivers, bindings, Kconfig snippet)
 - `docs/` - notes per subsystem, the postmarketOS install, tester instructions and boot logs
 
