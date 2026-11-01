@@ -1,0 +1,145 @@
+# Forked from Alpine to add systemd!
+# gts3: postmarketOS extra-repos/systemd/kwin 99996.8.1-r0 plus two
+# rotation fixes for upstream KWin (not merged yet):
+# the rotation animation paints the whole snapshot at scale > 1 (no
+# snow), 0001; the output keeps its orientation when the screen wakes
+# instead of turning to the manual transform and back, 0002.
+# No CAP_SYS_NICE file capability on kwin_wayland: on musl it makes
+# libdbus ignore the session bus address (docs/sensors.md).
+maintainer="team/kde <bribbers@disroot.org>"
+pkgname=kwin
+_pkgver=6.8.1
+pkgver=9999$_pkgver
+pkgrel=100
+pkgdesc="An easy to use, but flexible, composited Window Manager"
+# armhf blocked by qt6-qtdeclarative
+# riscv64: slow Alpine builders
+arch="all !armhf !riscv64"
+url="https://kde.org/plasma-desktop/"
+license="GPL-2.0-or-later AND (GPL-2.0-only OR GPL-3.0-only) AND LGPL-2.1-only"
+depends="
+	aurorae
+	hwdata
+	kirigami
+	qt6-qtmultimedia
+	qt6-qtwayland
+	xwayland
+	"
+depends_dev="
+	breeze-dev
+	fontconfig-dev
+	kcmutils-dev
+	kcompletion-dev
+	kconfig-dev
+	kconfigwidgets-dev
+	kcoreaddons-dev
+	kcrash-dev
+	kdeclarative-dev
+	kdecoration-dev
+	kglobalaccel-dev
+	ki18n-dev
+	kiconthemes-dev
+	kidletime-dev
+	kio-dev
+	knewstuff-dev
+	knighttime-dev
+	knotifications-dev
+	kpackage-dev
+	krunner-dev
+	kscreenlocker-dev
+	kservice-dev
+	ksvg-dev
+	ktextwidgets-dev
+	kwayland-dev
+	kwidgetsaddons-dev
+	kwindowsystem-dev
+	kxmlgui-dev
+	lcms2-dev
+	libdrm-dev
+	libepoxy-dev
+	libinput-dev
+	libplasma-dev
+	libqaccessibilityclient-dev
+	libxcvt-dev
+	libxi-dev
+	libxkbcommon-dev
+	mesa-dev
+	mesa-gbm
+	pipewire-dev
+	plasma-activities-dev
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	qt6-qtdeclarative-private-dev
+	qt6-qtsensors-dev
+	wayland-dev
+	xcb-util-cursor-dev
+	xcb-util-image-dev
+	xcb-util-wm-dev
+	"
+case "$CARCH" in
+	armv7|x86) ;;
+	*) depends_dev="$depends_dev libevdev-dev"
+esac
+makedepends="$depends_dev
+	extra-cmake-modules
+	kdoctools-dev
+	kglobalacceld-dev
+	kpipewire-dev
+	libcap-utils
+	libdisplay-info-dev
+	libei-dev
+	plasma-wayland-protocols
+	qt6-qttools-dev
+	samurai
+	systemd-dev
+	"
+checkdepends="xwayland-run"
+
+case "$_pkgver" in
+	*.90*) _rel=unstable;;
+	*) _rel=stable;;
+esac
+subpackages="
+	$pkgname-systemd
+	$pkgname-dbg
+	$pkgname-dev
+	$pkgname-lang
+	"
+_repo_url="https://invent.kde.org/plasma/kwin.git"
+source="https://download.kde.org/stable/plasma/$(echo $_pkgver | cut -d . -f 1-3)/kwin-$_pkgver.tar.xz
+	0001-plugins-screentransform-Paint-the-whole-snapshot-of-.patch
+	0002-utils-orientationsensor-Keep-the-last-reading-when-s.patch
+	"
+# Broken, fails to setup due to missing or invalid XDG_RUNTIME_DIR?
+options="!check"
+builddir="$srcdir/$pkgname-$_pkgver"
+
+build() {
+	# significantly reduce debug symbol size
+	# use None here to not make cmake pass bare -g (-g2)
+	CFLAGS="$CFLAGS -O2 -g1" CXXFLAGS="$CXXFLAGS -O2 -g1" \
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+}
+
+check() {
+	XDG_RUNTIME_DIR="$(mktemp -p -d "$builddir")" \
+	wlheadless-run -- ctest --test-dir build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+
+	# The install step gives kwin_wayland CAP_SYS_NICE. A file capability
+	# makes it AT_SECURE, so musl's issetugid() is true and libdbus ignores
+	# DBUS_SESSION_BUS_ADDRESS: KWin can't connect to the session bus.
+	setcap -r "$pkgdir"/usr/bin/kwin_wayland
+}
+sha512sums="
+658a4a94fc7ee2c4f30d4edd1b4926319bf36fe816bf8cf764dc999f9868add67188f6a1736aef099016ed387f947023d3c1ab4cb65b6c0f2aa32de077ebc886  kwin-6.8.1.tar.xz
+4e8a33e980c5170f9b8c071362ce774d1f13e7aa150fb3e5d56218912103a09d2a9c46fecc2383bef5dcc1b72fe887e96b0a4ac6768c7fd063519ae573f37f86  0001-plugins-screentransform-Paint-the-whole-snapshot-of-.patch
+41568c1636a26a435bb6ea788b36a9159f0a7df66cd7e191375ae9c98f34617895812ad48055388520c16fb5f353cbb887198a116f31a6ebe8c6ef92a6a887dc  0002-utils-orientationsensor-Keep-the-last-reading-when-s.patch
+"

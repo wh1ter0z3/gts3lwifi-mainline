@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: jaydens-tasty-slop
+ <325336397+jaydens-tasty-slop@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 07:49:24 -0700
+Subject: [PATCH] utils/orientationsensor: Keep the last reading when
+ subscribing again
+
+Auto-rotation unsubscribes from the orientation sensor while the
+screen is off. When the screen turns back on, subscribe() reports the
+reading of the new subscription straight away, but that reading is
+always Undefined: the ClaimAccelerometer() and Get() calls have not
+been answered yet. An Undefined reading applies the manual transform,
+so on a tablet held in landscape whose manual transform is portrait
+the output turns to portrait on every wake and back to landscape about
+a second later, when the real reading arrives.
+
+Keep the last known orientation until the subscription has a reading.
+The Qt Sensors based implementation behaved like this too: the reading
+it went back to after start() was the last one the sensor had.
+
+Still report the first reading of a new subscription when it matches the
+last known one, so the outputs are put back to the sensor orientation if
+they were reconfigured while the screen was off, as they were before.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01UQSvSLBoFcFR7i6bQghXDu
+---
+ src/utils/orientationsensor.cpp | 19 +++++++++++++++----
+ 1 file changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/src/utils/orientationsensor.cpp b/src/utils/orientationsensor.cpp
+index fe4cbb5..83b8457 100644
+--- a/src/utils/orientationsensor.cpp
++++ b/src/utils/orientationsensor.cpp
+@@ -17,6 +17,8 @@
+ #include <QDBusPendingCall>
+ #include <QDBusServiceWatcher>
+ 
++#include <utility>
++
+ namespace KWin
+ {
+ 
+@@ -208,11 +210,20 @@ void OrientationSensor::subscribe()
+     }
+ 
+     m_subscription = std::make_unique<OrientationSensorSubscription>();
+-    connect(m_subscription.get(), &OrientationSensorSubscription::readingChanged, this, [this]() {
+-        updateOrientation(m_subscription->reading());
++    // A new subscription has no reading until net.hadess.SensorProxy answers.
++    // Keep the last known orientation until then, rather than reporting it as
++    // undefined, which would rotate the output to its manual transform and
++    // back every time the screen turns on.
++    connect(m_subscription.get(), &OrientationSensorSubscription::readingChanged, this, [this, firstReading = true]() mutable {
++        const AccelerometerOrientation reading = m_subscription->reading();
++        if (std::exchange(firstReading, false) && reading == m_orientation) {
++            // The outputs may have been reconfigured while there was no
++            // subscription, so report the first reading even if it's unchanged.
++            Q_EMIT readingReceived();
++        } else {
++            updateOrientation(reading);
++        }
+     });
+-
+-    updateOrientation(m_subscription->reading());
+ }
+ 
+ void OrientationSensor::unsubscribe()
+-- 
+2.56.0
+

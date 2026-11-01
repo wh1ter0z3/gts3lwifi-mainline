@@ -10,7 +10,10 @@ the command line below. Since 2026-10-31 the kernel package lists patches
 0001-0104 (USB OTG and USB 3.0, HBM, the cameras, the cover as a dock) and
 sets the camera sensor and lens options; 0105-0112 fix an oops in the
 SLIMbus controller at boot and 0113 a 5 s timeout when the DSP closes an
-audio stream (docs/audio.md). The keyboard cover joined the
+audio stream (docs/audio.md); 0122-0123 fix GPU faults when a buffer is
+shared between processes, e.g. while the screen rotates (docs/gpu.md).
+`pmaports/kwin` is KWin with two rotation fixes (docs/sensors.md); put it
+in place of pmaports' `extra-repos/systemd/kwin`. The keyboard cover joined the
 main DTS on 2026-10-31 (attached at boot; no hotplug yet); only the panel
 temperature channel (`dts/test/test-display-temp.dts`) is still a test DT.
 The rest of this page records the original install.
