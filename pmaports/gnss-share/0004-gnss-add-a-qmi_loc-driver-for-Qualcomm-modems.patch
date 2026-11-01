@@ -1,0 +1,1379 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <gnss-share@jayd.ml>
+Date: Sun, 1 Nov 2026 16:11:14 -0700
+Subject: [PATCH 4/4] gnss: add a qmi_loc driver for Qualcomm modems
+
+Reads NMEA from the GNSS engine of a Qualcomm modem DSP through its QMI
+location service (LOC, QRTR service 0x10 version 2). This is for modems
+that ModemManager does not manage, e.g. the GNSS-only modem images of APQ
+SoCs, which offer LOC but no WDS, DMS or NAS, so the mm driver can't be
+used.
+
+The session starts when the first client connects and stops when the last
+one leaves: REG_EVENTS (NMEA, time requests, engine and session state),
+SET_OPERATION_MODE standalone (there is no A-GPS server), START (session
+1, periodic, intermediate reports, 1000 ms) and STOP. Closing the socket,
+also when gnss-share dies, makes the kernel send DEL_CLIENT to the modem.
+The service is found through the QRTR name service, not at a fixed port,
+and the lookup stays open: when the modem restarts, the session is set up
+again on the new service. A request that fails or isn't answered is
+retried after 30 s.
+
+The system time is injected (INJECT_UTC_TIME) after START and when the
+engine asks for it, only while the kernel's maximum error estimate for
+the clock is below NTP_PHASE_LIMIT (16 s), the test systemd uses for "NTP
+synchronized"; that estimate, at least 500 ms, is the uncertainty sent.
+
+Message IDs, TLVs and enum values are from libqmi's
+data/qmi-service-loc.json, qmi-enums-loc.h and qmi-flags64-loc.h; the
+sequence is close to ModemManager's (src/mm-shared-qmi.c). NMEA text is
+never logged. Load and Save do nothing: the modem keeps its own
+assistance data.
+
+Tested on x86_64, aarch64 (qemu-user), armv7 (qemu-user) and x86: unit
+tests against a fake socket (setup, NMEA, modem restart, unsynchronized
+clock, failures and timeouts, socket errors) and a test over the kernel's
+QRTR with a fake service, which skips without AF_QIPCRTR.
+---
+ cmd/gnss-share/main.go             |   2 +
+ doc/gnss-share.conf.5.scd          |   6 +-
+ gnss-share.conf                    |   2 +-
+ internal/gnss/clock_linux.go       |  23 ++
+ internal/gnss/clock_other.go       |  17 +
+ internal/gnss/qmiloc.go            | 576 +++++++++++++++++++++++++++++
+ internal/gnss/qmiloc_linux_test.go | 176 +++++++++
+ internal/gnss/qmiloc_test.go       | 457 +++++++++++++++++++++++
+ 8 files changed, 1256 insertions(+), 3 deletions(-)
+ create mode 100644 internal/gnss/clock_linux.go
+ create mode 100644 internal/gnss/clock_other.go
+ create mode 100644 internal/gnss/qmiloc.go
+ create mode 100644 internal/gnss/qmiloc_linux_test.go
+ create mode 100644 internal/gnss/qmiloc_test.go
+
+diff --git a/cmd/gnss-share/main.go b/cmd/gnss-share/main.go
+index 77b6ab0..8fe7b0b 100644
+--- a/cmd/gnss-share/main.go
++++ b/cmd/gnss-share/main.go
+@@ -59,6 +59,8 @@ func main() {
+ 		driver = gnss.NewStmSerial(conf.DevicePath, conf.BaudRate, debug)
+ 	case "mm":
+ 		driver = gnss.NewModemManager(debug)
++	case "qmi_loc":
++		driver = gnss.NewQmiLoc(debug)
+ 	}
+ 	gnssDevice, err := gnss.New(driver)
+ 	if err != nil {
+diff --git a/doc/gnss-share.conf.5.scd b/doc/gnss-share.conf.5.scd
+index 5914a97..ec44c91 100644
+--- a/doc/gnss-share.conf.5.scd
++++ b/doc/gnss-share.conf.5.scd
+@@ -14,10 +14,12 @@ format is TOML.
+ 
+ *device_driver="<string>"*
+ 	GPS device driver to use. Supported values: stm, stm_serial, mm (for
+-	ModemManager D-Bus interface)
++	ModemManager D-Bus interface), qmi_loc (for the QMI location service of
++	a Qualcomm modem, over QRTR)
+ 
+ *device_path="<string>"*
+-	Path to GPS device to use, e.g. "/dev/gnss0"
++	Path to GPS device to use, e.g. "/dev/gnss0". Not used by the mm and
++	qmi_loc drivers.
+ 
+ *device_baud_rate=<int>*
+ 	Baud rate for GPS serial device, e.g. "9600". Only used if the device driver
+diff --git a/gnss-share.conf b/gnss-share.conf
+index 4e53e36..16d1397 100644
+--- a/gnss-share.conf
++++ b/gnss-share.conf
+@@ -4,7 +4,7 @@ socket="/var/run/gnss-share.sock"
+ group="geoclue"
+ 
+ # GPS device driver to use
+-# Supported values: stm, stm_serial, mm
++# Supported values: stm, stm_serial, mm, qmi_loc
+ device_driver="stm"
+ 
+ # Path to GPS device to use
+diff --git a/internal/gnss/clock_linux.go b/internal/gnss/clock_linux.go
+new file mode 100644
+index 0000000..d085ae7
+--- /dev/null
++++ b/internal/gnss/clock_linux.go
+@@ -0,0 +1,23 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++//go:build linux
++// +build linux
++
++package gnss
++
++import (
++	"syscall"
++	"time"
++)
++
++// clockMaxError returns the kernel's maximum error estimate for the system
++// clock (struct timex maxerror, read with adjtimex() without changing
++// anything)
++func clockMaxError() (time.Duration, error) {
++	var tx syscall.Timex
++	if _, err := syscall.Adjtimex(&tx); err != nil {
++		return 0, err
++	}
++	return time.Duration(tx.Maxerror) * time.Microsecond, nil
++}
+diff --git a/internal/gnss/clock_other.go b/internal/gnss/clock_other.go
+new file mode 100644
+index 0000000..8c92b41
+--- /dev/null
++++ b/internal/gnss/clock_other.go
+@@ -0,0 +1,17 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++//go:build !linux
++// +build !linux
++
++package gnss
++
++import (
++	"errors"
++	"time"
++)
++
++// clockMaxError fails: only Linux reports the clock's error estimate here
++func clockMaxError() (time.Duration, error) {
++	return 0, errors.New("clock error estimate not supported")
++}
+diff --git a/internal/gnss/qmiloc.go b/internal/gnss/qmiloc.go
+new file mode 100644
+index 0000000..a04adaf
+--- /dev/null
++++ b/internal/gnss/qmiloc.go
+@@ -0,0 +1,576 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++package gnss
++
++// The qmi_loc driver reads NMEA from the GNSS engine of a Qualcomm modem
++// DSP through the modem's QMI location service (LOC), over QRTR. It is for
++// modems that ModemManager doesn't manage, such as the GNSS-only modem
++// images of APQ SoCs, which offer LOC but no WDS, DMS or NAS.
++//
++// Message, TLV and enum values are those of libqmi
++// (data/qmi-service-loc.json, src/libqmi-glib/qmi-enums-loc.h and
++// qmi-flags64-loc.h). The session is like ModemManager's
++// (src/mm-shared-qmi.c): periodic fixes every second, NMEA, and the system
++// time injected when the engine asks for it. This driver also injects the
++// time right after START, and only while the kernel considers the system
++// clock synchronized. There is no A-GPS server, so it asks for standalone
++// operation.
++//
++// A session runs only while gnss-share has clients: the first client starts
++// it, and when the last one leaves the driver stops it and closes its
++// socket. Closing the socket (also when gnss-share dies) makes the kernel
++// tell the modem that the client is gone. The driver finds the service
++// through the QRTR name service and keeps that lookup open, so it starts the
++// session again when the modem restarts.
++
++import (
++	"bytes"
++	"fmt"
++	"time"
++
++	"gitlab.com/postmarketOS/gnss-share/internal/qmi"
++	"gitlab.com/postmarketOS/gnss-share/internal/qrtr"
++)
++
++const (
++	// QMI LOC is service 0x10 on QRTR; its messages are version 2
++	qmiLocService uint32 = 0x10
++	qmiLocVersion uint32 = 2
++
++	qmiLocRegisterEvents     uint16 = 0x0021
++	qmiLocStart              uint16 = 0x0022
++	qmiLocStop               uint16 = 0x0023
++	qmiLocNmeaInd            uint16 = 0x0026
++	qmiLocInjectTimeReqInd   uint16 = 0x0028
++	qmiLocEngineStateInd     uint16 = 0x002B
++	qmiLocFixSessionStateInd uint16 = 0x002C
++	qmiLocInjectUtcTime      uint16 = 0x0038
++	qmiLocSetOperationMode   uint16 = 0x004A
++
++	// QmiLocEventRegistrationFlag
++	qmiLocEventNmea            uint64 = 1 << 2
++	qmiLocEventInjectTimeReq   uint64 = 1 << 4
++	qmiLocEventEngineState     uint64 = 1 << 7
++	qmiLocEventFixSessionState uint64 = 1 << 8
++
++	qmiLocEvents = qmiLocEventNmea | qmiLocEventInjectTimeReq |
++		qmiLocEventEngineState | qmiLocEventFixSessionState
++
++	// QmiLocOperationMode: no A-GPS server, so standalone
++	qmiLocOperationModeStandalone uint32 = 4
++	// QmiLocFixRecurrenceType
++	qmiLocFixRecurrencePeriodic uint32 = 1
++	// QmiLocIntermediateReportState
++	qmiLocIntermediateReportEnable uint32 = 1
++	// QmiLocEngineState
++	qmiLocEngineStateOn uint32 = 1
++
++	qmiLocSessionID      uint8  = 1
++	qmiLocFixIntervalMs  uint32 = 1000
++	qmiLocMinUncertainty        = 500 * time.Millisecond
++)
++
++// ntpPhaseLimit is Linux's NTP_PHASE_LIMIT: the kernel marks the clock as
++// unsynchronized once its maximum error estimate reaches it
++const ntpPhaseLimit = 16 * time.Second
++
++type QmiLoc struct {
++	debug   bool
++	service uint32
++	open    func() (qrtr.Socket, error)
++	// clock returns the time to inject and its uncertainty, or false if
++	// the system clock isn't synchronized
++	clock func() (time.Time, time.Duration, bool)
++
++	requestTimeout time.Duration
++	opModeWait     time.Duration
++	retryDelay     time.Duration
++	reopenDelay    time.Duration
++	timeReqGap     time.Duration
++}
++
++func NewQmiLoc(debug bool) *QmiLoc {
++	return &QmiLoc{
++		debug:   debug,
++		service: qmiLocService,
++		open: func() (qrtr.Socket, error) {
++			return qrtr.Open()
++		},
++		clock:          systemClock,
++		requestTimeout: 5 * time.Second,
++		opModeWait:     time.Second,
++		retryDelay:     30 * time.Second,
++		reopenDelay:    time.Second,
++		timeReqGap:     5 * time.Second,
++	}
++}
++
++// Load does nothing: the modem keeps its own assistance data
++func (q *QmiLoc) Load(dir string) error {
++	return nil
++}
++
++// Save does nothing: the modem keeps its own assistance data
++func (q *QmiLoc) Save(dir string) error {
++	return nil
++}
++
++func (q *QmiLoc) Start(send func(data []byte), write <-chan []byte, stop <-chan struct{}) error {
++	conn, err := q.connect()
++	if err != nil {
++		return err
++	}
++	go q.run(conn, send, write, stop)
++	return nil
++}
++
++func (q *QmiLoc) connect() (qrtr.Socket, error) {
++	conn, err := q.open()
++	if err != nil {
++		return nil, fmt.Errorf("qmi_loc: %w", err)
++	}
++	if err := qrtr.Lookup(conn, q.service, 0); err != nil {
++		conn.Close()
++		return nil, fmt.Errorf("qmi_loc: name service lookup: %w", err)
++	}
++	return conn, nil
++}
++
++type qrtrPacket struct {
++	data []byte
++	from qrtr.Addr
++}
++
++// reader passes the datagrams of one socket to the session
++type reader struct {
++	pkts chan qrtrPacket
++	errc chan error
++	done chan struct{}
++}
++
++// newReader reads conn until reading fails, then sends the error on errc.
++// Closing done (after closing conn) ends it.
++func newReader(conn qrtr.Socket) *reader {
++	r := &reader{
++		pkts: make(chan qrtrPacket, 64),
++		errc: make(chan error, 1),
++		done: make(chan struct{}),
++	}
++	go func() {
++		buf := make([]byte, 65536)
++		for {
++			n, from, err := conn.ReadFrom(buf)
++			if err != nil {
++				r.errc <- err
++				return
++			}
++			select {
++			case r.pkts <- qrtrPacket{data: append([]byte{}, buf[:n]...), from: from}:
++			case <-r.done:
++				return
++			}
++		}
++	}()
++	return r
++}
++
++type locState int
++
++const (
++	locNoService locState = iota // waiting for the name service to list LOC
++	locRegister                  // REG_EVENTS sent
++	locOpMode                    // SET_OPERATION_MODE sent
++	locStart                     // START sent
++	locRunning                   // session started
++	locRetry                     // setup failed, trying again after a delay
++)
++
++// locSession is the state of one client of the LOC service
++type locSession struct {
++	q        *QmiLoc
++	conn     qrtr.Socket
++	send     func([]byte)
++	svc      *qrtr.Addr
++	state    locState
++	txn      uint16
++	pending  uint16 // transaction the current state waits for
++	listed   bool   // the name service finished its first listing
++	lastTime time.Time
++	timer    *time.Timer
++}
++
++func (q *QmiLoc) logf(format string, a ...interface{}) {
++	fmt.Printf("qmi_loc: "+format+"\n", a...)
++}
++
++func (q *QmiLoc) debugf(format string, a ...interface{}) {
++	if q.debug {
++		q.logf(format, a...)
++	}
++}
++
++func (q *QmiLoc) run(conn qrtr.Socket, send func([]byte), write <-chan []byte, stop <-chan struct{}) {
++	s := &locSession{q: q, conn: conn, send: send, timer: time.NewTimer(time.Hour)}
++	s.clearTimer()
++	r := newReader(conn)
++
++	for {
++		select {
++		case <-stop:
++			s.stopSession(r.pkts)
++			s.conn.Close()
++			close(r.done)
++			return
++		case msg := <-write:
++			q.debugf("ignoring %d bytes from a client: nothing to forward them to", len(msg))
++		case p := <-r.pkts:
++			s.handle(p)
++		case <-s.timer.C:
++			s.timeout()
++		case err := <-r.errc:
++			// The socket failed (e.g. ENETRESET when the local node
++			// changes): open a new one and look the service up again
++			q.logf("socket error: %s; reopening", err)
++			s.conn.Close()
++			close(r.done)
++			s.reset()
++			conn := s.reopen(stop)
++			if conn == nil {
++				return
++			}
++			s.conn = conn
++			r = newReader(conn)
++		}
++	}
++}
++
++// reopen opens a new socket and looks the service up, retrying with a
++// growing delay; it returns nil if stop closes first
++func (s *locSession) reopen(stop <-chan struct{}) qrtr.Socket {
++	delay := s.q.reopenDelay
++	for {
++		select {
++		case <-stop:
++			return nil
++		case <-time.After(delay):
++		}
++		conn, err := s.q.connect()
++		if err == nil {
++			return conn
++		}
++		s.q.logf("%s", err)
++		if delay *= 2; delay > s.q.retryDelay {
++			delay = s.q.retryDelay
++		}
++	}
++}
++
++func (s *locSession) setTimer(d time.Duration) {
++	s.clearTimer()
++	s.timer.Reset(d)
++}
++
++func (s *locSession) clearTimer() {
++	if !s.timer.Stop() {
++		select {
++		case <-s.timer.C:
++		default:
++		}
++	}
++}
++
++func (s *locSession) reset() {
++	s.clearTimer()
++	s.svc = nil
++	s.state = locNoService
++	s.listed = false
++}
++
++func (s *locSession) request(id uint16, tlvs ...qmi.TLV) (uint16, error) {
++	s.txn++
++	if s.txn == 0 {
++		s.txn = 1
++	}
++	return s.txn, s.conn.WriteTo(qmi.Encode(qmi.TypeRequest, s.txn, id, tlvs...), *s.svc)
++}
++
++// expect sends a request that the current state waits for
++func (s *locSession) expect(state locState, id uint16, tlvs ...qmi.TLV) {
++	txn, err := s.request(id, tlvs...)
++	if err != nil {
++		s.q.logf("request 0x%04x: %s", id, err)
++		s.retry()
++		return
++	}
++	s.state, s.pending = state, txn
++	s.setTimer(s.q.requestTimeout)
++}
++
++func (s *locSession) retry() {
++	s.q.logf("setting the session up again in %s", s.q.retryDelay)
++	s.state = locRetry
++	s.setTimer(s.q.retryDelay)
++}
++
++func (s *locSession) begin() {
++	s.expect(locRegister, qmiLocRegisterEvents, qmi.Uint64(0x01, qmiLocEvents))
++}
++
++func (s *locSession) setOperationMode() {
++	s.expect(locOpMode, qmiLocSetOperationMode, qmi.Uint32(0x01, qmiLocOperationModeStandalone))
++}
++
++func (s *locSession) start() {
++	s.expect(locStart, qmiLocStart,
++		qmi.Uint8(0x01, qmiLocSessionID),
++		qmi.Uint32(0x10, qmiLocFixRecurrencePeriodic),
++		qmi.Uint32(0x12, qmiLocIntermediateReportEnable),
++		qmi.Uint32(0x13, qmiLocFixIntervalMs))
++}
++
++func (s *locSession) timeout() {
++	switch s.state {
++	case locRegister, locStart:
++		s.q.logf("no response from the location service")
++		s.retry()
++	case locOpMode:
++		// The mode is a preference; start without its indication
++		s.start()
++	case locRetry:
++		if s.svc != nil {
++			s.begin()
++		}
++	}
++}
++
++// injectTime gives the engine the system time if the system clock is
++// synchronized, so it doesn't have to decode the time from the satellites
++func (s *locSession) injectTime() {
++	t, unc, ok := s.q.clock()
++	if !ok {
++		s.q.debugf("system clock not synchronized, not injecting the time")
++		return
++	}
++	s.lastTime = time.Now()
++	ms := uint32(unc / time.Millisecond)
++	if _, err := s.request(qmiLocInjectUtcTime,
++		qmi.Uint64(0x01, uint64(t.UnixNano()/int64(time.Millisecond))),
++		qmi.Uint32(0x02, ms)); err != nil {
++		s.q.logf("injecting the time: %s", err)
++		return
++	}
++	s.q.debugf("injected the system time, uncertainty %d ms", ms)
++}
++
++func (s *locSession) handle(p qrtrPacket) {
++	if p.from.Port == qrtr.PortCtrl && p.from.Node == s.conn.LocalAddr().Node {
++		s.handleCtrl(p.data)
++		return
++	}
++	if s.svc == nil || p.from != *s.svc {
++		return
++	}
++	m, err := qmi.Decode(p.data)
++	if err != nil {
++		s.q.logf("%s", err)
++		return
++	}
++	switch m.Type {
++	case qmi.TypeResponse:
++		s.handleResponse(m)
++	case qmi.TypeIndication:
++		s.handleIndication(m)
++	}
++}
++
++func (s *locSession) handleCtrl(b []byte) {
++	c, err := qrtr.ParseCtrl(b)
++	if err != nil {
++		return
++	}
++	switch c.Cmd {
++	case qrtr.TypeNewServer:
++		if c.EndOfListing() {
++			if !s.listed && s.svc == nil {
++				s.q.logf("waiting for the location service (is the modem running?)")
++			}
++			s.listed = true
++			return
++		}
++		if c.Server.Service != s.q.service || s.svc != nil {
++			return
++		}
++		if v := c.Server.Version(); v != qmiLocVersion {
++			s.q.logf("ignoring location service version %d on %d:%d", v, c.Server.Addr.Node, c.Server.Addr.Port)
++			return
++		}
++		addr := c.Server.Addr
++		s.svc = &addr
++		s.q.logf("location service on QRTR node %d port %d, starting the session", addr.Node, addr.Port)
++		s.begin()
++	case qrtr.TypeDelServer:
++		if s.svc == nil || c.Server.Addr != *s.svc {
++			return
++		}
++		s.q.logf("location service gone (modem stopped?), waiting for it to come back")
++		s.clearTimer()
++		s.svc = nil
++		s.state = locNoService
++	}
++}
++
++func (s *locSession) handleResponse(m qmi.Message) {
++	res, code, ok := m.Result()
++	if !ok {
++		s.q.logf("response to 0x%04x without a result", m.ID)
++		return
++	}
++	failed := res != 0
++	if m.Txn != s.pending || s.state == locRunning {
++		if failed {
++			s.q.logf("request 0x%04x failed: error %d", m.ID, code)
++		}
++		return
++	}
++
++	switch s.state {
++	case locRegister:
++		if failed {
++			s.q.logf("registering for events failed: error %d", code)
++			s.retry()
++			return
++		}
++		s.setOperationMode()
++	case locOpMode:
++		if failed {
++			// Not supported by every engine; start in its default mode
++			s.q.debugf("setting the operation mode failed: error %d", code)
++			s.start()
++			return
++		}
++		// Wait for the indication that the mode is set
++		s.pending = 0
++		s.setTimer(s.q.opModeWait)
++	case locStart:
++		if failed {
++			s.q.logf("starting the session failed: error %d", code)
++			s.retry()
++			return
++		}
++		s.clearTimer()
++		s.state = locRunning
++		s.q.logf("session started")
++		s.injectTime()
++	}
++}
++
++func (s *locSession) handleIndication(m qmi.Message) {
++	switch m.ID {
++	case qmiLocNmeaInd:
++		if out := nmeaSentences(m.TLVs[0x01]); len(out) > 0 {
++			s.send(out)
++		}
++	case qmiLocInjectTimeReqInd:
++		s.q.debugf("engine asks for the time")
++		if s.state == locRunning && time.Since(s.lastTime) >= s.q.timeReqGap {
++			s.injectTime()
++		}
++	case qmiLocSetOperationMode:
++		if st, ok := m.Uint32(0x01); ok && st != 0 {
++			s.q.debugf("operation mode not set: status %d", st)
++		}
++		if s.state == locOpMode {
++			s.start()
++		}
++	case qmiLocInjectUtcTime:
++		if st, ok := m.Uint32(0x01); ok && st != 0 {
++			s.q.logf("time injection failed: status %d", st)
++		}
++	case qmiLocEngineStateInd:
++		if v, ok := m.Uint32(0x01); ok {
++			on := "off"
++			if v == qmiLocEngineStateOn {
++				on = "on"
++			}
++			s.q.debugf("engine %s", on)
++		}
++	case qmiLocFixSessionStateInd:
++		if v, ok := m.Uint32(0x01); ok {
++			s.q.debugf("fix session state %d", v)
++		}
++	default:
++		s.q.debugf("indication 0x%04x", m.ID)
++	}
++}
++
++// stopSession stops the engine's session and waits briefly for the answer
++func (s *locSession) stopSession(pkts <-chan qrtrPacket) {
++	s.clearTimer()
++	if s.svc == nil {
++		return
++	}
++	txn, err := s.request(qmiLocStop, qmi.Uint8(0x01, qmiLocSessionID))
++	if err != nil {
++		s.q.logf("stopping the session: %s", err)
++		return
++	}
++	deadline := time.NewTimer(s.q.requestTimeout)
++	defer deadline.Stop()
++	for {
++		select {
++		case p := <-pkts:
++			if s.svc == nil || p.from != *s.svc {
++				continue
++			}
++			m, err := qmi.Decode(p.data)
++			if err != nil || m.Type != qmi.TypeResponse || m.Txn != txn {
++				continue
++			}
++			if res, code, _ := m.Result(); res != 0 {
++				s.q.debugf("stopping the session: error %d", code)
++			} else {
++				s.q.logf("session stopped")
++			}
++			return
++		case <-deadline.C:
++			s.q.logf("no answer to stopping the session; closing the client anyway")
++			return
++		}
++	}
++}
++
++// nmeaSentences turns the value of an NMEA indication's string TLV (one or
++// more sentences, maybe NUL-terminated, with or without line ends) into
++// sentences that each end in CR LF
++func nmeaSentences(v []byte) []byte {
++	if i := bytes.IndexByte(v, 0); i >= 0 {
++		v = v[:i]
++	}
++	var out []byte
++	for _, l := range bytes.Split(v, []byte{'\n'}) {
++		l = bytes.TrimSpace(l)
++		if len(l) == 0 || (l[0] != '$' && l[0] != '!') {
++			continue
++		}
++		out = append(out, l...)
++		out = append(out, '\r', '\n')
++	}
++	return out
++}
++
++// systemClock returns the system time and the kernel's maximum error
++// estimate for it (at least qmiLocMinUncertainty). The clock counts as
++// synchronized while that estimate is below NTP_PHASE_LIMIT, as systemd
++// judges it: an NTP client such as systemd-timesyncd or chrony resets the
++// estimate on each update, and the kernel grows it by 500 us per second.
++func systemClock() (time.Time, time.Duration, bool) {
++	maxErr, err := clockMaxError()
++	if err != nil || maxErr >= ntpPhaseLimit {
++		return time.Time{}, 0, false
++	}
++	if maxErr < qmiLocMinUncertainty {
++		maxErr = qmiLocMinUncertainty
++	}
++	return time.Now(), maxErr, true
++}
+diff --git a/internal/gnss/qmiloc_linux_test.go b/internal/gnss/qmiloc_linux_test.go
+new file mode 100644
+index 0000000..97ee648
+--- /dev/null
++++ b/internal/gnss/qmiloc_linux_test.go
+@@ -0,0 +1,176 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++//go:build linux
++// +build linux
++
++package gnss
++
++import (
++	"bytes"
++	"testing"
++	"time"
++
++	"gitlab.com/postmarketOS/gnss-share/internal/qmi"
++	"gitlab.com/postmarketOS/gnss-share/internal/qrtr"
++)
++
++// A service number no remote processor offers, so this test never starts a
++// session on a real modem
++const testLocService = 0x7f10
++
++// fakeLoc is a LOC service on a local QRTR socket, published through the
++// kernel's name service. It answers every request, and sends an NMEA
++// indication every 20 ms while a session runs.
++type fakeLoc struct {
++	t    *testing.T
++	conn *qrtr.Conn
++	got  chan uint16 // IDs of the requests it received
++	done chan struct{}
++}
++
++func startFakeLoc(t *testing.T) *fakeLoc {
++	t.Helper()
++	conn, err := qrtr.Open()
++	if err != nil {
++		t.Fatal(err)
++	}
++	ns := qrtr.Addr{Node: conn.LocalAddr().Node, Port: qrtr.PortCtrl}
++	if err := conn.WriteTo(qrtr.NewServer(testLocService, qmiLocVersion), ns); err != nil {
++		t.Fatal(err)
++	}
++	f := &fakeLoc{t: t, conn: conn, got: make(chan uint16, 64), done: make(chan struct{})}
++	go f.serve()
++	return f
++}
++
++func (f *fakeLoc) serve() {
++	defer close(f.done)
++	pkts := make(chan qrtrPacket, 16)
++	go func() {
++		defer close(pkts)
++		buf := make([]byte, 4096)
++		for {
++			n, from, err := f.conn.ReadFrom(buf)
++			if err != nil {
++				return
++			}
++			pkts <- qrtrPacket{data: append([]byte{}, buf[:n]...), from: from}
++		}
++	}()
++
++	var client *qrtr.Addr
++	tick := time.NewTicker(20 * time.Millisecond)
++	defer tick.Stop()
++	for {
++		select {
++		case p, ok := <-pkts:
++			if !ok {
++				return
++			}
++			m, err := qmi.Decode(p.data)
++			if err != nil || m.Type != qmi.TypeRequest {
++				continue
++			}
++			f.got <- m.ID
++			ok0 := qmi.TLV{Type: qmi.TLVResult, Value: []byte{0, 0, 0, 0}}
++			_ = f.conn.WriteTo(qmi.Encode(qmi.TypeResponse, m.Txn, m.ID, ok0), p.from)
++			switch m.ID {
++			case qmiLocSetOperationMode:
++				_ = f.conn.WriteTo(qmi.Encode(qmi.TypeIndication, 0, m.ID, qmi.Uint32(0x01, 0)), p.from)
++			case qmiLocStart:
++				from := p.from
++				client = &from
++			case qmiLocStop:
++				client = nil
++			}
++		case <-tick.C:
++			if client != nil {
++				_ = f.conn.WriteTo(qmi.Encode(qmi.TypeIndication, 0, qmiLocNmeaInd,
++					qmi.TLV{Type: 0x01, Value: append(append([]byte{}, testGGA...), 0)}), *client)
++			}
++		}
++	}
++}
++
++// stop closes the service's socket, as when the modem stops
++func (f *fakeLoc) stop() {
++	f.conn.Close()
++	<-f.done
++}
++
++func (f *fakeLoc) expect(ids ...uint16) {
++	f.t.Helper()
++	for _, want := range ids {
++		select {
++		case id := <-f.got:
++			if id != want {
++				f.t.Fatalf("service got 0x%04x, want 0x%04x", id, want)
++			}
++		case <-time.After(2 * time.Second):
++			f.t.Fatalf("service got nothing, want 0x%04x", want)
++		}
++	}
++}
++
++func expectNmea(t *testing.T, sent <-chan []byte) {
++	t.Helper()
++	want := append(append([]byte{}, testGGA...), "\r\n"...)
++	select {
++	case got := <-sent:
++		if !bytes.Equal(got, want) {
++			t.Fatalf("got %q, want %q", got, want)
++		}
++	case <-time.After(2 * time.Second):
++		t.Fatal("no NMEA")
++	}
++}
++
++// The whole driver over the kernel's QRTR: lookup, session, NMEA, the
++// service restarting, and the session stopping with the last client
++func TestQmiLocOverKernelQRTR(t *testing.T) {
++	probe, err := qrtr.Open()
++	if err != nil {
++		t.Skipf("no AF_QIPCRTR sockets here: %s", err)
++	}
++	probe.Close()
++
++	q := NewQmiLoc(testing.Verbose())
++	q.service = testLocService
++	q.clock = func() (time.Time, time.Duration, bool) {
++		return time.Unix(0, testTimeMs*int64(time.Millisecond)), time.Second, true
++	}
++	q.requestTimeout = time.Second
++	q.retryDelay = 200 * time.Millisecond
++
++	sent := make(chan []byte, 256)
++	stop := make(chan struct{})
++	if err := q.Start(func(b []byte) {
++		select {
++		case sent <- append([]byte{}, b...):
++		default:
++		}
++	}, make(chan []byte), stop); err != nil {
++		t.Fatal(err)
++	}
++
++	// The service appears after the driver started looking
++	time.Sleep(50 * time.Millisecond)
++	loc := startFakeLoc(t)
++	loc.expect(qmiLocRegisterEvents, qmiLocSetOperationMode, qmiLocStart, qmiLocInjectUtcTime)
++	expectNmea(t, sent)
++
++	// The modem stops and starts again
++	loc.stop()
++	loc = startFakeLoc(t)
++	loc.expect(qmiLocRegisterEvents, qmiLocSetOperationMode, qmiLocStart, qmiLocInjectUtcTime)
++	for len(sent) > 0 {
++		<-sent
++	}
++	expectNmea(t, sent)
++
++	// The last client leaves
++	close(stop)
++	loc.expect(qmiLocStop)
++	loc.stop()
++}
+diff --git a/internal/gnss/qmiloc_test.go b/internal/gnss/qmiloc_test.go
+new file mode 100644
+index 0000000..ab17063
+--- /dev/null
++++ b/internal/gnss/qmiloc_test.go
+@@ -0,0 +1,457 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++package gnss
++
++import (
++	"bytes"
++	"encoding/binary"
++	"errors"
++	"os"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"gitlab.com/postmarketOS/gnss-share/internal/nmea"
++	"gitlab.com/postmarketOS/gnss-share/internal/qmi"
++	"gitlab.com/postmarketOS/gnss-share/internal/qrtr"
++)
++
++// Synthetic sentences at 0 degrees north, 0 degrees east
++var (
++	testGGA = nmea.New("GPGGA", []string{"120000.00", "0000.0000", "N", "00000.0000", "E", "1", "08", "0.9", "0.0", "M", "0.0", "M", "", ""})
++	testRMC = nmea.New("GPRMC", []string{"120000.00", "A", "0000.0000", "N", "00000.0000", "E", "0.0", "0.0", "010170", "", "", "A"})
++)
++
++var (
++	testLocal = qrtr.Addr{Node: 1, Port: 0x4001}
++	testNS    = qrtr.Addr{Node: 1, Port: qrtr.PortCtrl}
++	testLoc   = qrtr.Addr{Node: 0, Port: 38}
++)
++
++const testTimeMs = 1700000000000
++
++// fakeSocket stands in for a QRTR socket: the test feeds packets in and
++// reads what the driver sends
++type fakeSocket struct {
++	in     chan qrtrPacket
++	out    chan qrtrPacket
++	fail   chan error
++	closed chan struct{}
++	once   sync.Once
++}
++
++func newFakeSocket() *fakeSocket {
++	return &fakeSocket{
++		in:     make(chan qrtrPacket, 16),
++		out:    make(chan qrtrPacket, 16),
++		fail:   make(chan error, 1),
++		closed: make(chan struct{}),
++	}
++}
++
++func (f *fakeSocket) ReadFrom(b []byte) (int, qrtr.Addr, error) {
++	select {
++	case p := <-f.in:
++		return copy(b, p.data), p.from, nil
++	case err := <-f.fail:
++		return 0, qrtr.Addr{}, err
++	case <-f.closed:
++		return 0, qrtr.Addr{}, os.ErrClosed
++	}
++}
++
++func (f *fakeSocket) WriteTo(b []byte, to qrtr.Addr) error {
++	select {
++	case <-f.closed:
++		return os.ErrClosed
++	default:
++	}
++	f.out <- qrtrPacket{data: append([]byte{}, b...), from: to}
++	return nil
++}
++
++func (f *fakeSocket) LocalAddr() qrtr.Addr { return testLocal }
++
++func (f *fakeSocket) Close() error {
++	f.once.Do(func() { close(f.closed) })
++	return nil
++}
++
++type harness struct {
++	t      *testing.T
++	q      *QmiLoc
++	socks  chan *fakeSocket
++	sock   *fakeSocket
++	sent   chan []byte
++	stop   chan struct{}
++	synced int32
++}
++
++func newHarness(t *testing.T, synced bool) *harness {
++	h := &harness{
++		t:     t,
++		socks: make(chan *fakeSocket, 4),
++		sent:  make(chan []byte, 64),
++		stop:  make(chan struct{}),
++	}
++	h.setSynced(synced)
++	h.q = NewQmiLoc(testing.Verbose())
++	h.q.open = func() (qrtr.Socket, error) {
++		s := newFakeSocket()
++		h.socks <- s
++		return s, nil
++	}
++	h.q.clock = func() (time.Time, time.Duration, bool) {
++		return time.Unix(0, testTimeMs*int64(time.Millisecond)), 500 * time.Millisecond, atomic.LoadInt32(&h.synced) != 0
++	}
++	h.q.requestTimeout = 200 * time.Millisecond
++	h.q.opModeWait = 100 * time.Millisecond
++	h.q.retryDelay = 100 * time.Millisecond
++	h.q.reopenDelay = 10 * time.Millisecond
++	h.q.timeReqGap = 0
++
++	if err := h.q.Start(func(b []byte) { h.sent <- append([]byte{}, b...) }, make(chan []byte), h.stop); err != nil {
++		t.Fatal(err)
++	}
++	h.nextSocket()
++	return h
++}
++
++func (h *harness) setSynced(synced bool) {
++	var v int32
++	if synced {
++		v = 1
++	}
++	atomic.StoreInt32(&h.synced, v)
++}
++
++// nextSocket takes the socket the driver opened and checks its lookup
++func (h *harness) nextSocket() {
++	h.t.Helper()
++	select {
++	case h.sock = <-h.socks:
++	case <-time.After(2 * time.Second):
++		h.t.Fatal("driver opened no socket")
++	}
++	p := h.write()
++	if p.from != testNS {
++		h.t.Fatalf("first packet to %+v, want the name service", p.from)
++	}
++	c, err := qrtr.ParseCtrl(p.data)
++	if err != nil || c.Cmd != qrtr.TypeNewLookup || c.Server.Service != qmiLocService || c.Server.Instance != 0 {
++		h.t.Fatalf("lookup %+v %v", c, err)
++	}
++}
++
++func (h *harness) write() qrtrPacket {
++	h.t.Helper()
++	select {
++	case p := <-h.sock.out:
++		return p
++	case <-time.After(2 * time.Second):
++		h.t.Fatal("driver sent nothing")
++	}
++	return qrtrPacket{}
++}
++
++func (h *harness) noWrite(d time.Duration) {
++	h.t.Helper()
++	select {
++	case p := <-h.sock.out:
++		m, _ := qmi.Decode(p.data)
++		h.t.Fatalf("unexpected packet to %+v: message 0x%04x", p.from, m.ID)
++	case <-time.After(d):
++	}
++}
++
++func (h *harness) request(id uint16, to qrtr.Addr) qmi.Message {
++	h.t.Helper()
++	p := h.write()
++	m, err := qmi.Decode(p.data)
++	if err != nil {
++		h.t.Fatal(err)
++	}
++	if p.from != to || m.Type != qmi.TypeRequest || m.ID != id {
++		h.t.Fatalf("got type %d message 0x%04x to %+v, want request 0x%04x to %+v", m.Type, m.ID, p.from, id, to)
++	}
++	return m
++}
++
++func (h *harness) ctrl(cmd, service, instance uint32, a qrtr.Addr) {
++	b := make([]byte, 20)
++	for i, v := range []uint32{cmd, service, instance, a.Node, a.Port} {
++		binary.LittleEndian.PutUint32(b[4*i:], v)
++	}
++	h.sock.in <- qrtrPacket{data: b, from: testNS}
++}
++
++func (h *harness) respond(req qmi.Message, from qrtr.Addr, result, code uint16) {
++	v := make([]byte, 4)
++	binary.LittleEndian.PutUint16(v, result)
++	binary.LittleEndian.PutUint16(v[2:], code)
++	h.sock.in <- qrtrPacket{data: qmi.Encode(qmi.TypeResponse, req.Txn, req.ID, qmi.TLV{Type: qmi.TLVResult, Value: v}), from: from}
++}
++
++func (h *harness) indicate(id uint16, from qrtr.Addr, tlvs ...qmi.TLV) {
++	h.sock.in <- qrtrPacket{data: qmi.Encode(qmi.TypeIndication, 0, id, tlvs...), from: from}
++}
++
++func (h *harness) expectSent(want []byte) {
++	h.t.Helper()
++	select {
++	case got := <-h.sent:
++		if !bytes.Equal(got, want) {
++			h.t.Fatalf("sent %q, want %q", got, want)
++		}
++	case <-time.After(2 * time.Second):
++		h.t.Fatalf("nothing sent, want %q", want)
++	}
++}
++
++func (h *harness) noSent(d time.Duration) {
++	h.t.Helper()
++	select {
++	case got := <-h.sent:
++		h.t.Fatalf("unexpected data %q", got)
++	case <-time.After(d):
++	}
++}
++
++func tlvU32(t *testing.T, m qmi.Message, typ uint8) uint32 {
++	t.Helper()
++	v, ok := m.Uint32(typ)
++	if !ok || len(m.TLVs[typ]) != 4 {
++		t.Fatalf("message 0x%04x: no 32-bit TLV 0x%02x", m.ID, typ)
++	}
++	return v
++}
++
++// setUp runs the session setup against the service at loc up to START
++func (h *harness) setUp(loc qrtr.Addr) {
++	h.t.Helper()
++	reg := h.request(qmiLocRegisterEvents, loc)
++	if v := reg.TLVs[0x01]; len(v) != 8 || binary.LittleEndian.Uint64(v) != qmiLocEvents {
++		h.t.Fatalf("event mask % x", v)
++	}
++	h.respond(reg, loc, 0, 0)
++
++	mode := h.request(qmiLocSetOperationMode, loc)
++	if v := tlvU32(h.t, mode, 0x01); v != qmiLocOperationModeStandalone {
++		h.t.Fatalf("operation mode %d", v)
++	}
++	h.respond(mode, loc, 0, 0)
++	h.indicate(qmiLocSetOperationMode, loc, qmi.Uint32(0x01, 0))
++
++	start := h.request(qmiLocStart, loc)
++	if v := start.TLVs[0x01]; len(v) != 1 || v[0] != qmiLocSessionID {
++		h.t.Fatalf("session ID % x", v)
++	}
++	for typ, want := range map[uint8]uint32{0x10: 1, 0x12: 1, 0x13: 1000} {
++		if v := tlvU32(h.t, start, typ); v != want {
++			h.t.Fatalf("START TLV 0x%02x = %d, want %d", typ, v, want)
++		}
++	}
++	h.respond(start, loc, 0, 0)
++}
++
++func (h *harness) expectTimeInjection(loc qrtr.Addr) {
++	h.t.Helper()
++	m := h.request(qmiLocInjectUtcTime, loc)
++	if v := m.TLVs[0x01]; len(v) != 8 || binary.LittleEndian.Uint64(v) != testTimeMs {
++		h.t.Fatalf("injected time % x", v)
++	}
++	if v := tlvU32(h.t, m, 0x02); v != 500 {
++		h.t.Fatalf("time uncertainty %d ms", v)
++	}
++	h.respond(m, loc, 0, 0)
++}
++
++func (h *harness) stopAndExpectStop(loc qrtr.Addr) {
++	h.t.Helper()
++	close(h.stop)
++	m := h.request(qmiLocStop, loc)
++	if v := m.TLVs[0x01]; len(v) != 1 || v[0] != qmiLocSessionID {
++		h.t.Fatalf("STOP session ID % x", v)
++	}
++	h.respond(m, loc, 0, 0)
++	h.expectClosed()
++}
++
++func (h *harness) expectClosed() {
++	h.t.Helper()
++	select {
++	case <-h.sock.closed:
++	case <-time.After(2 * time.Second):
++		h.t.Fatal("socket not closed")
++	}
++}
++
++func TestQmiLocSession(t *testing.T) {
++	h := newHarness(t, true)
++
++	// Nothing listed yet: the modem isn't up
++	h.ctrl(qrtr.TypeNewServer, 0, 0, qrtr.Addr{})
++	h.noWrite(50 * time.Millisecond)
++
++	// Other services and other versions of LOC are not ours
++	h.ctrl(qrtr.TypeNewServer, 0x11, 2, qrtr.Addr{Node: 0, Port: 37})
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 3, qrtr.Addr{Node: 0, Port: 36})
++	h.noWrite(50 * time.Millisecond)
++
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, testLoc)
++	h.setUp(testLoc)
++	h.expectTimeInjection(testLoc)
++
++	// NMEA, NUL-terminated and with line ends, comes out as CR LF lines
++	h.indicate(qmiLocNmeaInd, testLoc, qmi.TLV{Type: 0x01, Value: append(append([]byte{}, testGGA...), "\r\n\x00"...)})
++	h.expectSent(append(append([]byte{}, testGGA...), "\r\n"...))
++	h.indicate(qmiLocNmeaInd, testLoc, qmi.TLV{Type: 0x01, Value: testRMC})
++	h.expectSent(append(append([]byte{}, testRMC...), "\r\n"...))
++
++	// The same from another port, or a broken packet, is dropped
++	h.sock.in <- qrtrPacket{data: qmi.Encode(qmi.TypeIndication, 0, qmiLocNmeaInd, qmi.TLV{Type: 0x01, Value: testGGA}), from: qrtr.Addr{Node: 0, Port: 99}}
++	h.sock.in <- qrtrPacket{data: []byte{4, 0, 0, 0x26, 0, 0xff, 0xff}, from: testLoc}
++	h.noSent(50 * time.Millisecond)
++
++	// The engine asks for the time again
++	h.indicate(qmiLocInjectTimeReqInd, testLoc)
++	h.expectTimeInjection(testLoc)
++
++	h.stopAndExpectStop(testLoc)
++}
++
++func TestQmiLocModemRestart(t *testing.T) {
++	h := newHarness(t, true)
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, testLoc)
++	h.setUp(testLoc)
++	h.expectTimeInjection(testLoc)
++
++	// The modem stops: its service goes away, then comes back on a new port
++	h.ctrl(qrtr.TypeDelServer, qmiLocService, 2, testLoc)
++	h.noWrite(50 * time.Millisecond)
++	again := qrtr.Addr{Node: 0, Port: 40}
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, again)
++	h.setUp(again)
++	h.expectTimeInjection(again)
++
++	// Packets from the old port are ignored
++	h.indicate(qmiLocNmeaInd, testLoc, qmi.TLV{Type: 0x01, Value: testGGA})
++	h.noSent(50 * time.Millisecond)
++	h.indicate(qmiLocNmeaInd, again, qmi.TLV{Type: 0x01, Value: testGGA})
++	h.expectSent(append(append([]byte{}, testGGA...), "\r\n"...))
++
++	h.stopAndExpectStop(again)
++}
++
++func TestQmiLocClockNotSynced(t *testing.T) {
++	h := newHarness(t, false)
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, testLoc)
++	h.setUp(testLoc)
++	h.noWrite(100 * time.Millisecond)
++	h.indicate(qmiLocInjectTimeReqInd, testLoc)
++	h.noWrite(100 * time.Millisecond)
++
++	// Synchronized later: the next request gets the time
++	h.setSynced(true)
++	h.indicate(qmiLocInjectTimeReqInd, testLoc)
++	h.expectTimeInjection(testLoc)
++	h.stopAndExpectStop(testLoc)
++}
++
++func TestQmiLocStartFailsThenRetries(t *testing.T) {
++	h := newHarness(t, true)
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, testLoc)
++
++	reg := h.request(qmiLocRegisterEvents, testLoc)
++	h.respond(reg, testLoc, 0, 0)
++	mode := h.request(qmiLocSetOperationMode, testLoc)
++	h.respond(mode, testLoc, 1, 0x1e) // not supported: start anyway
++	start := h.request(qmiLocStart, testLoc)
++	h.respond(start, testLoc, 1, 0x1a)
++
++	// After the retry delay the whole setup runs again
++	h.setUp(testLoc)
++	h.expectTimeInjection(testLoc)
++	h.stopAndExpectStop(testLoc)
++}
++
++func TestQmiLocNoResponse(t *testing.T) {
++	h := newHarness(t, true)
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, testLoc)
++	h.request(qmiLocRegisterEvents, testLoc)
++	// No answer: timeout, then the retry
++	h.setUp(testLoc)
++	h.expectTimeInjection(testLoc)
++
++	// No indication after the mode response: START follows anyway
++	h.ctrl(qrtr.TypeDelServer, qmiLocService, 2, testLoc)
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, testLoc)
++	reg := h.request(qmiLocRegisterEvents, testLoc)
++	h.respond(reg, testLoc, 0, 0)
++	mode := h.request(qmiLocSetOperationMode, testLoc)
++	h.respond(mode, testLoc, 0, 0)
++	start := h.request(qmiLocStart, testLoc)
++	h.respond(start, testLoc, 0, 0)
++	h.expectTimeInjection(testLoc)
++
++	// No answer to STOP: the socket closes anyway
++	close(h.stop)
++	h.request(qmiLocStop, testLoc)
++	h.expectClosed()
++}
++
++func TestQmiLocStopWithoutService(t *testing.T) {
++	h := newHarness(t, true)
++	close(h.stop)
++	h.expectClosed()
++	h.noWrite(50 * time.Millisecond)
++}
++
++func TestQmiLocSocketErrorReopens(t *testing.T) {
++	h := newHarness(t, true)
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, testLoc)
++	h.setUp(testLoc)
++	h.expectTimeInjection(testLoc)
++
++	old := h.sock
++	old.fail <- errors.New("network reset")
++	h.nextSocket()
++	select {
++	case <-old.closed:
++	default:
++		t.Fatal("failed socket not closed")
++	}
++	h.ctrl(qrtr.TypeNewServer, qmiLocService, 2, testLoc)
++	h.setUp(testLoc)
++	h.expectTimeInjection(testLoc)
++	h.stopAndExpectStop(testLoc)
++}
++
++func TestNmeaSentences(t *testing.T) {
++	tables := []struct {
++		in, want string
++	}{
++		{"", ""},
++		{"\x00", ""},
++		{"$GPGGA,1*00", "$GPGGA,1*00\r\n"},
++		{"$GPGGA,1*00\r\n\x00garbage", "$GPGGA,1*00\r\n"},
++		{"$GPGSV,1*00\n$GLGSV,2*00\r\n", "$GPGSV,1*00\r\n$GLGSV,2*00\r\n"},
++		{"\r\n  $GPRMC,3*00  \r\n", "$GPRMC,3*00\r\n"},
++		{"!AIVDM,4*00", "!AIVDM,4*00\r\n"},
++		{"not nmea\n$GPVTG,5*00", "$GPVTG,5*00\r\n"},
++	}
++	for _, table := range tables {
++		if got := string(nmeaSentences([]byte(table.in))); got != table.want {
++			t.Errorf("%q: got %q, want %q", table.in, got, table.want)
++		}
++	}
++}
++
++func TestSystemClockBounds(t *testing.T) {
++	_, unc, ok := systemClock()
++	if ok && (unc < qmiLocMinUncertainty || unc >= ntpPhaseLimit) {
++		t.Errorf("uncertainty %s out of bounds", unc)
++	}
++}
+-- 
+2.56.0
+

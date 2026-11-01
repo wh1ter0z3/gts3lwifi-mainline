@@ -1,0 +1,240 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <gnss-share@jayd.ml>
+Date: Sun, 1 Nov 2026 16:11:14 -0700
+Subject: [PATCH 3/4] qmi: add QMI message encoding for QRTR
+
+On QRTR a QMI message is a header (type, transaction ID, message ID,
+payload length; struct qmi_header in Linux's include/linux/soc/qcom/qmi.h)
+followed by TLVs, with no QMUX header. Decode rejects headers and TLVs
+that run past the end of the datagram.
+---
+ internal/qmi/qmi.go      | 132 +++++++++++++++++++++++++++++++++++++++
+ internal/qmi/qmi_test.go |  77 +++++++++++++++++++++++
+ 2 files changed, 209 insertions(+)
+ create mode 100644 internal/qmi/qmi.go
+ create mode 100644 internal/qmi/qmi_test.go
+
+diff --git a/internal/qmi/qmi.go b/internal/qmi/qmi.go
+new file mode 100644
+index 0000000..898ee95
+--- /dev/null
++++ b/internal/qmi/qmi.go
+@@ -0,0 +1,132 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++// Package qmi encodes and decodes QMI messages as they travel over QRTR:
++// a header (struct qmi_header in Linux's include/linux/soc/qcom/qmi.h: u8
++// type, le16 transaction ID, le16 message ID, le16 payload length) followed
++// by TLVs (u8 type, le16 length, value). There is no QMUX header on QRTR.
++package qmi
++
++import (
++	"encoding/binary"
++	"errors"
++	"fmt"
++)
++
++// Message types (QMI_REQUEST, QMI_RESPONSE, QMI_INDICATION)
++const (
++	TypeRequest    uint8 = 0
++	TypeResponse   uint8 = 2
++	TypeIndication uint8 = 4
++)
++
++// TLVResult is the TLV of every response that holds the result and error
++// code (struct qmi_response_type_v01; libqmi's "Operation Result")
++const TLVResult uint8 = 0x02
++
++const headerLen = 7
++
++// TLV is one type-length-value element
++type TLV struct {
++	Type  uint8
++	Value []byte
++}
++
++// Uint8 returns a TLV holding v
++func Uint8(t uint8, v uint8) TLV {
++	return TLV{Type: t, Value: []byte{v}}
++}
++
++// Uint32 returns a TLV holding v, little endian
++func Uint32(t uint8, v uint32) TLV {
++	b := make([]byte, 4)
++	binary.LittleEndian.PutUint32(b, v)
++	return TLV{Type: t, Value: b}
++}
++
++// Uint64 returns a TLV holding v, little endian
++func Uint64(t uint8, v uint64) TLV {
++	b := make([]byte, 8)
++	binary.LittleEndian.PutUint64(b, v)
++	return TLV{Type: t, Value: b}
++}
++
++// Message is a decoded QMI message
++type Message struct {
++	Type uint8
++	Txn  uint16
++	ID   uint16
++	TLVs map[uint8][]byte
++}
++
++// Encode returns the message with the given header fields and TLVs
++func Encode(typ uint8, txn, id uint16, tlvs ...TLV) []byte {
++	n := headerLen
++	for _, t := range tlvs {
++		n += 3 + len(t.Value)
++	}
++	b := make([]byte, headerLen, n)
++	b[0] = typ
++	binary.LittleEndian.PutUint16(b[1:], txn)
++	binary.LittleEndian.PutUint16(b[3:], id)
++	binary.LittleEndian.PutUint16(b[5:], uint16(n-headerLen))
++	for _, t := range tlvs {
++		b = append(b, t.Type, 0, 0)
++		binary.LittleEndian.PutUint16(b[len(b)-2:], uint16(len(t.Value)))
++		b = append(b, t.Value...)
++	}
++	return b
++}
++
++var errShort = errors.New("qmi: message shorter than its header")
++
++// Decode parses a message. It fails on a header or TLV that runs past the
++// end of b.
++func Decode(b []byte) (Message, error) {
++	if len(b) < headerLen {
++		return Message{}, errShort
++	}
++	le := binary.LittleEndian
++	m := Message{
++		Type: b[0],
++		Txn:  le.Uint16(b[1:]),
++		ID:   le.Uint16(b[3:]),
++		TLVs: map[uint8][]byte{},
++	}
++	n := int(le.Uint16(b[5:]))
++	if headerLen+n > len(b) {
++		return Message{}, fmt.Errorf("qmi: message 0x%04x: payload of %d bytes, %d received", m.ID, n, len(b)-headerLen)
++	}
++	p := b[headerLen : headerLen+n]
++	for len(p) > 0 {
++		if len(p) < 3 {
++			return Message{}, fmt.Errorf("qmi: message 0x%04x: truncated TLV header", m.ID)
++		}
++		t, l := p[0], int(le.Uint16(p[1:]))
++		if 3+l > len(p) {
++			return Message{}, fmt.Errorf("qmi: message 0x%04x: TLV 0x%02x of %d bytes, %d left", m.ID, t, l, len(p)-3)
++		}
++		m.TLVs[t] = p[3 : 3+l]
++		p = p[3+l:]
++	}
++	return m, nil
++}
++
++// Result returns the result (0 success, 1 failure) and the error code of a
++// response, and false if the message has no result TLV
++func (m Message) Result() (result, code uint16, ok bool) {
++	v := m.TLVs[TLVResult]
++	if len(v) < 4 {
++		return 0, 0, false
++	}
++	return binary.LittleEndian.Uint16(v), binary.LittleEndian.Uint16(v[2:]), true
++}
++
++// Uint32 returns the value of a 32-bit TLV
++func (m Message) Uint32(t uint8) (uint32, bool) {
++	v, ok := m.TLVs[t]
++	if !ok || len(v) < 4 {
++		return 0, false
++	}
++	return binary.LittleEndian.Uint32(v), true
++}
+diff --git a/internal/qmi/qmi_test.go b/internal/qmi/qmi_test.go
+new file mode 100644
+index 0000000..819a879
+--- /dev/null
++++ b/internal/qmi/qmi_test.go
+@@ -0,0 +1,77 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++package qmi
++
++import (
++	"bytes"
++	"testing"
++)
++
++func TestEncode(t *testing.T) {
++	got := Encode(TypeRequest, 0x0102, 0x0022, Uint8(0x01, 1), Uint32(0x13, 1000))
++	want := []byte{
++		0x00,       // request
++		0x02, 0x01, // transaction
++		0x22, 0x00, // message
++		0x0b, 0x00, // payload length
++		0x01, 0x01, 0x00, 0x01, // TLV 0x01: 1
++		0x13, 0x04, 0x00, 0xe8, 0x03, 0x00, 0x00, // TLV 0x13: 1000
++	}
++	if !bytes.Equal(got, want) {
++		t.Errorf("got  % x\nwant % x", got, want)
++	}
++}
++
++func TestDecodeRoundTrip(t *testing.T) {
++	b := Encode(TypeResponse, 7, 0x0021, TLV{Type: TLVResult, Value: []byte{1, 0, 0x1a, 0}}, Uint64(0x10, 1<<40))
++	m, err := Decode(b)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if m.Type != TypeResponse || m.Txn != 7 || m.ID != 0x0021 {
++		t.Errorf("header %+v", m)
++	}
++	res, code, ok := m.Result()
++	if !ok || res != 1 || code != 0x1a {
++		t.Errorf("result %d %d %v", res, code, ok)
++	}
++	if _, ok := m.Uint32(0x11); ok {
++		t.Error("missing TLV found")
++	}
++	if v, ok := m.Uint32(0x10); !ok || v != 0 {
++		t.Errorf("low half of TLV 0x10: %d %v", v, ok)
++	}
++}
++
++func TestDecodeRejectsTruncated(t *testing.T) {
++	good := Encode(TypeIndication, 1, 0x0026, TLV{Type: 0x01, Value: []byte("$GPGGA,")})
++	for n := 0; n < len(good); n++ {
++		if _, err := Decode(good[:n]); err == nil {
++			t.Errorf("accepted %d of %d bytes", n, len(good))
++		}
++	}
++
++	// A TLV that claims more than the payload holds
++	bad := append([]byte{}, good...)
++	bad[8] = 0xff
++	if _, err := Decode(bad); err == nil {
++		t.Error("accepted an overlong TLV")
++	}
++
++	// Bytes after the payload are ignored
++	m, err := Decode(append(append([]byte{}, good...), 0xaa))
++	if err != nil || string(m.TLVs[0x01]) != "$GPGGA," {
++		t.Errorf("trailing byte: %v %q", err, m.TLVs[0x01])
++	}
++}
++
++func TestResultMissing(t *testing.T) {
++	m, err := Decode(Encode(TypeResponse, 1, 0x0022))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, _, ok := m.Result(); ok {
++		t.Error("result found in an empty response")
++	}
++}
+-- 
+2.56.0
+
