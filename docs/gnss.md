@@ -1,10 +1,10 @@
 # GNSS (GPS)
 
-## Status (2026-11-01): GNSS works on the SM-T820 on mainline (test DT); geoclue bridge written, not yet tested on the tablet
+## Status (2026-11-01): on the SM-T820, apps get a GNSS fix through geoclue with a RAM-booted test DT; the main DT has no MSS yet
 
 | Model | Where the GNSS engine is | Stock | Mainline |
 |---|---|---|---|
-| SM-T820 (Wi-Fi, APQ8096) | modem DSP (MSS), which runs a GNSS-only modem image ("modemlite") | works: satellites and position reports at 1 Hz in LineageOS | **works** with `dts/test/test-gnss.dts`: modem up, QMI LOC fix in about 6 min from a cold start (see "Results"). geoclue gets it through gnss-share with our `qmi_loc` driver (`pmaports/gnss-share`, `device-samsung-gts3lwifi-gnss`): tested on a PC against a fake modem, hardware test steps 4-9 below |
+| SM-T820 (Wi-Fi, APQ8096) | modem DSP (MSS), which runs a GNSS-only modem image ("modemlite") | works: satellites and position reports at 1 Hz in LineageOS | **works** with `dts/test/test-gnss.dts`: modem up, first fix 2.5-8 min after the modem starts, and geoclue gets it through gnss-share with our `qmi_loc` driver (`pmaports/gnss-share`, `device-samsung-gts3lwifi-gnss`; see "Results"). Before the main DT: idle drain (step 9) and the regression checklist (step 10) |
 | SM-T825 (LTE, MSM8996) | modem DSP, in the full LTE modem image | should work the same way (same location HAL) | `dts/test/test-gnss-lte.dts`, untested; we have no dump of its modem partition |
 
 "APQ8096 has no modem" is only true of the cellular part. The modem
@@ -60,9 +60,46 @@ changed.
   position report indications arrive once satellites are tracked.
 - **Memshare** was not needed for a fix.
 
-Next: the geoclue bridge on the tablet (test steps 4-8), idle/sleep checks
-(step 9; the modem stays up while rmtfs runs), then the MSS in the main DT
-(prepared on branch `gps-mss-main-dt`, step 10).
+### Through gnss-share and geoclue (test steps 4-8)
+
+Same test DT, at a window. All of it passed.
+
+| Step | Test | Result |
+|---|---|---|
+| 4 | gnss-share by hand, its event mask 0x194 | no engine without a client; first client starts the session, time injected, NMEA flows, first fix after 141 s; engine off when the client leaves |
+| 5 | two clients | one `Starting device`; the session survives the shorter client and stops with the longer; a new session fixes in 6-7 s |
+| 5 | `pkill -9 gnss-share` | engine off within 8 s |
+| 6 | modem down and up during a session | the driver sets the session up again by itself; new fix after 500 s (`rmtfs -r` keeps nothing) |
+| 7 | packages installed, RAM boot | rmtfs, tqftpserv and gnss-share start by themselves, modem up, socket there; engine stays off for 150 s idle |
+| 7 | `where-am-i -a 8`, GPS-only drop-in | first location after 171 s, 61 updates; session stops with where-am-i, engine off |
+| 7 | `where-am-i -a 4` | gnss-share gets no client |
+| 8 | normal boot, packages installed | rmtfs, tqftpserv and gnss-share inactive (`start condition unmet`), no rmtfs process, no modem in dmesg; ADSP and SLPI running, orientation reported, sound cards and sinks present, Wi-Fi up, no failed units, stock geoclue starts |
+
+Not checked: whether where-am-i's permission went through the on-screen
+prompt or was allowed without one; sound in step 8 by ear; a request with
+geoclue's stock configuration and a real fix (it would go online, below).
+
+- **geoclue's accuracy is not a measurement.** For NMEA it comes from a
+  table on the HDOP (`get_accuracy_from_hdop`: up to 1 gives 0 m, up to 2
+  gives 1 m, up to 5 gives 3 m, up to 10 gives 50 m). `where-am-i` printing
+  0 or 3 m is that table. The modem's own figure is about 10 m (above).
+- **Stock geoclue also goes online.** Its configuration keeps `[wifi]` and
+  `[ip]` enabled, and a request starts every source at or below the
+  requested level (`gclue_locator_start`). So an exact request uses GPS and
+  also sends nearby Wi-Fi networks and the IP address to
+  `api.beacondb.net`; a coarse one uses only those two. This comes from
+  reading the code; our tests ran GPS-only. gnss-share's packaging changes
+  none of it.
+- **GPS-only test configuration.** A drop-in in `/etc/geoclue/conf.d/` with
+  `enable=false` in `[wifi]`, `[3g]`, `[cdma]`, `[modem-gps]` and `[ip]`.
+  Disable all of them: with `[wifi]` off and the modem sources left on,
+  geoclue hangs at startup and never finishes activating. Stock starts
+  fine, and so does turning off any other single source. Not chased
+  further.
+
+Next: idle/sleep (step 9; the modem stays up while rmtfs runs), then the
+MSS in the main DT (prepared on branch `gps-mss-main-dt`, step 10). Until
+then a normal boot starts none of this, and GPS needs the RAM-booted test DT.
 
 ## Evidence
 
@@ -245,8 +282,8 @@ subscribers, and neither started the device.
   from the satellites, which is slower.
 - **Stopping:** STOP when the last client leaves, then the socket closes.
   If gnss-share dies, closing its socket makes the kernel send DEL_CLIENT to
-  the modem, which should end the session there too (to be confirmed on
-  the tablet, step 5).
+  the modem, which ends the session there too (step 5: engine off within
+  8 s).
 - NMEA is never logged; `-d` only adds debug messages about the session.
 
 Message IDs, TLVs and enum values come from libqmi's
@@ -266,6 +303,10 @@ tqftpserv and gnss-share, and `90-gts3-gnss.rules`.
   gnss-share all skip on their `Condition*` lines. Nothing runs and
   nothing needs masking. (The rmtfs package's own udev rule still tries to
   start rmtfs when `/dev/qcom_rmtfs_mem1` appears; the condition stops it.)
+- **On every install, with or without the subpackage:** `gts3-firmware`
+  also copies the modem's firmware to the rootfs. On an SM-T820 that is
+  9 MB once and 1.8 s more for that service at each boot, to compare the
+  files. The SM-T825's full LTE image is unmeasured and probably larger.
 - **DT with the MSS** (`test-gnss.dts` now, the main DT once
   `gps-mss-main-dt` is merged): when `qcom_q6v5_mss` registers the
   modem's remoteproc, `90-gts3-gnss.rules` starts rmtfs, which pulls in
@@ -276,7 +317,8 @@ tqftpserv and gnss-share, and `90-gts3-gnss.rules`.
   only while an app asks for exact accuracy (level 8, e.g. a map's "my
   location"). Requests for a coarser accuracy don't start the GNSS
   engine. When the last such app stops, geoclue disconnects and gnss-share
-  stops the session.
+  stops the session. geoclue's Wi-Fi and IP sources are a separate matter
+  and do go online (see "Results").
 - **OpenRC** is not wired up: the subpackage only carries systemd units
   and drop-ins.
 
@@ -311,8 +353,8 @@ reversible; nothing writes to a partition until a later, separate decision
 to let rmtfs write. `fix` never prints the position and `nmea` masks it:
 don't paste unmasked NMEA or `where-am-i` output anywhere.
 
-Steps 0-3 were done on 2026-11-01 with the first version of the tools
-(see "Results"); repeat them as needed. Steps 4-10 are new.
+Steps 0-8 were done on 2026-11-01 (see "Results"; 0-3 with the first
+version of the tools); repeat them as needed. Steps 9 and 10 are open.
 
 **0. Pre-checks (current install, no reboot).**
 `apk add rmtfs qrtr tqftpserv socat python3`, then `systemctl mask rmtfs`:
@@ -377,8 +419,8 @@ Pass:
   status`, line `clock`; otherwise `system clock not synchronized`), and
   `qmi_loc: engine on`. A prints `engine on`.
 - C prints a summary every 15 s: satellites and C/N0 within a few minutes,
-  then `first fix` (about 6 min from a cold start; much faster while the
-  modem still has recent orbit data).
+  then `first fix` (2.5-8 min after the modem starts; seconds while it
+  still has recent orbit data).
 - C ends: B prints `Client disconnected`, `Stopping device`,
   `qmi_loc: session stopped`; A prints `engine off` within a few seconds.
 - `./gnss-test.sh nmea 30` shows sentences with the position fields
@@ -426,7 +468,9 @@ and `device-samsung-gts3lwifi-gnss` (`pmbootstrap sideload`, or copy the
   -a 8 -t 900 | grep -E 'Accuracy|Timestamp'`. The demo agent asks for
   permission on screen; allow it. Pass: `journalctl -u gnss-share` shows
   `Client connected` and `session started`; after a fix, where-am-i
-  reports an accuracy of about 10 m. Where-am-i ending (or Ctrl+C) ends the
+  reports a location. To be sure it came from GPS, and to keep the test
+  offline, use the GPS-only drop-in (see "Results"). Where-am-i ending (or
+  Ctrl+C) ends the
   session: `Client disconnected`, `session stopped`, and a watcher sees
   `engine off`.
 - A coarse request starts no session: `where-am-i -a 4 -t 60` (city
@@ -500,14 +544,6 @@ sorted out.
 
 ## Open items
 
-- **Event mask.** The first fix used REG_EVENTS 0x3ff7; gnss-share and
-  `qmi-loc.py` register only NMEA, time requests, engine and session state
-  (0x194). Whether the modem sends NMEA with that mask is untested (step 4
-  has the fallback).
-- **Sessions of dead clients.** Whether the modem ends a session when the
-  kernel reports its client gone (DEL_CLIENT) is untested (step 5). If it
-  doesn't, a crashed gnss-share leaves the engine on until the modem
-  restarts.
 - **Idle cost of the modem.** With the MSS DT and the packages, the modem
   boots at startup and stays up idle. Its screen-off and suspend cost is
   unmeasured (step 9); if it matters, start it only for the first client.
@@ -516,8 +552,9 @@ sorted out.
   fix takes longer; a wrong RTC with no network is not injected either,
   which is the point of the check.
 - **No assistance data.** Predicted orbits (XTRA) and a coarse position
-  are not injected; the engine asks for both (0x29, 0x2a). Every cold
-  start takes about 6 min. With rmtfs `-r` nothing the modem learns
+  are not injected; the engine asks for both (0x29, 0x2a). The first fix
+  after a modem start took 141 s to about 500 s. With rmtfs `-r` nothing
+  the modem learns
   survives a modem restart or reboot (step 11).
 - **Memshare.** Stock reserves a 96 MiB pool for it on both models and the
   modem image has a memshare client. A fix came without it; if sessions
