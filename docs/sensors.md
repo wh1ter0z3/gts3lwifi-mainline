@@ -116,11 +116,16 @@ If iio-sensor-proxy was installed after the sensors appeared, run
 
 ### KWin (`pmaports/kwin`)
 
-KWin 6.8.1 rotates the screen from the sensor. Two KWin bugs showed up on
+KWin 6.8.2 rotates the screen from the sensor. Two KWin bugs showed up on
 this tablet; `pmaports/kwin` is postmarketOS's systemd KWin package
-(extra-repos/systemd/kwin, 99996.8.1-r0) with a fix for each and a build
-option (pkgrel 101). All three patches are for upstream KWin and not merged
-yet; 0001 is [plasma/kwin!10293](https://invent.kde.org/plasma/kwin/-/merge_requests/10293).
+(extra-repos/systemd/kwin, 99996.8.2-r0) with a fix for each and a build
+option (pkgrel 100). A newer stock KWin outranks this package, so it has to
+follow postmarketOS's version.
+
+0001 is [plasma/kwin!10293](https://invent.kde.org/plasma/kwin/-/merge_requests/10293),
+merged after 6.8.2; drop it at 6.8.3. 0002 and 0003 are for upstream KWin and
+not merged yet. The checks below ran on 6.8.1. On 6.8.2 the patches are only
+known to apply; that package has not been built or run on the tablet.
 
 - 0001, snow during the rotation animation: the animation snapshots the old
   frame with `Scene::paint()`, which takes a region in device pixels, but it
