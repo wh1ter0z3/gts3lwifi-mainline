@@ -9,3 +9,10 @@
 # right-up there); on an SM-T825 the same X and Y were confirmed in all
 # positions (with Z +1, which turned only the tilt over).
 SUBSYSTEM=="iio", ATTR{name}=="qcom-smgr-accel", ENV{ACCEL_MOUNT_MATRIX}="1, 0, 0; 0, -1, 0; 0, 0, -1"
+
+# Stream the accelerometer at its lowest rate, about 12.5 Hz, not its fastest
+# (416 Hz). iio-sensor-proxy reads it every 700 ms and uses only the newest
+# sample, and each sample is a QMI message that wakes a CPU: on the SM-T820
+# with the screen on, 416 Hz cost about 385 wakeups a second and 2 % of the
+# CPU time. The rate takes effect with kernel patch 0143.
+ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="qcom-smgr-accel", ATTR{in_accel_sampling_frequency}="12"

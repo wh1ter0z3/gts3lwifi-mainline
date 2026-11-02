@@ -388,13 +388,11 @@ it again with KWin running leaves auto-rotate dead (see
 - Writes to `in_*_sampling_frequency` were ignored: every buffer enable
   went back to the fastest rate, one QMI message per sample. Patch 0143
   keeps the written rate, capped at the maximum SMGR reports (tested, rates
-  above). Nothing writes one yet, so
-  the accelerometer runs at its fastest rate, 416 Hz. 12 Hz (it streams at
-  12.4 Hz) would lose nothing: iio-sensor-proxy reads it every 700 ms and
-  uses only the newest scan, and at 416 Hz the buffer filled in 0.3 s, so
-  the scan it used was stale anyway. Tried with
-  `ATTR{in_accel_sampling_frequency}="12"` in `61-gts3-accel.rules`: it
-  takes effect from boot, and turning an SM-T820 by hand through all four
+  above). `61-gts3-accel.rules` sets the
+  accelerometer to 12 Hz (it streams at about 12.3 Hz). That loses nothing:
+  iio-sensor-proxy reads it every 700 ms and uses only the newest scan, and
+  at 416 Hz the buffer filled in 0.3 s, so the scan it used was stale anyway.
+  It takes effect from boot, and turning an SM-T820 by hand through all four
   positions felt the same as at 416 Hz (not timed). Measured on the
   SM-T820 with the screen on and the desktop idle (10 s windows, SLPI
   `smd-edge` IRQs, CPU busy over 4 cores, residency in the deepest idle
