@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <kwin@jayd.ml>
+Date: Sun, 1 Nov 2026 07:56:05 -0700
+Subject: [PATCH] plugins/screentransform: Paint the entire snapshot, not a
+ subset
+
+With a scale factor above 1 we end up compositing uninitialized memory since
+Scene::paint() takes device pixels and this call passes logical geometry.
+
+Instead, paint the delegate's whole device rect.
+
+Fixes: 1b8f6ed40e ("scene,backends: change damage regions to be in device pixels")
+---
+ src/plugins/screentransform/screentransform.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/plugins/screentransform/screentransform.cpp b/src/plugins/screentransform/screentransform.cpp
+index 93af4529f9..b46cb7b6e9 100644
+--- a/src/plugins/screentransform/screentransform.cpp
++++ b/src/plugins/screentransform/screentransform.cpp
+@@ -112,7 +112,7 @@ void ScreenTransformEffect::addScreen(LogicalOutput *screen)
+         delegate.setViewport(screen->geometryF());
+         delegate.setScale(screen->scale());
+         scene->prePaint(&delegate);
+-        scene->paint(renderTarget, QPoint(), screen->geometry());
++        scene->paint(renderTarget, QPoint(), delegate.deviceRect());
+         scene->postPaint();
+     });
+ }
