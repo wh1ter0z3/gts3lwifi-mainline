@@ -6,10 +6,9 @@ the base is the kernel.org tarball and we carry their patches ourselves.
 
 ## Merge order
 
-Merge this after everything else in flight. The branch is stacked on `gps` and
-`sensors`, neither merged yet. Whatever lands on main first has to be redone on
-top of this: add the patch, then regenerate it with the steps below. The exception
-is `mdp5-resume`: its patch 0148 is already here.
+Merge this after everything else in flight. The branch is stacked on `gps`, which
+is stacked on `mdp5-resume`. Anything else that lands on main first has to be redone
+on top of this: add the patch, then regenerate it with the steps below.
 
 ## Patches
 
@@ -82,8 +81,7 @@ None of these are in 7.4-rc1.
   dead until reboot. This keeps the link up during suspend, as 6.19 did. Why it
   doesn't retrain is unknown: holding BT_EN low doesn't help.
 - **0148 `drm/msm/mdp5`:** not caused by 7.3, 6.19 has the same bug. The second
-  suspend after a boot failed at `prepare`. See [suspend](suspend.md) and the fork
-  branch `mdp5-resume`, which carries it for 6.19.
+  suspend after a boot failed at `prepare`. See [suspend](suspend.md).
 
 ## Config
 
@@ -110,18 +108,17 @@ it on an SM-T825: only its device tree is compile-tested.
 | Boots with 0146 | 13 of 13 clean: no announce failures or modem crashes. Without it, a crash on 2 of 4 |
 | Suspend, 20 s by RTC | 4 of 4 in a row, as RAM boot and as installed. Wi-Fi passes traffic after, Bluetooth stays powered |
 | Sensors | accelerometer, gyroscope, magnetometer, light, ADC; orientation reads normal |
-| GNSS | at a window, first fix after 80 s, probably with orbit data kept from earlier fixes; 12 GPS and 10 GLONASS in view, HDOP about 0.8 |
+| GNSS | at a window, first fix after 80 s, probably with orbit data kept from earlier fixes; 12 GPS and 10 GLONASS in view, HDOP about 0.8. An idle modem doesn't wake a suspend, and a session carries on across one |
 | Venus decode | H.264 and HEVC both match a software decode |
 | Cameras | both capture; "seems good" by hand in Ocellus |
 | Audio, by ear | speakers and headphones sound clean. The mic works but is quiet (peaks near 5 %): gain was never tuned, see `docs/audio.md` |
 | Panel, by eye | picture correct, brightness works, on a boot with the `pclk` warning below |
 | Rotation, touch, pen | all good by hand |
 | Power button, by hand | sleeps and wakes twice in a row, picture and touch correct after |
+| Keyboard cover, by hand | good |
 | KWin, modem, ADSP, SLPI, USB gadget | running |
 
 Sensors and H.264/HEVC decode ran on the build before 0147 and 0148, which don't touch them.
-
-**Not checked by hand:** the keyboard cover.
 
 ### Worse than 6.19, or maybe
 
