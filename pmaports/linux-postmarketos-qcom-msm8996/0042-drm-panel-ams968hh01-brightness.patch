@@ -37,10 +37,10 @@ Assisted-by: Claude:claude-opus-5-5
  2 files changed, 511 insertions(+), 29 deletions(-)
 
 diff --git a/drivers/gpu/drm/panel/Kconfig b/drivers/gpu/drm/panel/Kconfig
-index 2954d5f9ac18..0b6ef8fe7804 100644
+index 616d2a463c..eaa9bb23f1 100644
 --- a/drivers/gpu/drm/panel/Kconfig
 +++ b/drivers/gpu/drm/panel/Kconfig
-@@ -763,6 +763,7 @@ config DRM_PANEL_SAMSUNG_AMS968HH01
+@@ -931,6 +931,7 @@ config DRM_PANEL_SAMSUNG_AMS968HH01
  	tristate "Samsung AMS968HH01 QXGA dual-DSI command mode panel"
  	depends on OF
  	depends on DRM_MIPI_DSI
@@ -49,7 +49,7 @@ index 2954d5f9ac18..0b6ef8fe7804 100644
  	  Say Y or M here if you want to enable support for the Samsung
  	  AMS968HH01 2048x1536 AMOLED panel with the Anapass ANA38401 driver
 diff --git a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-index a2f9c309fa68..7392ac6b700a 100644
+index 937a24efee..8d9f692e8c 100644
 --- a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 +++ b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 @@ -13,10 +13,13 @@
@@ -66,7 +66,7 @@ index a2f9c309fa68..7392ac6b700a 100644
  #include <linux/module.h>
  #include <linux/of.h>
  #include <linux/of_graph.h>
-@@ -30,15 +33,20 @@
+@@ -31,15 +34,20 @@
  #include <video/mipi_display.h>
  
  #define AMS968HH01_GAMMA_LEN	33
@@ -88,7 +88,7 @@ index a2f9c309fa68..7392ac6b700a 100644
  };
  
  static inline struct ams968hh01 *to_ams968hh01(struct drm_panel *panel)
-@@ -287,23 +295,423 @@ static const u8 ams968hh01_gamma_nominal[11] = {
+@@ -288,23 +296,423 @@ static const u8 ams968hh01_gamma_nominal[11] = {
  	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00, 0x80, 0x80, 0x00,
  };
  
@@ -522,7 +522,7 @@ index a2f9c309fa68..7392ac6b700a 100644
   */
  static int ams968hh01_read_mtp(struct ams968hh01 *ctx)
  {
-@@ -330,21 +738,52 @@ static int ams968hh01_read_mtp(struct ams968hh01 *ctx)
+@@ -331,21 +739,52 @@ static int ams968hh01_read_mtp(struct ams968hh01 *ctx)
  			return ret < 0 ? ret : -EIO;
  	}
  
@@ -581,7 +581,7 @@ index a2f9c309fa68..7392ac6b700a 100644
  
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0x34);
  	ams968hh01_reg(ctx, 0xb2, 0x64, 0x00);	/* check fail off */
-@@ -361,23 +800,20 @@ static void ams968hh01_init(struct mipi_dsi_multi_context *ctx)
+@@ -362,23 +801,20 @@ static void ams968hh01_init(struct mipi_dsi_multi_context *ctx)
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0xbc);
  	ams968hh01_reg(ctx, 0xb2, 0x04);		/* gamma offset index */
  
@@ -613,7 +613,7 @@ index a2f9c309fa68..7392ac6b700a 100644
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0x35);
  	ams968hh01_reg(ctx, 0xb2, 0x01);		/* gamma update key */
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0xd0);
-@@ -512,6 +948,37 @@ static int ams968hh01_get_modes(struct drm_panel *panel,
+@@ -513,6 +949,37 @@ static int ams968hh01_get_modes(struct drm_panel *panel,
  						   &ams968hh01_mode_slow : &ams968hh01_mode);
  }
  
@@ -651,7 +651,7 @@ index a2f9c309fa68..7392ac6b700a 100644
  static const struct drm_panel_funcs ams968hh01_panel_funcs = {
  	.prepare = ams968hh01_prepare,
  	.enable = ams968hh01_enable,
-@@ -527,6 +994,13 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
+@@ -528,6 +995,13 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
  		.channel = 0,
  		.node = NULL,
  	};
@@ -665,7 +665,7 @@ index a2f9c309fa68..7392ac6b700a 100644
  	struct device *dev = &dsi->dev;
  	struct mipi_dsi_host *dsi1_host;
  	struct device_node *dsi1;
-@@ -562,17 +1036,24 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
+@@ -564,15 +1038,22 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
  	if (!dsi1_host)
  		return dev_err_probe(dev, -EPROBE_DEFER, "second DSI host not ready\n");
  
@@ -684,13 +684,8 @@ index a2f9c309fa68..7392ac6b700a 100644
 +	/* Until the MTP is read: the tables of a panel with zero offsets */
 +	ams968hh01_gamma_tables(ctx, no_mtp);
  
- 	drm_panel_init(&ctx->panel, dev, &ams968hh01_panel_funcs,
- 		       DRM_MODE_CONNECTOR_DSI);
  	ctx->panel.prepare_prev_first = true;
 +	ctx->panel.backlight = ctx->bl;
  	drm_panel_add(&ctx->panel);
  
  	for (i = 0; i < ARRAY_SIZE(ctx->dsi); i++) {
--- 
-2.56.0
-

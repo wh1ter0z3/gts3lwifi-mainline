@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Sun, 7 Aug 2022 20:14:34 +0100
+Subject: [PATCH] util_macros.h: Add macro to find closest smaller value in
+ array
+
+Add a macro to find the value closest to but smaller than a given
+value in an array.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+Link: https://lore.kernel.org/linux-arm-msm/20220808073459.396278-1-y.oudjana@protonmail.com/T/#m0c8652be783662db61ad78794cf4430c8e8f8a28
+---
+ include/linux/util_macros.h | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/include/linux/util_macros.h b/include/linux/util_macros.h
+index 71564868b8..0fcd243956 100644
+--- a/include/linux/util_macros.h
++++ b/include/linux/util_macros.h
+@@ -82,6 +82,28 @@
+ 	(__fc_i);							\
+ })
+ 
++/**
++ * find_closest_smaller - locate the closest smaller element in a sorted array
++ * @x: The reference value.
++ * @a: The array in which to look for the closest smaller element. Must be
++ *  sorted in ascending order.
++ * @as: Size of 'a'.
++ *
++ * Returns the index of the element closest to and smaller than 'x', or -1
++ * if no element smaller than 'x' exists in the array.
++ */
++#define find_closest_smaller(x, a, as)					\
++({									\
++	typeof(as) __fcs_i;						\
++	typeof(x) __fcs_x = (x);					\
++	typeof(*a) const *__fcs_a = (a);				\
++	for (__fcs_i = 0; __fcs_i < (as); __fcs_i++) {			\
++		if (__fcs_x < __fcs_a[__fcs_i])				\
++			break;						\
++	}								\
++	(__fcs_i - 1);							\
++})
++
+ /**
+  * PTR_IF - evaluate to @ptr if @cond is true, or to NULL otherwise.
+  * @cond: A conditional, usually in a form of IS_ENABLED(CONFIG_FOO)

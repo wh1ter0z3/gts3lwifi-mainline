@@ -15,10 +15,10 @@ Signed-off-by: Jayden Milne <linux@jayd.ml>
  1 file changed, 1 insertion(+)
 
 diff --git a/drivers/media/i2c/imx258.c b/drivers/media/i2c/imx258.c
-index e50dcfd830f5..61faa8daf5eb 100644
+index bc9ee449a8..9c3a6579df 100644
 --- a/drivers/media/i2c/imx258.c
 +++ b/drivers/media/i2c/imx258.c
-@@ -1117,6 +1117,7 @@ static int imx258_power_on(struct device *dev)
+@@ -1129,6 +1129,7 @@ static int imx258_power_on(struct device *dev)
  		dev_err(dev, "failed to enable clock\n");
  		regulator_bulk_disable(IMX258_NUM_SUPPLIES, imx258->supplies);
  	}
@@ -26,6 +26,3 @@ index e50dcfd830f5..61faa8daf5eb 100644
  
  	return ret;
  }
--- 
-2.56.0
-

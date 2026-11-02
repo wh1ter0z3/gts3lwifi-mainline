@@ -27,10 +27,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 sound/soc/codecs/rt5508.c
 
 diff --git a/sound/soc/codecs/Kconfig b/sound/soc/codecs/Kconfig
-index 061791e61..de49edc69 100644
+index 8e251e1d84..53bc81eaad 100644
 --- a/sound/soc/codecs/Kconfig
 +++ b/sound/soc/codecs/Kconfig
-@@ -241,6 +241,7 @@ config SND_SOC_ALL_CODECS
+@@ -244,6 +244,7 @@ config SND_SOC_ALL_CODECS
  	imply SND_SOC_RT1318
  	imply SND_SOC_RT1318_SDW
  	imply SND_SOC_RT1320_SDW
@@ -38,7 +38,7 @@ index 061791e61..de49edc69 100644
  	imply SND_SOC_RT9120
  	imply SND_SOC_RT9123
  	imply SND_SOC_RTQ9124
-@@ -1918,6 +1919,17 @@ config SND_SOC_RT715_SDCA_SDW
+@@ -1993,6 +1994,17 @@ config SND_SOC_RT766_SDCA_SDW
  	select REGMAP_SOUNDWIRE
  	select REGMAP_SOUNDWIRE_MBQ
  
@@ -57,28 +57,28 @@ index 061791e61..de49edc69 100644
  	tristate "Richtek RT9120 Stereo Class-D Amplifier"
  	depends on I2C
 diff --git a/sound/soc/codecs/Makefile b/sound/soc/codecs/Makefile
-index d687d4f74..d23aadf6e 100644
+index 3d122ace75..4d6c1f99c7 100644
 --- a/sound/soc/codecs/Makefile
 +++ b/sound/soc/codecs/Makefile
-@@ -279,6 +279,7 @@ snd-soc-rt715-y := rt715.o rt715-sdw.o
- snd-soc-rt715-sdca-y := rt715-sdca.o rt715-sdca-sdw.o
+@@ -286,6 +286,7 @@ snd-soc-rt715-sdca-y := rt715-sdca.o rt715-sdca-sdw.o
  snd-soc-rt721-sdca-y := rt721-sdca.o rt721-sdca-sdw.o
  snd-soc-rt722-sdca-y := rt722-sdca.o rt722-sdca-sdw.o
+ snd-soc-rt766-sdca-y := rt766-sdca.o rt766-sdca-sdw.o
 +snd-soc-rt5508-y := rt5508.o
  snd-soc-rt9120-y := rt9120.o
  snd-soc-rt9123-y := rt9123.o
  snd-soc-rt9123p-y := rt9123p.o
-@@ -712,6 +713,7 @@ obj-$(CONFIG_SND_SOC_RT715)     += snd-soc-rt715.o
- obj-$(CONFIG_SND_SOC_RT715_SDCA_SDW)     += snd-soc-rt715-sdca.o
+@@ -729,6 +730,7 @@ obj-$(CONFIG_SND_SOC_RT715_SDCA_SDW)     += snd-soc-rt715-sdca.o
  obj-$(CONFIG_SND_SOC_RT721_SDCA_SDW)     += snd-soc-rt721-sdca.o
  obj-$(CONFIG_SND_SOC_RT722_SDCA_SDW)     += snd-soc-rt722-sdca.o
+ obj-$(CONFIG_SND_SOC_RT766_SDCA_SDW)     += snd-soc-rt766-sdca.o
 +obj-$(CONFIG_SND_SOC_RT5508)	+= snd-soc-rt5508.o
  obj-$(CONFIG_SND_SOC_RT9120)	+= snd-soc-rt9120.o
  obj-$(CONFIG_SND_SOC_RT9123)	+= snd-soc-rt9123.o
  obj-$(CONFIG_SND_SOC_RT9123P)	+= snd-soc-rt9123p.o
 diff --git a/sound/soc/codecs/rt5508.c b/sound/soc/codecs/rt5508.c
 new file mode 100644
-index 000000000..ecbe9eb3b
+index 0000000000..ecbe9eb3bf
 --- /dev/null
 +++ b/sound/soc/codecs/rt5508.c
 @@ -0,0 +1,1127 @@
@@ -1209,6 +1209,3 @@ index 000000000..ecbe9eb3b
 +MODULE_DESCRIPTION("ASoC Richtek RT5508 speaker amplifier driver");
 +MODULE_AUTHOR("psigod <psigod@example.com>");
 +MODULE_LICENSE("GPL");
--- 
-2.53.0
-

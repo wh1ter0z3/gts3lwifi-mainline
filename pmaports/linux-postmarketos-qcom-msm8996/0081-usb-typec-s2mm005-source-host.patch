@@ -56,7 +56,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 223 insertions(+), 21 deletions(-)
 
 diff --git a/drivers/usb/typec/s2mm005.c b/drivers/usb/typec/s2mm005.c
-index 48800abf11bc..e097c76222b1 100644
+index 48800abf11..e097c76222 100644
 --- a/drivers/usb/typec/s2mm005.c
 +++ b/drivers/usb/typec/s2mm005.c
 @@ -9,6 +9,12 @@
@@ -420,6 +420,3 @@ index 48800abf11bc..e097c76222b1 100644
  	s2mm005_update(s);
  
  	ret = devm_request_threaded_irq(dev, client->irq, NULL, s2mm005_irq,
--- 
-2.56.0
-

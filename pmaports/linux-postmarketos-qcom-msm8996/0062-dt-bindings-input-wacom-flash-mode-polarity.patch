@@ -14,7 +14,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 3 insertions(+)
 
 diff --git a/Documentation/devicetree/bindings/input/touchscreen/wacom,w9007a-lt03.yaml b/Documentation/devicetree/bindings/input/touchscreen/wacom,w9007a-lt03.yaml
-index 39c0b0dcb535..eee20b8bcea5 100644
+index 39c0b0dcb5..eee20b8bce 100644
 --- a/Documentation/devicetree/bindings/input/touchscreen/wacom,w9007a-lt03.yaml
 +++ b/Documentation/devicetree/bindings/input/touchscreen/wacom,w9007a-lt03.yaml
 @@ -44,6 +44,9 @@ properties:
@@ -27,6 +27,3 @@ index 39c0b0dcb535..eee20b8bcea5 100644
  
    reset-gpios:
      maxItems: 1
--- 
-2.56.0
-

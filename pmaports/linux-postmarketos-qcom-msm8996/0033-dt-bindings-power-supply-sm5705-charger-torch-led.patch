@@ -13,7 +13,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 21 insertions(+)
 
 diff --git a/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml
-index d49fa487a..305fadf04 100644
+index d49fa487a4..305fadf049 100644
 --- a/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml
 +++ b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml
 @@ -42,6 +42,20 @@ properties:
@@ -57,6 +57,3 @@ index d49fa487a..305fadf04 100644
 +        };
        };
      };
--- 
-2.53.0
-

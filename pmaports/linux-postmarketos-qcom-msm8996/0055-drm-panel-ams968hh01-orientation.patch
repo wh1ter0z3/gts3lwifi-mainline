@@ -22,10 +22,10 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 11 insertions(+)
 
 diff --git a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-index 159733f001a4..1fb1281b0c45 100644
+index 89fec8c0e0..38813b10f0 100644
 --- a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 +++ b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-@@ -46,6 +46,7 @@ struct ams968hh01 {
+@@ -47,6 +47,7 @@ struct ams968hh01 {
  	struct regulator *vdd;
  	struct gpio_desc *reset_gpio;
  	struct gpio_desc *tcon_ready_gpio;
@@ -33,7 +33,7 @@ index 159733f001a4..1fb1281b0c45 100644
  	bool mtp_valid;
  	/* register 0x83 and its table, per luminance step */
  	u8 gamma[AMS968HH01_NUM_STEPS][1 + AMS968HH01_GAMMA_LEN];
-@@ -1095,12 +1096,18 @@ static const struct backlight_ops ams968hh01_bl_ops = {
+@@ -1096,12 +1097,18 @@ static const struct backlight_ops ams968hh01_bl_ops = {
  	.update_status = ams968hh01_bl_update_status,
  };
  
@@ -52,17 +52,14 @@ index 159733f001a4..1fb1281b0c45 100644
  };
  
  static int ams968hh01_probe(struct mipi_dsi_device *dsi)
-@@ -1140,6 +1147,10 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
+@@ -1142,6 +1149,10 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
  	if (IS_ERR(ctx->tcon_ready_gpio))
  		return dev_err_probe(dev, PTR_ERR(ctx->tcon_ready_gpio), "failed to get tcon-ready gpio\n");
  
-+	ret = of_drm_get_panel_orientation(dev->of_node, &ctx->orientation);
++	ret = drm_of_get_panel_orientation(dev->of_node, &ctx->orientation);
 +	if (ret)
 +		return dev_err_probe(dev, ret, "invalid rotation\n");
 +
  	/*
  	 * The panel node sits under the master DSI controller and has a second
  	 * input port fed by the other controller. Register a DSI device there.
--- 
-2.56.0
-

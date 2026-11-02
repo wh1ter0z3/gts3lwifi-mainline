@@ -34,7 +34,7 @@ Assisted-by: Claude:claude-opus-5-5
 
 diff --git a/Documentation/ABI/testing/sysfs-bus-mipi-dsi-devices-ams968hh01 b/Documentation/ABI/testing/sysfs-bus-mipi-dsi-devices-ams968hh01
 new file mode 100644
-index 000000000000..8813896433ce
+index 0000000000..8813896433
 --- /dev/null
 +++ b/Documentation/ABI/testing/sysfs-bus-mipi-dsi-devices-ams968hh01
 @@ -0,0 +1,15 @@
@@ -54,10 +54,10 @@ index 000000000000..8813896433ce
 +		replaces the top backlight level while the backlight is at
 +		max_brightness; below that this setting has no effect.
 diff --git a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-index cdd130d20d5e..9e5632f149c7 100644
+index 3a457bb432..4026f17299 100644
 --- a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 +++ b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-@@ -39,7 +39,6 @@
+@@ -40,7 +40,6 @@
  #define AMS968HH01_MAX_LEVEL	255
  #define AMS968HH01_POINTS	9	/* gamma points V255 ... V3 */
  #define AMS968HH01_HBM_STEPS	8
@@ -65,7 +65,7 @@ index cdd130d20d5e..9e5632f149c7 100644
  #define AMS968HH01_TEMP_BANDS	3	/* above 0 C, above -20 C, colder */
  #define AMS968HH01_TEMP_PERIOD	(30 * HZ)
  
-@@ -56,6 +55,7 @@ struct ams968hh01 {
+@@ -57,6 +56,7 @@ struct ams968hh01 {
  	u8 gamma[AMS968HH01_NUM_STEPS][1 + AMS968HH01_GAMMA_LEN];
  	/* high brightness mode: read from the panel with the MTP */
  	bool hbm_valid;
@@ -73,7 +73,7 @@ index cdd130d20d5e..9e5632f149c7 100644
  	bool hbm_on;		/* HBM ELVSS (B0 70) set since the last reset */
  	u8 elvss_normal;	/* B0 70 outside HBM */
  	u8 elvss_hbm;		/* B0 70 in HBM */
-@@ -314,7 +314,7 @@ static const u8 ams968hh01_gamma_nominal[11] = {
+@@ -315,7 +315,7 @@ static const u8 ams968hh01_gamma_nominal[11] = {
  
  /*
   * Brightness. As in the vendor driver, backlight levels 0 to 255 map onto
@@ -82,7 +82,7 @@ index cdd130d20d5e..9e5632f149c7 100644
   * below). Each level has its own AID value (register 0x90, the emission
   * duty cycle); each step has its own ELVSS value and gamma table. A step's
   * gamma table is cut for its base luminance, and AID dims that to the
-@@ -576,9 +576,12 @@ static const u8 ams968hh01_vt_coeff[16] = {
+@@ -577,9 +577,12 @@ static const u8 ams968hh01_vt_coeff[16] = {
  
  /* DDI reference voltages (vendor VREG0_REF_L and _H), in 2^-22 V */
  /*
@@ -98,7 +98,7 @@ index cdd130d20d5e..9e5632f149c7 100644
   * (D4 from offset 0x5b, plus the MTP gamma offsets); the steps between are
   * interpolated from the 360 cd/m2 table. AID stays at 360 cd/m2's, ELVSS
   * comes from this table (per temperature band) and the panel (D8 at
-@@ -902,10 +905,11 @@ static void ams968hh01_brightness(struct ams968hh01 *panel,
+@@ -903,10 +906,11 @@ static void ams968hh01_brightness(struct ams968hh01 *panel,
  				  struct mipi_dsi_multi_context *ctx,
  				  unsigned int level)
  {
@@ -112,7 +112,7 @@ index cdd130d20d5e..9e5632f149c7 100644
  
  		ams968hh01_reg_write(ctx, panel->hbm_gamma[h], sizeof(panel->hbm_gamma[h]));
  		ams968hh01_aid(ctx, AMS968HH01_MAX_LEVEL);
-@@ -917,7 +921,6 @@ static void ams968hh01_brightness(struct ams968hh01 *panel,
+@@ -918,7 +922,6 @@ static void ams968hh01_brightness(struct ams968hh01 *panel,
  		ams968hh01_param(ctx, 0x6d, 0x85);	/* CAPS */
  		panel->hbm_on = true;
  	} else {
@@ -120,7 +120,7 @@ index cdd130d20d5e..9e5632f149c7 100644
  		s = ams968hh01_step(level);
  		if (panel->hbm_on) {
  			ams968hh01_param(ctx, 0x70, panel->elvss_normal);
-@@ -1174,7 +1177,7 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
+@@ -1175,7 +1178,7 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
  	const struct backlight_properties props = {
  		.type = BACKLIGHT_RAW,
  		.brightness = AMS968HH01_MAX_LEVEL,
@@ -177,6 +177,3 @@ index cdd130d20d5e..9e5632f149c7 100644
  	},
  };
  module_mipi_dsi_driver(ams968hh01_driver);
--- 
-2.56.0
-

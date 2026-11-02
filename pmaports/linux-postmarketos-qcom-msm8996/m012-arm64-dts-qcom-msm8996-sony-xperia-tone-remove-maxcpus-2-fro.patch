@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Fri, 3 Sep 2021 16:23:39 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-sony-xperia-tone: Remove maxcpus=2
+ from bootargs
+
+With support for CBF scaling added, it's no longer necessary to limit the
+system to the powersave cluster.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone.dtsi | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone.dtsi b/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone.dtsi
+index d55e407504..3064a3e716 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone.dtsi
+@@ -24,10 +24,6 @@ / {
+ 	qcom,msm-id = <246 0x30001>; /* MSM8996 V3.1 (Final) */
+ 	qcom,board-id = <8 0>;
+ 
+-	chosen {
+-		bootargs = "maxcpus=2";
+-	};
+-
+ 	reserved-memory {
+ 		ramoops@a7f00000 {
+ 			compatible = "ramoops";

@@ -34,7 +34,7 @@ Assisted-by: Claude:claude-opus-5-5
  create mode 100644 drivers/mfd/stmpe-test.c
 
 diff --git a/drivers/iio/adc/stmpe-adc.c b/drivers/iio/adc/stmpe-adc.c
-index 8e26c47edc08..1f43c90927d9 100644
+index 8e26c47edc..1f43c90927 100644
 --- a/drivers/iio/adc/stmpe-adc.c
 +++ b/drivers/iio/adc/stmpe-adc.c
 @@ -176,6 +176,7 @@ static irqreturn_t stmpe_adc_isr(int irq, void *dev_id)
@@ -71,7 +71,7 @@ index 8e26c47edc08..1f43c90927d9 100644
  	info->value = (u32) be16_to_cpu(data);
  	complete(&info->completion);
 diff --git a/drivers/input/touchscreen/stmpe-ts.c b/drivers/input/touchscreen/stmpe-ts.c
-index af0fb38bcfdc..55ce0a856281 100644
+index af0fb38bcf..55ce0a8562 100644
 --- a/drivers/input/touchscreen/stmpe-ts.c
 +++ b/drivers/input/touchscreen/stmpe-ts.c
 @@ -129,6 +129,7 @@ static void stmpe_work(struct work_struct *work)
@@ -102,10 +102,10 @@ index af0fb38bcfdc..55ce0a856281 100644
  	__stmpe_reset_fifo(ts->stmpe);
  
 diff --git a/drivers/mfd/Kconfig b/drivers/mfd/Kconfig
-index f7f12a0428aa..edada6572e6f 100644
+index e4fd457247..e93e30109c 100644
 --- a/drivers/mfd/Kconfig
 +++ b/drivers/mfd/Kconfig
-@@ -1636,6 +1636,17 @@ config STMPE_SPI
+@@ -1629,6 +1629,17 @@ config STMPE_SPI
  	depends on SPI_MASTER
  	help
  	  This is used to enable SPI interface of STMPE
@@ -124,7 +124,7 @@ index f7f12a0428aa..edada6572e6f 100644
  
  config MFD_SUN6I_PRCM
 diff --git a/drivers/mfd/Makefile b/drivers/mfd/Makefile
-index e75e8045c28a..dabbda160e0a 100644
+index 72d3944b0a..8c26d5cf7e 100644
 --- a/drivers/mfd/Makefile
 +++ b/drivers/mfd/Makefile
 @@ -31,6 +31,7 @@ obj-$(CONFIG_MFD_TI_AM335X_TSCADC)	+= ti_am335x_tscadc.o
@@ -136,7 +136,7 @@ index e75e8045c28a..dabbda160e0a 100644
  obj-$(CONFIG_MFD_TC3589X)	+= tc3589x.o
  obj-$(CONFIG_MFD_TQMX86)	+= tqmx86.o
 diff --git a/drivers/mfd/stmpe-i2c.c b/drivers/mfd/stmpe-i2c.c
-index 943fa363efc3..c95295f44d19 100644
+index 943fa363ef..c95295f44d 100644
 --- a/drivers/mfd/stmpe-i2c.c
 +++ b/drivers/mfd/stmpe-i2c.c
 @@ -15,6 +15,7 @@
@@ -162,7 +162,7 @@ index 943fa363efc3..c95295f44d19 100644
  static int i2c_block_write(struct stmpe *stmpe, u8 reg, u8 length,
 diff --git a/drivers/mfd/stmpe-i2c.h b/drivers/mfd/stmpe-i2c.h
 new file mode 100644
-index 000000000000..0d6c42d29316
+index 0000000000..0d6c42d293
 --- /dev/null
 +++ b/drivers/mfd/stmpe-i2c.h
 @@ -0,0 +1,17 @@
@@ -185,7 +185,7 @@ index 000000000000..0d6c42d29316
 +#endif
 diff --git a/drivers/mfd/stmpe-test.c b/drivers/mfd/stmpe-test.c
 new file mode 100644
-index 000000000000..ab65ecc9e812
+index 0000000000..ab65ecc9e8
 --- /dev/null
 +++ b/drivers/mfd/stmpe-test.c
 @@ -0,0 +1,140 @@
@@ -330,7 +330,7 @@ index 000000000000..ab65ecc9e812
 +MODULE_DESCRIPTION("KUnit tests for STMPE transport contracts");
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/mfd/stmpe.c b/drivers/mfd/stmpe.c
-index 362471de3be4..46cfabf74f19 100644
+index 362471de3b..46cfabf74f 100644
 --- a/drivers/mfd/stmpe.c
 +++ b/drivers/mfd/stmpe.c
 @@ -96,9 +96,10 @@ static int __stmpe_block_read(struct stmpe *stmpe, u8 reg, u8 length,
@@ -354,6 +354,3 @@ index 362471de3be4..46cfabf74f19 100644
   */
  int stmpe_block_read(struct stmpe *stmpe, u8 reg, u8 length, u8 *values)
  {
--- 
-2.56.0
-

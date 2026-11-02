@@ -15,7 +15,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/Documentation/devicetree/bindings/usb/samsung,s2mm005.yaml b/Documentation/devicetree/bindings/usb/samsung,s2mm005.yaml
-index 16e446fbd91f..2318f2643fb5 100644
+index 16e446fbd9..2318f2643f 100644
 --- a/Documentation/devicetree/bindings/usb/samsung,s2mm005.yaml
 +++ b/Documentation/devicetree/bindings/usb/samsung,s2mm005.yaml
 @@ -13,8 +13,10 @@ description:
@@ -31,6 +31,3 @@ index 16e446fbd91f..2318f2643fb5 100644
  
  properties:
    compatible:
--- 
-2.56.0
-

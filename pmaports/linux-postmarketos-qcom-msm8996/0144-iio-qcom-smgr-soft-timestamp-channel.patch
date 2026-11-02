@@ -25,7 +25,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 6 insertions(+), 66 deletions(-)
 
 diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
-index a88a9f554572..248215257cbc 100644
+index a88a9f5545..248215257c 100644
 --- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
 +++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
 @@ -544,17 +544,7 @@ static const struct iio_chan_spec qcom_smgr_accel_iio_channels[] = {
@@ -142,6 +142,3 @@ index a88a9f554572..248215257cbc 100644
  };
  
  static const char *const qcom_smgr_sensor_type_device_names[] = {
--- 
-2.56.0
-

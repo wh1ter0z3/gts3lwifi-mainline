@@ -24,7 +24,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/clk/qcom/gcc-msm8996.c b/drivers/clk/qcom/gcc-msm8996.c
-index aa3bd2777..dc8b6f3f3 100644
+index aa3bd27778..dc8b6f3f3d 100644
 --- a/drivers/clk/qcom/gcc-msm8996.c
 +++ b/drivers/clk/qcom/gcc-msm8996.c
 @@ -3239,7 +3239,7 @@ static struct gdsc pcie0_gdsc = {
@@ -54,6 +54,3 @@ index aa3bd2777..dc8b6f3f3 100644
  };
  
  static struct gdsc ufs_gdsc = {
--- 
-2.53.0
-

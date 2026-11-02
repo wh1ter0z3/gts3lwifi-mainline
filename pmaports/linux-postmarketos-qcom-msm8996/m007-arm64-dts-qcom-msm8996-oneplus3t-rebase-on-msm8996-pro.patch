@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Wed, 3 May 2023 16:38:19 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996-oneplus3t: Rebase on MSM8996 Pro
+
+The OnePlus 3T has MSM8996 Pro rather than MSM8996. Rename DTS and change
+includes to match.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/Makefile                               | 2 +-
+ arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi            | 1 -
+ arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts                   | 1 +
+ .../qcom/{msm8996-oneplus3t.dts => msm8996pro-oneplus3t.dts}    | 1 +
+ 4 files changed, 3 insertions(+), 2 deletions(-)
+ rename arch/arm64/boot/dts/qcom/{msm8996-oneplus3t.dts => msm8996pro-oneplus3t.dts} (97%)
+
+diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
+index 1c86e7e98f..9114dd3eac 100644
+--- a/arch/arm64/boot/dts/qcom/Makefile
++++ b/arch/arm64/boot/dts/qcom/Makefile
+@@ -142,11 +142,11 @@ dtb-$(CONFIG_ARCH_QCOM)	+= msm8994-sony-xperia-kitakami-sumire.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8994-sony-xperia-kitakami-suzuran.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-mtp.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-oneplus3.dtb
+-dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-oneplus3t.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-dora.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-kagura.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-keyaki.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-xiaomi-gemini.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= msm8996pro-oneplus3t.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996pro-xiaomi-natrium.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996pro-xiaomi-scorpio.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8998-asus-novago-tp370ql.dtb
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+index a4dcc88bb0..99fb70495b 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+@@ -3,7 +3,6 @@
+  * Copyright (c) 2022, Harry Austen <hpausten@protonmail.com>
+  */
+ 
+-#include "msm8996.dtsi"
+ #include "pm8994.dtsi"
+ #include "pmi8994.dtsi"
+ #include "pmi8996.dtsi"
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts b/arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts
+index 0bb9e3d8f7..3ad5b3f8db 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts
+@@ -5,6 +5,7 @@
+ 
+ /dts-v1/;
+ 
++#include "msm8996.dtsi"
+ #include "msm8996-oneplus-common.dtsi"
+ 
+ / {
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus3t.dts b/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dts
+similarity index 97%
+rename from arch/arm64/boot/dts/qcom/msm8996-oneplus3t.dts
+rename to arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dts
+index 1d7b27c5af..cde3ce91b3 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus3t.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dts
+@@ -5,6 +5,7 @@
+ 
+ /dts-v1/;
+ 
++#include "msm8996pro.dtsi"
+ #include "msm8996-oneplus-common.dtsi"
+ 
+ / {

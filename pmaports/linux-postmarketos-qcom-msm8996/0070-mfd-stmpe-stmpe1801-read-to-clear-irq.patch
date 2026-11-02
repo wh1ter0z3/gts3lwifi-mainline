@@ -17,7 +17,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/mfd/stmpe.c b/drivers/mfd/stmpe.c
-index 3c5c2f157f52..362471de3be4 100644
+index 3c5c2f157f..362471de3b 100644
 --- a/drivers/mfd/stmpe.c
 +++ b/drivers/mfd/stmpe.c
 @@ -327,7 +327,7 @@ static const struct mfd_cell stmpe_gpio_cell_noirq = {
@@ -40,6 +40,3 @@ index 3c5c2f157f52..362471de3be4 100644
  	}
  
  	return IRQ_HANDLED;
--- 
-2.56.0
-

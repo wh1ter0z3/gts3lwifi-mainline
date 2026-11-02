@@ -16,7 +16,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 diff --git a/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-fuel-gauge.yaml b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-fuel-gauge.yaml
 new file mode 100644
-index 000000000..9b6464e05
+index 0000000000..9b6464e056
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-fuel-gauge.yaml
 @@ -0,0 +1,52 @@
@@ -72,6 +72,3 @@ index 000000000..9b6464e05
 +        monitored-battery = <&battery>;
 +      };
 +    };
--- 
-2.53.0
-

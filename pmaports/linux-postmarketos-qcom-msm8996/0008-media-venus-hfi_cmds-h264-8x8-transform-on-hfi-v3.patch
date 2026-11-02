@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Wed, 28 Oct 2026 10:09:26 +0530
-Subject: [PATCH 1/2] media: venus: hfi_cmds: accept the H.264 8x8 transform
+Subject: [PATCH] media: venus: hfi_cmds: accept the H.264 8x8 transform
  property on HFI v3
 
 venc_set_properties() sets HFI_PROPERTY_PARAM_VENC_H264_TRANSFORM_8X8 for
@@ -23,7 +23,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 7 insertions(+)
 
 diff --git a/drivers/media/platform/qcom/venus/hfi_cmds.c b/drivers/media/platform/qcom/venus/hfi_cmds.c
-index 3ae063094..9684ecb5f 100644
+index 3ae063094e..9684ecb5f4 100644
 --- a/drivers/media/platform/qcom/venus/hfi_cmds.c
 +++ b/drivers/media/platform/qcom/venus/hfi_cmds.c
 @@ -1177,6 +1177,13 @@ pkt_session_set_property_3xx(struct hfi_session_set_property_pkt *pkt,

@@ -24,7 +24,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  3 files changed, 9 insertions(+)
 
 diff --git a/sound/soc/qcom/qdsp6/q6afe-dai.c b/sound/soc/qcom/qdsp6/q6afe-dai.c
-index 0f47aadaa..ef956f00f 100644
+index 920345609d..93c46c6a61 100644
 --- a/sound/soc/qcom/qdsp6/q6afe-dai.c
 +++ b/sound/soc/qcom/qdsp6/q6afe-dai.c
 @@ -278,6 +278,9 @@ static int q6tdm_hw_params(struct snd_pcm_substream *substream,
@@ -38,10 +38,10 @@ index 0f47aadaa..ef956f00f 100644
  	return 0;
  }
 diff --git a/sound/soc/qcom/qdsp6/q6afe.c b/sound/soc/qcom/qdsp6/q6afe.c
-index 0b01fc9e1..fb323c882 100644
+index f0ff1350e9..5e796e9206 100644
 --- a/sound/soc/qcom/qdsp6/q6afe.c
 +++ b/sound/soc/qcom/qdsp6/q6afe.c
-@@ -1357,6 +1357,9 @@ void q6afe_tdm_port_prepare(struct q6afe_port *port,
+@@ -1404,6 +1404,9 @@ void q6afe_tdm_port_prepare(struct q6afe_port *port,
  	pcfg->tdm_cfg.sync_mode = cfg->sync_mode;
  	pcfg->tdm_cfg.sync_src = cfg->sync_src;
  	pcfg->tdm_cfg.nslots_per_frame = cfg->nslots_per_frame;
@@ -52,10 +52,10 @@ index 0b01fc9e1..fb323c882 100644
  	pcfg->tdm_cfg.slot_width = cfg->slot_width;
  	pcfg->tdm_cfg.slot_mask = cfg->slot_mask;
 diff --git a/sound/soc/qcom/qdsp6/q6afe.h b/sound/soc/qcom/qdsp6/q6afe.h
-index a29abe4ce..a16da6373 100644
+index 0b8c3ec131..7bb28aaaa1 100644
 --- a/sound/soc/qcom/qdsp6/q6afe.h
 +++ b/sound/soc/qcom/qdsp6/q6afe.h
-@@ -189,6 +189,9 @@ struct q6afe_tdm_cfg {
+@@ -190,6 +190,9 @@ struct q6afe_tdm_cfg {
  	u16	sync_mode;
  	u16	sync_src;
  	u16	nslots_per_frame;
@@ -65,6 +65,3 @@ index a29abe4ce..a16da6373 100644
  	u16	slot_width;
  	u16	slot_mask;
  	u32	data_align_type;
--- 
-2.53.0
-

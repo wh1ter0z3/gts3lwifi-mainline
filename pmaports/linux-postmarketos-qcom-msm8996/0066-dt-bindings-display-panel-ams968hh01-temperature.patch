@@ -19,7 +19,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 12 insertions(+)
 
 diff --git a/Documentation/devicetree/bindings/display/panel/samsung,ams968hh01.yaml b/Documentation/devicetree/bindings/display/panel/samsung,ams968hh01.yaml
-index 34874fa2e5f3..c111ca1795a9 100644
+index 34874fa2e5..c111ca1795 100644
 --- a/Documentation/devicetree/bindings/display/panel/samsung,ams968hh01.yaml
 +++ b/Documentation/devicetree/bindings/display/panel/samsung,ams968hh01.yaml
 @@ -35,6 +35,15 @@ properties:
@@ -55,6 +55,3 @@ index 34874fa2e5f3..c111ca1795a9 100644
              rotation = <270>;
  
              ports {
--- 
-2.56.0
-

@@ -26,7 +26,7 @@ Assisted-by: Claude:claude-opus-5-5
  create mode 100644 drivers/input/touchscreen/wacom_w9000.h
 
 diff --git a/drivers/input/touchscreen/wacom_w9000.c b/drivers/input/touchscreen/wacom_w9000.c
-index 4a2629a54167..b99b052997c0 100644
+index 4a2629a541..b99b052997 100644
 --- a/drivers/input/touchscreen/wacom_w9000.c
 +++ b/drivers/input/touchscreen/wacom_w9000.c
 @@ -16,14 +16,15 @@
@@ -493,7 +493,7 @@ index 4a2629a54167..b99b052997c0 100644
  MODULE_DEVICE_TABLE(i2c, wacom_w9000_id);
 diff --git a/drivers/input/touchscreen/wacom_w9000.h b/drivers/input/touchscreen/wacom_w9000.h
 new file mode 100644
-index 000000000000..514f70fdcbee
+index 0000000000..514f70fdcb
 --- /dev/null
 +++ b/drivers/input/touchscreen/wacom_w9000.h
 @@ -0,0 +1,99 @@
@@ -596,6 +596,3 @@ index 000000000000..514f70fdcbee
 +}
 +
 +#endif
--- 
-2.56.0
-

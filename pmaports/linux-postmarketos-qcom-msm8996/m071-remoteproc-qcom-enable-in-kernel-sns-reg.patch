@@ -1,0 +1,176 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexey Minnekhanov <alexeymin@postmarketos.org>
+Date: Fri, 7 Mar 2025 03:01:07 +0300
+Subject: [PATCH] remoteproc: qcom: Enable in-kernel sns-reg
+
+Request in-kernel Sensors Registry to be started along with ADSP or
+SLPI, and release it once DSP is stopped. Once all DSPs are
+stopped, the Sensors Registry will be stopped too.
+
+Signed-off-by: Alexey Minnekhanov <alexeymin@postmarketos.org>
+---
+ drivers/remoteproc/qcom_common.c   | 79 ++++++++++++++++++++++++++++++
+ drivers/remoteproc/qcom_common.h   | 10 ++++
+ drivers/remoteproc/qcom_q6v5_pas.c |  4 ++
+ 3 files changed, 93 insertions(+)
+
+diff --git a/drivers/remoteproc/qcom_common.c b/drivers/remoteproc/qcom_common.c
+index 3627789296..dafd262753 100644
+--- a/drivers/remoteproc/qcom_common.c
++++ b/drivers/remoteproc/qcom_common.c
+@@ -27,6 +27,7 @@
+ #define to_smd_subdev(d) container_of(d, struct qcom_rproc_subdev, subdev)
+ #define to_ssr_subdev(d) container_of(d, struct qcom_rproc_ssr, subdev)
+ #define to_pdm_subdev(d) container_of(d, struct qcom_rproc_pdm, subdev)
++#define to_sns_reg_subdev(d) container_of(d, struct qcom_rproc_sns_reg, subdev)
+ 
+ #define MAX_REGION_NAME_LENGTH  16
+ #define SBL_MINIDUMP_SMEM_ID	602
+@@ -634,5 +635,83 @@ void qcom_remove_pdm_subdev(struct rproc *rproc, struct qcom_rproc_pdm *pdm)
+ }
+ EXPORT_SYMBOL_GPL(qcom_remove_pdm_subdev);
+ 
++static int sns_reg_prepare(struct rproc_subdev *subdev)
++{
++	struct qcom_rproc_sns_reg *sns_reg = to_sns_reg_subdev(subdev);
++	struct auxiliary_device *adev;
++	int ret;
++
++	adev = kzalloc(sizeof(*adev), GFP_KERNEL);
++	if (!adev)
++		return -ENOMEM;
++
++	adev->dev.parent = sns_reg->rproc_dev;
++	/* yes, we can reuse release helper from PDM */
++	adev->dev.release = pdm_dev_release;
++	adev->name = "sns-reg";
++	adev->id = sns_reg->rproc_index;
++
++	ret = auxiliary_device_init(adev);
++	if (ret) {
++		kfree(adev);
++		return ret;
++	}
++
++	ret = auxiliary_device_add(adev);
++	if (ret) {
++		auxiliary_device_uninit(adev);
++		return ret;
++	}
++
++	sns_reg->adev = adev;
++
++	return 0;
++}
++
++static void sns_reg_unprepare(struct rproc_subdev *subdev)
++{
++	struct qcom_rproc_sns_reg *sns_reg = to_sns_reg_subdev(subdev);
++
++	if (!sns_reg->adev)
++		return;
++
++	auxiliary_device_delete(sns_reg->adev);
++	auxiliary_device_uninit(sns_reg->adev);
++	sns_reg->adev = NULL;
++}
++
++/**
++ * qcom_add_sns_reg_subdev() - register sns-reg subdevice
++ * @rproc:	rproc handle
++ * @sns_reg:	sns-reg subdevice handle
++ *
++ * Register @sns_reg so that Sensor Registry service is started when the
++ * DSP is started.
++ */
++void qcom_add_sns_reg_subdev(struct rproc *rproc, struct qcom_rproc_sns_reg *sns_reg)
++{
++	sns_reg->rproc_dev = &rproc->dev;
++	sns_reg->rproc_index = rproc->index;
++
++	sns_reg->subdev.prepare = sns_reg_prepare;
++	sns_reg->subdev.unprepare = sns_reg_unprepare;
++
++	rproc_add_subdev(rproc, &sns_reg->subdev);
++}
++EXPORT_SYMBOL_GPL(qcom_add_sns_reg_subdev);
++
++/**
++ * qcom_remove_sns_reg_subdev() - remove sns-reg subdevice
++ * @rproc:	rproc handle
++ * @sns_reg:	sns-reg subdevice handle
++ *
++ * Remove the Sensor Registry subdevice.
++ */
++void qcom_remove_sns_reg_subdev(struct rproc *rproc, struct qcom_rproc_sns_reg *sns_reg)
++{
++	rproc_remove_subdev(rproc, &sns_reg->subdev);
++}
++EXPORT_SYMBOL_GPL(qcom_remove_sns_reg_subdev);
++
+ MODULE_DESCRIPTION("Qualcomm Remoteproc helper driver");
+ MODULE_LICENSE("GPL v2");
+diff --git a/drivers/remoteproc/qcom_common.h b/drivers/remoteproc/qcom_common.h
+index b0e7e336d3..ca2b77685f 100644
+--- a/drivers/remoteproc/qcom_common.h
++++ b/drivers/remoteproc/qcom_common.h
+@@ -41,6 +41,13 @@ struct qcom_rproc_pdm {
+ 	struct auxiliary_device *adev;
+ };
+ 
++struct qcom_rproc_sns_reg {
++	struct rproc_subdev subdev;
++	struct device *rproc_dev;
++	int rproc_index;
++	struct auxiliary_device *adev;
++};
++
+ void qcom_minidump(struct rproc *rproc, unsigned int minidump_id,
+ 			void (*rproc_dumpfn_t)(struct rproc *rproc,
+ 				struct rproc_dump_segment *segment, void *dest, size_t offset,
+@@ -62,6 +69,9 @@ void qcom_remove_ssr_subdev(struct rproc *rproc, struct qcom_rproc_ssr *ssr);
+ void qcom_add_pdm_subdev(struct rproc *rproc, struct qcom_rproc_pdm *pdm);
+ void qcom_remove_pdm_subdev(struct rproc *rproc, struct qcom_rproc_pdm *pdm);
+ 
++void qcom_add_sns_reg_subdev(struct rproc *rproc, struct qcom_rproc_sns_reg *sns_reg);
++void qcom_remove_sns_reg_subdev(struct rproc *rproc, struct qcom_rproc_sns_reg *sns_reg);
++
+ #if IS_ENABLED(CONFIG_QCOM_SYSMON)
+ struct qcom_sysmon *qcom_add_sysmon_subdev(struct rproc *rproc,
+ 					   const char *name,
+diff --git a/drivers/remoteproc/qcom_q6v5_pas.c b/drivers/remoteproc/qcom_q6v5_pas.c
+index a005546c26..e8468b7ab8 100644
+--- a/drivers/remoteproc/qcom_q6v5_pas.c
++++ b/drivers/remoteproc/qcom_q6v5_pas.c
+@@ -118,6 +118,7 @@ struct qcom_pas {
+ 	struct qcom_rproc_subdev smd_subdev;
+ 	struct qcom_rproc_pdm pdm_subdev;
+ 	struct qcom_rproc_ssr ssr_subdev;
++	struct qcom_rproc_sns_reg sns_reg_subdev;
+ 	struct qcom_sysmon *sysmon;
+ 	struct platform_device *bam_dmux;
+ 
+@@ -916,6 +917,7 @@ static int qcom_pas_probe(struct platform_device *pdev)
+ 	qcom_add_glink_subdev(rproc, &pas->glink_subdev, desc->ssr_name);
+ 	qcom_add_smd_subdev(rproc, &pas->smd_subdev);
+ 	qcom_add_pdm_subdev(rproc, &pas->pdm_subdev);
++	qcom_add_sns_reg_subdev(rproc, &pas->sns_reg_subdev);
+ 	pas->sysmon = qcom_add_sysmon_subdev(rproc, desc->sysmon_name, desc->ssctl_id);
+ 	if (IS_ERR(pas->sysmon)) {
+ 		ret = PTR_ERR(pas->sysmon);
+@@ -945,6 +947,7 @@ static int qcom_pas_probe(struct platform_device *pdev)
+ 	qcom_remove_ssr_subdev(rproc, &pas->ssr_subdev);
+ 	qcom_remove_sysmon_subdev(pas->sysmon);
+ deinit_remove_pdm_smd_glink:
++	qcom_remove_sns_reg_subdev(rproc, &pas->sns_reg_subdev);
+ 	qcom_remove_pdm_subdev(rproc, &pas->pdm_subdev);
+ 	qcom_remove_smd_subdev(rproc, &pas->smd_subdev);
+ 	qcom_remove_glink_subdev(rproc, &pas->glink_subdev);
+@@ -974,6 +977,7 @@ static void qcom_pas_remove(struct platform_device *pdev)
+ 	qcom_remove_sysmon_subdev(pas->sysmon);
+ 	qcom_remove_smd_subdev(pas->rproc, &pas->smd_subdev);
+ 	qcom_remove_pdm_subdev(pas->rproc, &pas->pdm_subdev);
++	qcom_remove_sns_reg_subdev(pas->rproc, &pas->sns_reg_subdev);
+ 	qcom_remove_ssr_subdev(pas->rproc, &pas->ssr_subdev);
+ 	qcom_pas_pds_detach(pas, pas->proxy_pds, pas->proxy_pd_count);
+ 	device_init_wakeup(pas->dev, false);

@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Mon, 7 Nov 2022 20:20:23 +0300
+Subject: [PATCH] arm64: dts: qcom: pmi8996: Add fuel gauge
+
+PMI8996 has a few different registers, requiring the use of a different
+compatible string.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com
+---
+ arch/arm64/boot/dts/qcom/pmi8996.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/pmi8996.dtsi b/arch/arm64/boot/dts/qcom/pmi8996.dtsi
+index ea8d86d12b..e49e2e8443 100644
+--- a/arch/arm64/boot/dts/qcom/pmi8996.dtsi
++++ b/arch/arm64/boot/dts/qcom/pmi8996.dtsi
+@@ -14,6 +14,10 @@ / {
+ 	qcom,pmic-id = <0x20009 0x10013 0 0>;
+ };
+ 
++pmi8996_fg: &pmi8994_fg {
++	compatible = "qcom,pmi8996-fg";
++};
++
+ pmi8996_smbchg: &pmi8994_smbchg {
+ 	compatible = "qcom,pmi8996-smbchg";
+ };

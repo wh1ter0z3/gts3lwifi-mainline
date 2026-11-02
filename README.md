@@ -5,8 +5,9 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 - SoC: Qualcomm APQ8096 (SM-T820) / MSM8996 (SM-T825), Snapdragon 820; PMICs PM8994 + PM8004
 - Storage: eMMC (not UFS)
 - Boot chain: Samsung S-Boot -> lk2nd -> Linux
-- Kernel: [msm8996-mainline/linux](https://gitlab.com/msm8996-mainline/linux) `v6.19.5-msm8996`,
-  packaged as postmarketOS `linux-postmarketos-qcom-msm8996` with our patches (`pmaports/`)
+- Kernel: Linux 7.3.1 with the [msm8996-mainline](https://gitlab.com/msm8996-mainline/linux) patches rebased
+  (see [docs/kernel-7.3.md](docs/kernel-7.3.md)), packaged as postmarketOS `linux-postmarketos-qcom-msm8996`
+  with our patches (`pmaports/`)
 
 ## Models
 

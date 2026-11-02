@@ -32,10 +32,10 @@ Assisted-by: Claude:claude-opus-5-5
  3 files changed, 31 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
-index e5964cf67c62..1c3c3af154b9 100644
+index f0c8d396a0..3f6b7a3258 100644
 --- a/drivers/media/platform/qcom/venus/core.h
 +++ b/drivers/media/platform/qcom/venus/core.h
-@@ -419,6 +419,8 @@ enum venus_inst_modes {
+@@ -427,6 +427,8 @@ enum venus_inst_modes {
   * @payloads:		cache plane payload to use it for clock/BW scaling
   * @fps:		holds current FPS
   * @timeperframe:	holds current time per frame structure
@@ -44,7 +44,7 @@ index e5964cf67c62..1c3c3af154b9 100644
   * @fmt_out:	a reference to output format structure
   * @fmt_cap:	a reference to capture format structure
   * @num_input_bufs:	holds number of input buffers
-@@ -490,6 +492,8 @@ struct venus_inst {
+@@ -498,6 +500,8 @@ struct venus_inst {
  	unsigned long payloads[VIDEO_MAX_FRAME];
  	u64 fps;
  	struct v4l2_fract timeperframe;
@@ -54,7 +54,7 @@ index e5964cf67c62..1c3c3af154b9 100644
  	const struct venus_format *fmt_cap;
  	unsigned int num_input_bufs;
 diff --git a/drivers/media/platform/qcom/venus/helpers.c b/drivers/media/platform/qcom/venus/helpers.c
-index c0bb20e3f6dd..bdb834994a53 100644
+index 1224485745..6781701c20 100644
 --- a/drivers/media/platform/qcom/venus/helpers.c
 +++ b/drivers/media/platform/qcom/venus/helpers.c
 @@ -445,12 +445,12 @@ static void return_buf_error(struct venus_inst *inst,
@@ -109,10 +109,10 @@ index c0bb20e3f6dd..bdb834994a53 100644
  		venus_pm_load_scale(inst);
  	} else if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 diff --git a/drivers/media/platform/qcom/venus/venc.c b/drivers/media/platform/qcom/venus/venc.c
-index 511f29e7ec6a..94809d5300f1 100644
+index a67745ea0e..cc189b7ac5 100644
 --- a/drivers/media/platform/qcom/venus/venc.c
 +++ b/drivers/media/platform/qcom/venus/venc.c
-@@ -839,6 +839,9 @@ static int venc_set_properties(struct venus_inst *inst)
+@@ -842,6 +842,9 @@ static int venc_set_properties(struct venus_inst *inst)
  	if (ret)
  		return ret;
  
@@ -122,7 +122,7 @@ index 511f29e7ec6a..94809d5300f1 100644
  	if (rate_control == HFI_RATE_CONTROL_CQ && ctr->const_quality) {
  		struct hfi_heic_frame_quality quality = {};
  
-@@ -1280,6 +1283,8 @@ static int venc_start_streaming(struct vb2_queue *q, unsigned int count)
+@@ -1283,6 +1286,8 @@ static int venc_start_streaming(struct vb2_queue *q, unsigned int count)
  
  	inst->sequence_cap = 0;
  	inst->sequence_out = 0;
@@ -131,7 +131,7 @@ index 511f29e7ec6a..94809d5300f1 100644
  
  	ret = venc_pm_get(inst);
  	if (ret)
-@@ -1386,6 +1391,8 @@ static void venc_buf_done(struct venus_inst *inst, unsigned int buf_type,
+@@ -1389,6 +1394,8 @@ static void venc_buf_done(struct venus_inst *inst, unsigned int buf_type,
  		vb2_set_plane_payload(vb, 0, bytesused + data_offset);
  		vb->planes[0].data_offset = data_offset;
  		vb->timestamp = timestamp_us * NSEC_PER_USEC;
@@ -140,6 +140,3 @@ index 511f29e7ec6a..94809d5300f1 100644
  		vbuf->sequence = inst->sequence_cap++;
  		if ((vbuf->flags & V4L2_BUF_FLAG_LAST) &&
  		    inst->enc_state == VENUS_ENC_STATE_DRAIN) {
--- 
-2.56.0
-

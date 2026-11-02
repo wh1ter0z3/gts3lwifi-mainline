@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Thu, 10 Jul 2025 09:25:46 +0100
+Subject: [PATCH] net: qrtr: Define macro to convert QMI version and instance
+ to QRTR instance
+
+Move QRTR instance conversion from qmi_interface into a new macro in order
+to reuse it in QRTR device ID tables.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ drivers/soc/qcom/qmi_interface.c |  5 +++--
+ include/linux/soc/qcom/qrtr.h    | 10 ++++++++++
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/soc/qcom/qmi_interface.c b/drivers/soc/qcom/qmi_interface.c
+index 16e2e24b60..6813962909 100644
+--- a/drivers/soc/qcom/qmi_interface.c
++++ b/drivers/soc/qcom/qmi_interface.c
+@@ -14,6 +14,7 @@
+ #include <linux/workqueue.h>
+ #include <trace/events/sock.h>
+ #include <linux/soc/qcom/qmi.h>
++#include <linux/soc/qcom/qrtr.h>
+ 
+ static struct socket *qmi_sock_create(struct qmi_handle *qmi,
+ 				      struct sockaddr_qrtr *sq);
+@@ -173,7 +174,7 @@ static void qmi_send_new_lookup(struct qmi_handle *qmi, struct qmi_service *svc)
+ 	memset(&pkt, 0, sizeof(pkt));
+ 	pkt.cmd = cpu_to_le32(QRTR_TYPE_NEW_LOOKUP);
+ 	pkt.server.service = cpu_to_le32(svc->service);
+-	pkt.server.instance = cpu_to_le32(svc->version | svc->instance << 8);
++	pkt.server.instance = cpu_to_le32(QRTR_INSTANCE(svc->version, svc->instance));
+ 
+ 	sq.sq_family = qmi->sq.sq_family;
+ 	sq.sq_node = qmi->sq.sq_node;
+@@ -236,7 +237,7 @@ static void qmi_send_new_server(struct qmi_handle *qmi, struct qmi_service *svc)
+ 	memset(&pkt, 0, sizeof(pkt));
+ 	pkt.cmd = cpu_to_le32(QRTR_TYPE_NEW_SERVER);
+ 	pkt.server.service = cpu_to_le32(svc->service);
+-	pkt.server.instance = cpu_to_le32(svc->version | svc->instance << 8);
++	pkt.server.instance = cpu_to_le32(QRTR_INSTANCE(svc->version, svc->instance));
+ 	pkt.server.node = cpu_to_le32(qmi->sq.sq_node);
+ 	pkt.server.port = cpu_to_le32(qmi->sq.sq_port);
+ 
+diff --git a/include/linux/soc/qcom/qrtr.h b/include/linux/soc/qcom/qrtr.h
+index e9249d9422..e2aca520fd 100644
+--- a/include/linux/soc/qcom/qrtr.h
++++ b/include/linux/soc/qcom/qrtr.h
+@@ -3,6 +3,8 @@
+ #ifndef __QCOM_QRTR_H__
+ #define __QCOM_QRTR_H__
+ 
++#include <linux/bitfield.h>
++#include <linux/bits.h>
+ #include <linux/mod_devicetable.h>
+ 
+ struct qrtr_device {
+@@ -15,6 +17,14 @@ struct qrtr_device {
+ 
+ #define to_qrtr_device(d) container_of(d, struct qrtr_device, dev)
+ 
++#define QRTR_INSTANCE(qmi_version, qmi_instance) \
++	(FIELD_PREP(GENMASK(7, 0), qmi_version) | \
++	 FIELD_PREP(GENMASK(15, 8), qmi_instance))
++
++#define QRTR_INSTANCE_CONST(qmi_version, qmi_instance) \
++	(FIELD_PREP_CONST(GENMASK(7, 0), qmi_version) | \
++	 FIELD_PREP_CONST(GENMASK(15, 8), qmi_instance))
++
+ struct qrtr_driver {
+ 	int (*probe)(struct qrtr_device *qdev);
+ 	void (*remove)(struct qrtr_device *qdev);

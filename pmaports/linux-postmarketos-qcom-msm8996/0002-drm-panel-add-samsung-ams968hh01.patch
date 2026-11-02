@@ -1,4 +1,4 @@
-From d127025d7435f68457273297db8974ebd6e0fbd9 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Sat, 26 Sep 2026 15:35:16 +0530
 Subject: [PATCH] drm/panel: Add Samsung AMS968HH01 (ANA38401) dual-DSI panel
@@ -16,10 +16,10 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
  create mode 100644 drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 
 diff --git a/drivers/gpu/drm/panel/Kconfig b/drivers/gpu/drm/panel/Kconfig
-index eeefeea..2954d5f 100644
+index 4fb8dcc92c..616d2a463c 100644
 --- a/drivers/gpu/drm/panel/Kconfig
 +++ b/drivers/gpu/drm/panel/Kconfig
-@@ -759,6 +759,16 @@ config DRM_PANEL_SAMSUNG_S6E88A0_AMS452EF01
+@@ -927,6 +927,16 @@ config DRM_PANEL_SAMSUNG_S6E88A0_AMS452EF01
  	select DRM_MIPI_DSI
  	select VIDEOMODE_HELPERS
  
@@ -37,10 +37,10 @@ index eeefeea..2954d5f 100644
  	tristate "Samsung ATNA33XC20 eDP panel"
  	depends on OF
 diff --git a/drivers/gpu/drm/panel/Makefile b/drivers/gpu/drm/panel/Makefile
-index 53ef7e4..942edb2 100644
+index d68bc9b19b..949b575525 100644
 --- a/drivers/gpu/drm/panel/Makefile
 +++ b/drivers/gpu/drm/panel/Makefile
-@@ -74,6 +74,7 @@ obj-$(CONFIG_DRM_PANEL_RENESAS_R69328) += panel-renesas-r69328.o
+@@ -89,6 +89,7 @@ obj-$(CONFIG_DRM_PANEL_RENESAS_R69328) += panel-renesas-r69328.o
  obj-$(CONFIG_DRM_PANEL_RONBO_RB070D30) += panel-ronbo-rb070d30.o
  obj-$(CONFIG_DRM_PANEL_SAMSUNG_AMS581VF01) += panel-samsung-ams581vf01.o
  obj-$(CONFIG_DRM_PANEL_SAMSUNG_AMS639RQ08) += panel-samsung-ams639rq08.o
@@ -50,7 +50,7 @@ index 53ef7e4..942edb2 100644
  obj-$(CONFIG_DRM_PANEL_SAMSUNG_LD9040) += panel-samsung-ld9040.o
 diff --git a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 new file mode 100644
-index 0000000..9900bda
+index 0000000000..78e9655234
 --- /dev/null
 +++ b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 @@ -0,0 +1,293 @@
@@ -79,6 +79,7 @@ index 0000000..9900bda
 +
 +#include <drm/drm_mipi_dsi.h>
 +#include <drm/drm_modes.h>
++#include <drm/drm_of.h>
 +#include <drm/drm_panel.h>
 +#include <drm/drm_probe_helper.h>
 +#include <video/mipi_display.h>
@@ -255,9 +256,10 @@ index 0000000..9900bda
 +	struct ams968hh01 *ctx;
 +	int ret, i;
 +
-+	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-+	if (!ctx)
-+		return -ENOMEM;
++	ctx = devm_drm_panel_alloc(dev, struct ams968hh01, panel, &ams968hh01_panel_funcs,
++				   DRM_MODE_CONNECTOR_DSI);
++	if (IS_ERR(ctx))
++		return PTR_ERR(ctx);
 +
 +	ctx->vdd = devm_regulator_get(dev, "vdd");
 +	if (IS_ERR(ctx->vdd))
@@ -291,8 +293,6 @@ index 0000000..9900bda
 +
 +	mipi_dsi_set_drvdata(dsi, ctx);
 +
-+	drm_panel_init(&ctx->panel, dev, &ams968hh01_panel_funcs,
-+		       DRM_MODE_CONNECTOR_DSI);
 +	ctx->panel.prepare_prev_first = true;
 +	drm_panel_add(&ctx->panel);
 +

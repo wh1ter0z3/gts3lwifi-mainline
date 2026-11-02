@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Mon, 27 Sep 2021 10:39:14 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-*: Enable PMIC fuel gauge
+
+Enable the PMIC fuel gauge for all Xiaomi MSM8996 devices.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+index ca43e1b955..398a8ab40d 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+@@ -338,6 +338,12 @@ led@3 {
+ 	};
+ };
+ 
++&pmi8994_fg {
++	status = "okay";
++
++	monitored-battery = <&battery>;
++};
++
+ &pmi8994_smbchg {
+ 	status = "okay";
+ 

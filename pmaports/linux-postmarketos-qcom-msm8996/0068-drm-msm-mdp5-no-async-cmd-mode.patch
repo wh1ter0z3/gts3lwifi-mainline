@@ -23,7 +23,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 9 insertions(+)
 
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
-index 4ca183fb61a9..adb4d1d50807 100644
+index 841f444a8d..0341f56237 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
 @@ -380,6 +380,15 @@ static int mdp5_plane_atomic_async_check(struct drm_plane *plane,
@@ -42,6 +42,3 @@ index 4ca183fb61a9..adb4d1d50807 100644
  	/* don't use fast path if we don't have a hwpipe allocated yet */
  	if (!mdp5_state->hwpipe)
  		return -EINVAL;
--- 
-2.56.0
-

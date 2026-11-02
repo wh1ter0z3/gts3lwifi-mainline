@@ -298,7 +298,8 @@ static void dsi_mgr_start_deferred_hs_clk(int id)
 		msm_dsi_host_start_deferred_hs_clk(msm_dsi1->host);
 }
 
-static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge)
+static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge,
+				      struct drm_atomic_commit *commit)
 {
 	int id = dsi_mgr_bridge_get_id(bridge);
 	struct dsi_bridge *dsi_bridge = to_dsi_bridge(bridge);
@@ -354,7 +355,8 @@ put_pm:
 	pm_runtime_put_sync(&msm_dsi->pdev->dev);
 }
 
-static void dsi_mgr_bridge_enable(struct drm_bridge *bridge)
+static void dsi_mgr_bridge_enable(struct drm_bridge *bridge,
+				  struct drm_atomic_commit *commit)
 {
 	int id = dsi_mgr_bridge_get_id(bridge);
 
@@ -375,7 +377,8 @@ void msm_dsi_manager_tpg_enable(void)
 	}
 }
 
-static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge)
+static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge,
+					struct drm_atomic_commit *commit)
 {
 	struct dsi_bridge *dsi_bridge = to_dsi_bridge(bridge);
 	int id = dsi_mgr_bridge_get_id(bridge);
@@ -470,10 +473,13 @@ static int dsi_mgr_bridge_attach(struct drm_bridge *bridge,
 }
 
 static const struct drm_bridge_funcs dsi_mgr_bridge_funcs = {
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.attach = dsi_mgr_bridge_attach,
-	.pre_enable = dsi_mgr_bridge_pre_enable,
-	.enable = dsi_mgr_bridge_enable,
-	.post_disable = dsi_mgr_bridge_post_disable,
+	.atomic_pre_enable = dsi_mgr_bridge_pre_enable,
+	.atomic_enable = dsi_mgr_bridge_enable,
+	.atomic_post_disable = dsi_mgr_bridge_post_disable,
 	.mode_set = dsi_mgr_bridge_mode_set,
 	.mode_valid = dsi_mgr_bridge_mode_valid,
 };
@@ -510,10 +516,6 @@ int msm_dsi_manager_connector_init(struct msm_dsi *msm_dsi,
 		DRM_ERROR("Unable to create bridge connector\n");
 		return PTR_ERR(connector);
 	}
-
-	ret = drm_connector_attach_encoder(connector, encoder);
-	if (ret < 0)
-		return ret;
 
 	return 0;
 }

@@ -14,8 +14,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 DTS=${DTS:-$HOME/samsung/mainline/apq8096-samsung-gts3lwifi.dts}
 PMAPORTS=${PMAPORTS:-$HOME/.local/var/pmbootstrap/cache_git/pmaports}
 KDIR=$PMAPORTS/device/testing/linux-postmarketos-qcom-msm8996
-BASE_PKGVER=6.19.5
-BASE_MAKEFILE=$HERE/base/qcom-Makefile.v$BASE_PKGVER-msm8996
+BASE_PKGVER=7.3.1
+BASE_MAKEFILE=$HERE/base/qcom-Makefile.v$BASE_PKGVER
 UPSTREAM_DTS=${UPSTREAM_DTS:-$HOME/mocha/u-boot/dts/upstream}
 PATCH=0001-add-samsung-gts3lwifi-dts.patch
 NAME=psigod
@@ -50,7 +50,7 @@ cd "$work/linux"
 mkdir -p arch/arm64/boot/dts/qcom
 cp "$BASE_MAKEFILE" arch/arm64/boot/dts/qcom/Makefile
 git add -A
-git -c commit.gpgsign=false commit -q -m "base: v$BASE_PKGVER-msm8996"
+git -c commit.gpgsign=false commit -q -m "base: v$BASE_PKGVER"
 
 cp "$DTS" arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 tab=$(printf '\t')

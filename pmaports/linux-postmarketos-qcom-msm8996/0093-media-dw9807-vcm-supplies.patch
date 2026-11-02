@@ -23,7 +23,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 45 insertions(+)
 
 diff --git a/drivers/media/i2c/dw9807-vcm.c b/drivers/media/i2c/dw9807-vcm.c
-index 4148009e0e01..ff0d82909550 100644
+index 4148009e0e..ff0d829095 100644
 --- a/drivers/media/i2c/dw9807-vcm.c
 +++ b/drivers/media/i2c/dw9807-vcm.c
 @@ -7,6 +7,7 @@
@@ -142,6 +142,3 @@ index 4148009e0e01..ff0d82909550 100644
  	return 0;
  }
  
--- 
-2.56.0
-

@@ -34,7 +34,7 @@ Assisted-by: Claude:claude-opus-5-5
  4 files changed, 1018 insertions(+), 190 deletions(-)
 
 diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
-index 0d3ece2a8ec9..d494f7dfddb4 100644
+index 4cd41553fe..450bffd984 100644
 --- a/drivers/input/touchscreen/Kconfig
 +++ b/drivers/input/touchscreen/Kconfig
 @@ -615,7 +615,7 @@ config TOUCHSCREEN_WACOM_W9000
@@ -58,7 +58,7 @@ index 0d3ece2a8ec9..d494f7dfddb4 100644
  config TOUCHSCREEN_LPC32XX
  	tristate "LPC32XX touchscreen controller"
 diff --git a/drivers/input/touchscreen/wacom_w9000.c b/drivers/input/touchscreen/wacom_w9000.c
-index b99b052997c0..008be43a1302 100644
+index b99b052997..008be43a13 100644
 --- a/drivers/input/touchscreen/wacom_w9000.c
 +++ b/drivers/input/touchscreen/wacom_w9000.c
 @@ -19,22 +19,16 @@
@@ -594,7 +594,7 @@ index b99b052997c0..008be43a1302 100644
  	.name = "Wacom W9019 Digitizer",
  };
 diff --git a/drivers/input/touchscreen/wacom_w9000.h b/drivers/input/touchscreen/wacom_w9000.h
-index 514f70fdcbee..30349980b87b 100644
+index 514f70fdcb..30349980b8 100644
 --- a/drivers/input/touchscreen/wacom_w9000.h
 +++ b/drivers/input/touchscreen/wacom_w9000.h
 @@ -4,11 +4,14 @@
@@ -853,7 +853,7 @@ index 514f70fdcbee..30349980b87b 100644
 +
  #endif
 diff --git a/drivers/input/touchscreen/wacom_w9000_test.c b/drivers/input/touchscreen/wacom_w9000_test.c
-index b33112068c00..0780d0279a77 100644
+index b33112068c..0780d0279a 100644
 --- a/drivers/input/touchscreen/wacom_w9000_test.c
 +++ b/drivers/input/touchscreen/wacom_w9000_test.c
 @@ -2,6 +2,7 @@
@@ -1559,6 +1559,3 @@ index b33112068c00..0780d0279a77 100644
 -MODULE_DESCRIPTION("KUnit tests for Wacom W9000-series protocol");
 +MODULE_DESCRIPTION("KUnit tests for Wacom W9000-series protocol and state");
  MODULE_LICENSE("GPL");
--- 
-2.56.0
-

@@ -25,10 +25,10 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 25 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-index 7392ac6b700a..d32ad9f32522 100644
+index 8d9f692e8c..6caf3260e3 100644
 --- a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 +++ b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-@@ -302,8 +302,9 @@ static const u8 ams968hh01_gamma_nominal[11] = {
+@@ -303,8 +303,9 @@ static const u8 ams968hh01_gamma_nominal[11] = {
   * ELVSS value and gamma table. A step's gamma table is cut for its base
   * luminance, and AID dims that to the step's luminance. The levels, AID
   * and ELVSS values are from the vendor device tree (samsung,
@@ -40,7 +40,7 @@ index 7392ac6b700a..d32ad9f32522 100644
   * (ss_dsi_smart_dimming_ANA38401_AMS968HH01.h and
   * ss_dsi_smart_dimming_common.c, Copyright (C) 2012 Samsung).
   */
-@@ -311,13 +312,13 @@ struct ams968hh01_step {
+@@ -312,13 +313,13 @@ struct ams968hh01_step {
  	u16 cd;			/* luminance, cd/m2 */
  	u16 base;		/* base luminance, cd/m2 */
  	u8 level;		/* first backlight level */
@@ -56,7 +56,7 @@ index 7392ac6b700a..d32ad9f32522 100644
  	{ 2, 112, 0, 0x19, { 0, 8, 16, 26, 35, 41, 45, 47, 49 },
  	  {-5, 0, 0, -3, 0, -3, -7, 0, -4, -6, 3, -5, -5, 2, -7, -3, 0, -5, 0, 0, -4, -3, 0, -7} },
  	{ 3, 112, 1, 0x19, { 0, 7, 14, 21, 28, 30, 36, 40, 42 },
-@@ -437,17 +438,17 @@ static const struct ams968hh01_step ams968hh01_steps[AMS968HH01_NUM_STEPS] = {
+@@ -438,17 +439,17 @@ static const struct ams968hh01_step ams968hh01_steps[AMS968HH01_NUM_STEPS] = {
  	  {0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -4, 1, -4} },
  	{ 249, 254, 182, 0x1e, { 0, 0, 1, 1, 0, 0, 0, 0, 0 },
  	  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
@@ -80,7 +80,7 @@ index 7392ac6b700a..d32ad9f32522 100644
  	  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
  };
  
-@@ -806,13 +807,21 @@ static void ams968hh01_init(struct mipi_dsi_multi_context *ctx)
+@@ -807,13 +808,21 @@ static void ams968hh01_init(struct mipi_dsi_multi_context *ctx)
  	/*
  	 * ELVSS. The vendor on-sequence writes 0x0f, but the brightness
  	 * update the vendor sends after display-on replaces it with the
@@ -107,7 +107,7 @@ index 7392ac6b700a..d32ad9f32522 100644
  	ams968hh01_param(ctx, 0x6d, ams968hh01_caps(s));
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0x35);
  	ams968hh01_reg(ctx, 0xb2, 0x01);		/* gamma update key */
-@@ -950,7 +959,7 @@ static int ams968hh01_get_modes(struct drm_panel *panel,
+@@ -951,7 +960,7 @@ static int ams968hh01_get_modes(struct drm_panel *panel,
  
  /*
   * The vendor brightness update, in HS mode on the first link: AID, ELVSS,
@@ -116,6 +116,3 @@ index 7392ac6b700a..d32ad9f32522 100644
   */
  static int ams968hh01_bl_update_status(struct backlight_device *bl)
  {
--- 
-2.56.0
-

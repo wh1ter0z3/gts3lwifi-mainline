@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Wed, 22 Jun 2022 11:09:46 +0400
+Subject: [PATCH] ASoC: dt-bindings: wcd9335: Add AIF4_CAP
+
+WCD9335 has a fourth capture DAI. Define it in DT bindings.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ include/dt-bindings/sound/qcom,wcd9335.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/dt-bindings/sound/qcom,wcd9335.h b/include/dt-bindings/sound/qcom,wcd9335.h
+index 4fc68aeb9e..22585d3030 100644
+--- a/include/dt-bindings/sound/qcom,wcd9335.h
++++ b/include/dt-bindings/sound/qcom,wcd9335.h
+@@ -10,5 +10,6 @@
+ #define AIF3_PB                 4
+ #define AIF3_CAP                5
+ #define AIF4_PB                 6
++#define AIF4_CAP                7
+ 
+ #endif

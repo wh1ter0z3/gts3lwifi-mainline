@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Tue, 5 Oct 2021 10:54:43 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-gemini: Add second board-id
+
+There are units with board-id 32 with no major differences from board-id 31.
+Add the second board-id to allow booting on those devices.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
+index 2fadac0c09..42770619ed 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
+@@ -18,7 +18,7 @@ / {
+ 	chassis-type = "handset";
+ 	qcom,msm-id = <246 0x30001>;
+ 	qcom,pmic-id = <0x20009 0x2000a 0x00 0x00>;
+-	qcom,board-id = <31 0>;
++	qcom,board-id = <31 0>, <32 0>;
+ 
+ 	divclk2_haptics: divclk2 {
+ 		compatible = "fixed-clock";

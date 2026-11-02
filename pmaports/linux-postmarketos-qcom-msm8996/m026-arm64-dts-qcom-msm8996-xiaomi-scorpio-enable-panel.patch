@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Fri, 3 Sep 2021 17:15:09 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-scorpio: Enable panel
+
+Enable MDSS and add the relevant nodes to enable the LG.Philips
+SW43101 panel.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ .../dts/qcom/msm8996pro-xiaomi-scorpio.dts    | 71 ++++++++++++++-----
+ 1 file changed, 53 insertions(+), 18 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+index e370839746..768eef5192 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+@@ -32,6 +32,8 @@ framebuffer0: framebuffer@83401000 {
+ 			stride = <(1080 * 3)>;
+ 			format = "r8g8b8";
+ 
++			display = <&panel>;
++
+ 			/* DSI0 clocks */
+ 			clocks = <&mmcc MDSS_MDP_CLK>,
+ 				 <&mmcc MMSS_MMAGIC_AHB_CLK>,
+@@ -53,6 +55,36 @@ cont_splash_mem: memory@83401000 {
+ 			no-map;
+ 		};
+ 	};
++
++	vlin1_7v3: vlin1-7v3 {
++		compatible = "regulator-fixed";
++		regulator-name = "vlin1_7v3";
++		regulator-min-microvolt = <7300000>;
++		regulator-max-microvolt = <7300000>;
++		vin-supply = <&vph_pwr>;
++		regulator-always-on;
++		regulator-boot-on;
++	};
++
++	elvdd: elvdd {
++		compatible = "regulator-fixed";
++		regulator-name = "elvdd";
++		regulator-min-microvolt = <4600000>;
++		regulator-max-microvolt = <4600000>;
++		vin-supply = <&vph_pwr>;
++		regulator-always-on;
++		regulator-boot-on;
++	};
++
++	elvss: elvss {
++		compatible = "regulator-fixed";
++		regulator-name = "elvss";
++		regulator-min-microvolt = <(-2500000)>;
++		regulator-max-microvolt = <(-2500000)>;
++		vin-supply = <&vph_pwr>;
++		regulator-always-on;
++		regulator-boot-on;
++	};
+ };
+ 
+ &adsp_pil {
+@@ -105,28 +137,31 @@ &mdp_smmu {
+ 	 * and losing simplefb as a result. MMAGIC_MDSS_GDSC is flagged
+ 	 * always-on so it does not need any consumers to stay on.
+ 	 */
+-	 /delete-property/ power-domains;
++	/delete-property/ power-domains;
+ };
+ 
+-&mdss {
+-	/*
+-	 * Probing MDSS alters the bootloader configured framebuffer used by
+-	 * simplefb. Disable it for now.
+-	 */
+-	status = "disabled";
++&mdss_dsi0 {
++	panel: panel@0 {
++		compatible = "lgphilips,sw43101";
++		reg = <0>;
++
++		reset-gpios = <&tlmm 8 GPIO_ACTIVE_LOW>;
++
++		vdd-supply = <&vreg_l14a_1p8>;
++		avdd-supply = <&vlin1_7v3>;
++		elvdd-supply = <&elvdd>;
++		elvss-supply = <&elvss>;
++
++		port {
++			panel_in: endpoint {
++				remote-endpoint = <&mdss_dsi0_out>;
++			};
++		};
++	};
+ };
+ 
+-&mmcc {
+-	/*
+-	 * Remove non-essential DSI PHY clocks to allow MMCC to probe
+-	 * with MDSS disabled.
+-	 */
+-	clocks = <&xo_board>,
+-		 <&gcc GCC_MMSS_NOC_CFG_AHB_CLK>,
+-		 <&gcc GPLL0>;
+-	clock-names = "xo",
+-		      "gcc_mmss_noc_cfg_ahb_clk",
+-		      "gpll0";
++&mdss_dsi0_out {
++	remote-endpoint = <&panel_in>;
+ };
+ 
+ &mss_pil {

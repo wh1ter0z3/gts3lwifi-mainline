@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Furkan Sonkaya <furkansonkaya61@gmail.com>
+Date: Sat, 9 Sep 2023 18:23:52 +0300
+Subject: [PATCH] dt-bindings: arm: qcom: Add Xiaomi Mi 5s
+
+---
+ Documentation/devicetree/bindings/arm/qcom.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/arm/qcom.yaml b/Documentation/devicetree/bindings/arm/qcom.yaml
+index ff8a35df78..87ed72453a 100644
+--- a/Documentation/devicetree/bindings/arm/qcom.yaml
++++ b/Documentation/devicetree/bindings/arm/qcom.yaml
+@@ -382,6 +382,7 @@ properties:
+ 
+       - items:
+           - enum:
++              - xiaomi,capricorn
+               - xiaomi,natrium
+               - xiaomi,scorpio
+           - const: qcom,msm8996pro

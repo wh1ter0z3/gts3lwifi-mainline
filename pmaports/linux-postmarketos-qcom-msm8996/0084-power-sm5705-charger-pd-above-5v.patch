@@ -26,7 +26,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
-index b23bf8cbc8bd..6e07b292a276 100644
+index b23bf8cbc8..6e07b292a2 100644
 --- a/drivers/power/supply/sm5705_charger.c
 +++ b/drivers/power/supply/sm5705_charger.c
 @@ -646,10 +646,13 @@ static void sm5705_chg_cable_work(struct work_struct *work)
@@ -45,6 +45,3 @@ index b23bf8cbc8bd..6e07b292a276 100644
  		type = typec_type;
  		limit = typec_limit;
  		fast = typec_fast;
--- 
-2.56.0
-

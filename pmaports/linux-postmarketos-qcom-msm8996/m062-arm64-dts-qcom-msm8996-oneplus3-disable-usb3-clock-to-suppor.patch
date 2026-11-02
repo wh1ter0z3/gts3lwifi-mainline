@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Lillepuu <martin@mlp.ee>
+Date: Thu, 28 Jul 2022 11:48:50 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996-oneplus3: disable usb3 clock to
+ support only USB2
+
+Disable USB3 clock requirement as the device only supports USB2.
+
+Signed-off-by: Martin Lillepuu <martin@mlp.ee>
+---
+ arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+index 2adb3d5bcb..30bb945841 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+@@ -861,6 +861,8 @@ &ufshc {
+ &usb3 {
+ 	extcon = <&fusb301>;
+ 
++	qcom,select-utmi-as-pipe-clk;
++
+ 	status = "okay";
+ };
+ 
+@@ -875,4 +877,8 @@ &usb3_dwc3 {
+ 	usb-psy-name = "qcom-smbchg-usb";
+ 
+ 	extcon = <&fusb301>;
++
++	snps,is-utmi-l1-suspend;
++	snps,usb2-gadget-lpm-disable;
++	snps,hird-threshold = /bits/ 8 <0>;
+ };

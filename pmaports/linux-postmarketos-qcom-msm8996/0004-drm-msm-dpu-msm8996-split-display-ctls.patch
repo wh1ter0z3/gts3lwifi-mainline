@@ -1,4 +1,4 @@
-From 8f5b13dce2ffa857cf3caf590be0c6412ad7f34f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Mon, 5 Oct 2026 17:55:33 +0530
 Subject: [PATCH] drm/msm/dpu: msm8996: mark CTL_0 and CTL_2 as split display
@@ -16,7 +16,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
  1 file changed, 2 insertions(+)
 
 diff --git a/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_1_7_msm8996.h b/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_1_7_msm8996.h
-index 8af63db31..2ea87857e 100644
+index 67910a2f68..3bd770a6b4 100644
 --- a/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_1_7_msm8996.h
 +++ b/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_1_7_msm8996.h
 @@ -43,12 +43,14 @@ static const struct dpu_ctl_cfg msm8996_ctl[] = {

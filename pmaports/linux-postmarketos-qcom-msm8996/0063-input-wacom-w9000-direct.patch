@@ -21,7 +21,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 1 insertion(+)
 
 diff --git a/drivers/input/touchscreen/wacom_w9000.c b/drivers/input/touchscreen/wacom_w9000.c
-index 008be43a1302..d5f735976e1b 100644
+index 008be43a13..d5f735976e 100644
 --- a/drivers/input/touchscreen/wacom_w9000.c
 +++ b/drivers/input/touchscreen/wacom_w9000.c
 @@ -488,6 +488,7 @@ static int wacom_w9000_probe(struct i2c_client *client)
@@ -32,6 +32,3 @@ index 008be43a1302..d5f735976e1b 100644
  
  	input_set_abs_params(input_dev, ABS_X, 0, wacom_data->prop.max_x, 4, 0);
  	input_set_abs_params(input_dev, ABS_Y, 0, wacom_data->prop.max_y, 4, 0);
--- 
-2.56.0
-

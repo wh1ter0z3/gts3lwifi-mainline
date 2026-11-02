@@ -18,7 +18,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 49 insertions(+)
 
 diff --git a/Documentation/devicetree/bindings/mfd/st,stmpe.yaml b/Documentation/devicetree/bindings/mfd/st,stmpe.yaml
-index df43878fbe18..76475d96679c 100644
+index ddb27ae64b..369da31cb7 100644
 --- a/Documentation/devicetree/bindings/mfd/st,stmpe.yaml
 +++ b/Documentation/devicetree/bindings/mfd/st,stmpe.yaml
 @@ -16,6 +16,46 @@ maintainers:
@@ -98,6 +98,3 @@ index df43878fbe18..76475d96679c 100644
  
      required:
        - compatible
--- 
-2.56.0
-

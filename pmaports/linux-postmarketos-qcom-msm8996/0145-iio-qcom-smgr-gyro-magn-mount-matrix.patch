@@ -46,7 +46,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 22 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
-index 248215257cbc..4cb9c9926bc6 100644
+index 248215257c..4cb9c9926b 100644
 --- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
 +++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
 @@ -398,8 +398,26 @@ static const struct iio_buffer_setup_ops qcom_smgr_buffer_ops = {
@@ -87,6 +87,3 @@ index 248215257cbc..4cb9c9926bc6 100644
  	return &qcom_smgr_iio_mount_matrix;
  }
  
--- 
-2.56.0
-

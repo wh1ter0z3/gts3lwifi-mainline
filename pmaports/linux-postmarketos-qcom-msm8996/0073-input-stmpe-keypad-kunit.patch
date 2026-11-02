@@ -22,10 +22,10 @@ Assisted-by: Claude:claude-opus-5-5
  create mode 100644 drivers/input/keyboard/stmpe-keypad-test.c
 
 diff --git a/drivers/input/keyboard/Kconfig b/drivers/input/keyboard/Kconfig
-index 2ff4fef322c2..aadc9d021a98 100644
+index d8c64f3334..7ec52898be 100644
 --- a/drivers/input/keyboard/Kconfig
 +++ b/drivers/input/keyboard/Kconfig
-@@ -621,6 +621,20 @@ config KEYBOARD_STMPE
+@@ -597,6 +597,20 @@ config KEYBOARD_STMPE
  	  To compile this driver as a module, choose M here: the module will be
  	  called stmpe-keypad.
  
@@ -47,10 +47,10 @@ index 2ff4fef322c2..aadc9d021a98 100644
  	tristate "Allwinner sun4i low res adc attached tablet keys support"
  	depends on ARCH_SUNXI
 diff --git a/drivers/input/keyboard/Makefile b/drivers/input/keyboard/Makefile
-index 2d906e14f3e2..62abc470330a 100644
+index 60bb7baf80..13a5ece211 100644
 --- a/drivers/input/keyboard/Makefile
 +++ b/drivers/input/keyboard/Makefile
-@@ -61,6 +61,7 @@ obj-$(CONFIG_KEYBOARD_SH_KEYSC)		+= sh_keysc.o
+@@ -62,6 +62,7 @@ obj-$(CONFIG_KEYBOARD_SH_KEYSC)		+= sh_keysc.o
  obj-$(CONFIG_KEYBOARD_SNVS_PWRKEY)	+= snvs_pwrkey.o
  obj-$(CONFIG_KEYBOARD_SPEAR)		+= spear-keyboard.o
  obj-$(CONFIG_KEYBOARD_STMPE)		+= stmpe-keypad.o
@@ -60,7 +60,7 @@ index 2d906e14f3e2..62abc470330a 100644
  obj-$(CONFIG_KEYBOARD_SUN4I_LRADC)	+= sun4i-lradc-keys.o
 diff --git a/drivers/input/keyboard/stmpe-keypad-test.c b/drivers/input/keyboard/stmpe-keypad-test.c
 new file mode 100644
-index 000000000000..89a482e76895
+index 0000000000..89a482e768
 --- /dev/null
 +++ b/drivers/input/keyboard/stmpe-keypad-test.c
 @@ -0,0 +1,329 @@
@@ -393,6 +393,3 @@ index 000000000000..89a482e76895
 +MODULE_IMPORT_NS("EXPORTED_FOR_KUNIT_TESTING");
 +MODULE_DESCRIPTION("KUnit tests for STMPE keypad event decoding");
 +MODULE_LICENSE("GPL");
--- 
-2.56.0
-

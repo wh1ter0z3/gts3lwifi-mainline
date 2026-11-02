@@ -15,7 +15,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 7 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
-index 732ae296b..f1cac69a8 100644
+index 732ae296b6..f1cac69a8a 100644
 --- a/drivers/power/supply/sm5705_charger.c
 +++ b/drivers/power/supply/sm5705_charger.c
 @@ -5,7 +5,8 @@
@@ -48,6 +48,3 @@ index 732ae296b..f1cac69a8 100644
  		type = POWER_SUPPLY_USB_TYPE_DCP;
  		limit = SM5705_DCP_INPUT_LIMIT_UA;
  	} else if (extcon_get_state(chg->edev, EXTCON_CHG_USB_CDP) > 0) {
--- 
-2.53.0
-

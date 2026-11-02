@@ -34,12 +34,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 drivers/power/supply/sm5705_charger.c
 
 diff --git a/drivers/power/supply/Kconfig b/drivers/power/supply/Kconfig
-index 3c012f066..bfc233505 100644
+index f802da81c5..22434936a8 100644
 --- a/drivers/power/supply/Kconfig
 +++ b/drivers/power/supply/Kconfig
-@@ -1151,6 +1151,16 @@ config FUEL_GAUGE_MM8013
- 	  the state of charge, temperature, cycle count, actual and design
- 	  capacity, etc.
+@@ -1221,6 +1221,16 @@ config MACSMC_POWER
+ 
+ 	  Say Y or M here if you have an Apple Silicon based Mac.
  
 +config CHARGER_SM5705
 +	tristate "Silicon Mitus SM5705 charger driver"
@@ -55,17 +55,17 @@ index 3c012f066..bfc233505 100644
  	tristate "Silicon Mitus SM5705 fuel gauge driver"
  	depends on I2C
 diff --git a/drivers/power/supply/Makefile b/drivers/power/supply/Makefile
-index 82024d043..136b74963 100644
+index 72348edc72..ebf8817bcc 100644
 --- a/drivers/power/supply/Makefile
 +++ b/drivers/power/supply/Makefile
-@@ -131,3 +131,4 @@ obj-$(CONFIG_BATTERY_UG3105)	+= ug3105_battery.o
- obj-$(CONFIG_CHARGER_QCOM_SMB2)	+= qcom_smbx.o
- obj-$(CONFIG_FUEL_GAUGE_MM8013)	+= mm8013.o
+@@ -138,3 +138,4 @@ obj-$(CONFIG_FUEL_GAUGE_MM8013)	+= mm8013.o
+ obj-$(CONFIG_MACSMC_POWER)	+= macsmc-power.o
+ obj-$(CONFIG_CHARGER_MAX77759)	+= max77759_charger.o
  obj-$(CONFIG_FUEL_GAUGE_SM5705)	+= sm5705_fuel_gauge.o
 +obj-$(CONFIG_CHARGER_SM5705)	+= sm5705_charger.o
 diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
 new file mode 100644
-index 000000000..732ae296b
+index 0000000000..732ae296b6
 --- /dev/null
 +++ b/drivers/power/supply/sm5705_charger.c
 @@ -0,0 +1,510 @@
@@ -579,6 +579,3 @@ index 000000000..732ae296b
 +
 +MODULE_DESCRIPTION("Silicon Mitus SM5705 charger driver");
 +MODULE_LICENSE("GPL");
--- 
-2.53.0
-

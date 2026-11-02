@@ -22,7 +22,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 33 insertions(+)
 
 diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
-index 6cc0f110a..c88e6d4bf 100644
+index 6cc0f110a8..c88e6d4bfe 100644
 --- a/drivers/power/supply/sm5705_charger.c
 +++ b/drivers/power/supply/sm5705_charger.c
 @@ -65,6 +65,13 @@
@@ -104,6 +104,3 @@ index 6cc0f110a..c88e6d4bf 100644
  	ret = sm5705_chg_get_charge_voltage(chg, &chg->cfg_voltage);
  	if (!ret)
  		ret = sm5705_chg_get_charge_current(chg, &chg->cfg_current);
--- 
-2.53.0
-

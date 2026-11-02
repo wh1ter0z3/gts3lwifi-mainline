@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Thu, 15 Jul 2021 09:19:40 +0400
+Subject: [PATCH] arm64: dts: qcom: pmi8994: Add SMBCHG
+
+Add a node for the switch-mode battery charger available on
+this PMIC.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+Link: https://lore.kernel.org/linux-arm-msm/20220808073459.396278-1-y.oudjana@protonmail.com/T/#m2ab90203df3ac5a29b0e113b6984f7d2afabe0a8
+---
+ arch/arm64/boot/dts/qcom/pmi8994.dtsi | 72 +++++++++++++++++++++++++++
+ 1 file changed, 72 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/pmi8994.dtsi b/arch/arm64/boot/dts/qcom/pmi8994.dtsi
+index 9ee59e6d2c..c7b8ee8ef1 100644
+--- a/arch/arm64/boot/dts/qcom/pmi8994.dtsi
++++ b/arch/arm64/boot/dts/qcom/pmi8994.dtsi
+@@ -10,6 +10,78 @@ pmic@2 {
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 
++		pmi8994_smbchg: charger@1000 {
++			compatible = "qcom,pmi8994-smbchg";
++			reg = <0x1000>;
++
++			interrupts = <0x2 0x10 0x0 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x10 0x1 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x10 0x2 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x10 0x3 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x10 0x4 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x10 0x5 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x10 0x6 IRQ_TYPE_EDGE_RISING>,
++				     <0x2 0x10 0x7 IRQ_TYPE_EDGE_RISING>,
++				     <0x2 0x12 0x0 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x12 0x1 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x12 0x2 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x12 0x3 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x12 0x4 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x12 0x5 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x12 0x6 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x12 0x7 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x13 0x0 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x13 0x1 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x13 0x2 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x13 0x3 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x13 0x4 IRQ_TYPE_EDGE_RISING>,
++				     <0x2 0x13 0x5 IRQ_TYPE_EDGE_RISING>,
++				     <0x2 0x13 0x6 IRQ_TYPE_EDGE_FALLING>,
++				     <0x2 0x14 0x0 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x14 0x1 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x16 0x0 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x16 0x1 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x16 0x2 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x16 0x3 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x16 0x4 IRQ_TYPE_EDGE_BOTH>,
++				     <0x2 0x16 0x5 IRQ_TYPE_EDGE_BOTH>;
++			interrupt-names = "chg-error",
++					  "chg-inhibit",
++					  "chg-prechg-sft",
++					  "chg-complete-chg-sft",
++					  "chg-p2f-thr",
++					  "chg-rechg-thr",
++					  "chg-taper-thr",
++					  "chg-tcc-thr",
++					  "batt-hot",
++					  "batt-warm",
++					  "batt-cold",
++					  "batt-cool",
++					  "batt-ov",
++					  "batt-low",
++					  "batt-missing",
++					  "batt-term-missing",
++					  "usbin-uv",
++					  "usbin-ov",
++					  "usbin-src-det",
++					  "otg-fail",
++					  "otg-oc",
++					  "aicl-done",
++					  "usbid-change",
++					  "dcin-uv",
++					  "dcin-ov",
++					  "power-ok",
++					  "temp-shutdown",
++					  "wdog-timeout",
++					  "flash-fail",
++					  "otst2",
++					  "otst3";
++
++			status = "disabled";
++
++			chg_otg: otg-vbus { };
++		};
++
+ 		pmi8994_gpios: gpio@c000 {
+ 			compatible = "qcom,pmi8994-gpio", "qcom,spmi-gpio";
+ 			reg = <0xc000>;

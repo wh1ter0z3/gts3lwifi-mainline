@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Tue, 7 Oct 2025 11:37:18 +0300
+Subject: [PATCH] media: qcom: camss: Add 8x96 power domain names
+
+Add power domain names to MSM8996/APQ8096 resource structs.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ drivers/media/platform/qcom/camss/camss.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index f925f33b88..2211151575 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1023,6 +1023,7 @@ static const struct camss_subdev_resources vfe_res_660[] = {
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.has_pd = true,
++			.pd_name = "vfe0",
+ 			.hw_ops = &vfe_ops_4_8,
+ 			.formats_rdi = &vfe_formats_rdi_8x96,
+ 			.formats_pix = &vfe_formats_pix_8x96
+@@ -1051,6 +1052,7 @@ static const struct camss_subdev_resources vfe_res_660[] = {
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.has_pd = true,
++			.pd_name = "vfe0",
+ 			.hw_ops = &vfe_ops_4_8,
+ 			.formats_rdi = &vfe_formats_rdi_8x96,
+ 			.formats_pix = &vfe_formats_pix_8x96
+@@ -5517,6 +5519,7 @@ static const struct camss_resources msm8953_resources = {
+ 
+ static const struct camss_resources msm8996_resources = {
+ 	.version = CAMSS_8x96,
++	.pd_name = "top",
+ 	.csiphy_res = csiphy_res_8x96,
+ 	.csid_res = csid_res_8x96,
+ 	.ispif_res = &ispif_res_8x96,

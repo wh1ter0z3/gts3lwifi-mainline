@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Lillepuu <martin@mlp.ee>
+Date: Thu, 28 Jul 2022 02:00:49 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996pro-oneplus3t: use per panel dts
+
+Use separate dts for each panel supported by Oneplus 3T. Move common
+properties to msm8996pro-oneplus3t.dtsi
+
+Signed-off-by: Martin Lillepuu <martin@mlp.ee>
+---
+ arch/arm64/boot/dts/qcom/Makefile                        | 3 ++-
+ arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi     | 1 -
+ arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts            | 4 ++++
+ .../arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa3.dts | 9 +++++++++
+ .../arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa5.dts | 9 +++++++++
+ ...sm8996pro-oneplus3t.dts => msm8996pro-oneplus3t.dtsi} | 2 --
+ 6 files changed, 24 insertions(+), 4 deletions(-)
+ create mode 100644 arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa3.dts
+ create mode 100644 arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa5.dts
+ rename arch/arm64/boot/dts/qcom/{msm8996pro-oneplus3t.dts => msm8996pro-oneplus3t.dtsi} (98%)
+
+diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
+index 03c7cb4e51..ce6b5cd476 100644
+--- a/arch/arm64/boot/dts/qcom/Makefile
++++ b/arch/arm64/boot/dts/qcom/Makefile
+@@ -147,7 +147,8 @@ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-kagura.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-keyaki.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-xiaomi-gemini.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-zte-axon7.dtb
+-dtb-$(CONFIG_ARCH_QCOM)	+= msm8996pro-oneplus3t.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= msm8996pro-oneplus3t-s6e3fa3.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= msm8996pro-oneplus3t-s6e3fa5.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996pro-xiaomi-natrium.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8996pro-xiaomi-scorpio.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8998-asus-novago-tp370ql.dtb
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+index 30bb945841..0e14c393f2 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+@@ -202,7 +202,6 @@ &mdss_dsi0 {
+ 	status = "okay";
+ 
+ 	panel: panel@0 {
+-		compatible = "samsung,s6e3fa3";
+ 		reg = <0>;
+ 
+ 		vddio-supply = <&vreg_l18a_3p3>;
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts b/arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts
+index 3ad5b3f8db..de09ee6912 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus3.dts
+@@ -51,3 +51,7 @@ &venus {
+ 	firmware-name = "qcom/msm8996/oneplus3/venus.mbn";
+ 	status = "okay";
+ };
++
++&panel {
++       compatible = "samsung,s6e3fa3";
++};
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa3.dts b/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa3.dts
+new file mode 100644
+index 0000000000..15422cc5d7
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa3.dts
+@@ -0,0 +1,9 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
++/dts-v1/;
++
++#include "msm8996pro-oneplus3t.dtsi"
++
++&panel {
++       compatible = "samsung,s6e3fa3";
++};
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa5.dts b/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa5.dts
+new file mode 100644
+index 0000000000..d71865c72f
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t-s6e3fa5.dts
+@@ -0,0 +1,9 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
++/dts-v1/;
++
++#include "msm8996pro-oneplus3t.dtsi"
++
++&panel {
++	compatible = "samsung,s6e3fa5";
++};
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dts b/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dtsi
+similarity index 98%
+rename from arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dts
+rename to arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dtsi
+index b2816815ce..f606857a92 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-oneplus3t.dtsi
+@@ -3,8 +3,6 @@
+  * Copyright (c) 2022, Harry Austen <hpausten@protonmail.com>
+  */
+ 
+-/dts-v1/;
+-
+ #include "msm8996pro.dtsi"
+ #include "msm8996-oneplus-common.dtsi"
+ 

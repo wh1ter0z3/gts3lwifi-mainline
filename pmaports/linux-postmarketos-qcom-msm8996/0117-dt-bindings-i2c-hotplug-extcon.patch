@@ -23,7 +23,7 @@ Assisted-by: Claude:claude-opus-5-5
 
 diff --git a/Documentation/devicetree/bindings/i2c/i2c-hotplug-extcon.yaml b/Documentation/devicetree/bindings/i2c/i2c-hotplug-extcon.yaml
 new file mode 100644
-index 000000000000..82e7ab4e5cfb
+index 0000000000..82e7ab4e5c
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/i2c/i2c-hotplug-extcon.yaml
 @@ -0,0 +1,61 @@
@@ -88,6 +88,3 @@ index 000000000000..82e7ab4e5cfb
 +        };
 +    };
 +...
--- 
-2.56.0
-

@@ -24,7 +24,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 19 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/mfd/stmpe.c b/drivers/mfd/stmpe.c
-index 46cfabf74f19..2fc28708d2c7 100644
+index 46cfabf74f..2fc28708d2 100644
 --- a/drivers/mfd/stmpe.c
 +++ b/drivers/mfd/stmpe.c
 @@ -1367,6 +1367,11 @@ static void stmpe_of_probe(struct stmpe_platform_data *pdata,
@@ -80,6 +80,3 @@ index 46cfabf74f19..2fc28708d2c7 100644
  	__stmpe_disable(stmpe, STMPE_BLOCK_ADC);
  
  	mfd_remove_devices(stmpe->dev);
--- 
-2.56.0
-

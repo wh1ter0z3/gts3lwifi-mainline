@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Mon, 1 May 2023 14:51:20 +0300
+Subject: [PATCH] dt-bindings: media: camss: qcom,msm8996-camss: Add CAMSS
+ power domain
+
+Add the CAMSS power domain which is needed for the proper operation of
+CAMSS, and add power-domain-names to ease fetching it as well as the other
+power domains.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Link: https://lore.kernel.org/linux-arm-msm/20230526180712.8481-2-y.oudjana@protonmail.com/
+---
+ .../bindings/media/qcom,msm8996-camss.yaml          | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/Documentation/devicetree/bindings/media/qcom,msm8996-camss.yaml b/Documentation/devicetree/bindings/media/qcom,msm8996-camss.yaml
+index a2025952fe..19a56741e5 100644
+--- a/Documentation/devicetree/bindings/media/qcom,msm8996-camss.yaml
++++ b/Documentation/devicetree/bindings/media/qcom,msm8996-camss.yaml
+@@ -84,6 +84,13 @@ properties:
+     items:
+       - description: VFE0 GDSC - Video Front End, Global Distributed Switch Controller.
+       - description: VFE1 GDSC - Video Front End, Global Distributed Switch Controller.
++      - description: CAMSS GDSC - Camera Subsystem, Global Distributed Switch Controller.
++
++  power-domain-names:
++    items:
++      - const: vfe0
++      - const: vfe1
++      - const: camss
+ 
+   ports:
+     $ref: /schemas/graph.yaml#/properties/ports
+@@ -228,6 +235,7 @@ required:
+   - interrupts
+   - iommus
+   - power-domains
++  - power-domain-names
+   - reg
+   - reg-names
+   - vdda-supply
+@@ -345,7 +353,10 @@ examples:
+          <&vfe_smmu 3>;
+ 
+       power-domains = <&mmcc VFE0_GDSC>,
+-        <&mmcc VFE1_GDSC>;
++        <&mmcc VFE1_GDSC>,
++        <&mmcc CAMSS_GDSC>;
++
++      power-domain-names = "vfe0", "vfe1", "camss";
+ 
+       reg = <0x00a34000 0x1000>,
+         <0x00a00030 0x4>,

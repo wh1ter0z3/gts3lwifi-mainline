@@ -20,7 +20,7 @@ Assisted-by: Claude:claude-opus-5-5
 
 diff --git a/Documentation/devicetree/bindings/display/panel/samsung,ams968hh01.yaml b/Documentation/devicetree/bindings/display/panel/samsung,ams968hh01.yaml
 new file mode 100644
-index 000000000000..34874fa2e5f3
+index 0000000000..34874fa2e5
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/display/panel/samsung,ams968hh01.yaml
 @@ -0,0 +1,99 @@
@@ -123,6 +123,3 @@ index 000000000000..34874fa2e5f3
 +    };
 +
 +...
--- 
-2.56.0
-

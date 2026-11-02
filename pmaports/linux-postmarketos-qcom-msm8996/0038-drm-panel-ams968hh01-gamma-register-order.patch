@@ -39,10 +39,10 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 29 insertions(+), 26 deletions(-)
 
 diff --git a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-index 2d8aa255d92b..7fd6d826c1c0 100644
+index 73af6812e2..4fed8bd674 100644
 --- a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 +++ b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-@@ -29,12 +29,15 @@
+@@ -30,12 +30,15 @@
  #include <drm/drm_probe_helper.h>
  #include <video/mipi_display.h>
  
@@ -58,7 +58,7 @@ index 2d8aa255d92b..7fd6d826c1c0 100644
  };
  
  static inline struct ams968hh01 *to_ams968hh01(struct drm_panel *panel)
-@@ -112,10 +115,6 @@ static const u8 ams968hh01_mdnie_bypass2[] = {
+@@ -113,10 +116,6 @@ static const u8 ams968hh01_mdnie_bypass2[] = {
  	0x20, 0x00, 0x20, 0x00, 0x20, 0x00, 0xff,
  };
  
@@ -69,7 +69,7 @@ index 2d8aa255d92b..7fd6d826c1c0 100644
  static void ams968hh01_mode_regs(struct mipi_dsi_multi_context *ctx);
  
  static bool init_in_enable;
-@@ -275,8 +274,31 @@ static void ams968hh01_mode_regs(struct mipi_dsi_multi_context *ctx)
+@@ -276,8 +275,31 @@ static void ams968hh01_mode_regs(struct mipi_dsi_multi_context *ctx)
  	ams968hh01_reg_write(ctx, d2, sizeof(d2));		/* Anapass compression mode */
  }
  
@@ -101,7 +101,7 @@ index 2d8aa255d92b..7fd6d826c1c0 100644
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0x34);
  	ams968hh01_reg(ctx, 0xb2, 0x64, 0x00);	/* check fail off */
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0x75);
-@@ -292,28 +314,8 @@ static void ams968hh01_init(struct mipi_dsi_multi_context *ctx)
+@@ -293,28 +315,8 @@ static void ams968hh01_init(struct mipi_dsi_multi_context *ctx)
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0xbc);
  	ams968hh01_reg(ctx, 0xb2, 0x04);		/* gamma offset index */
  
@@ -132,14 +132,11 @@ index 2d8aa255d92b..7fd6d826c1c0 100644
  
  	ams968hh01_reg(ctx, 0x90, 0x00, 0x00, 0x0e);	/* AID, 360 nit */
  	mipi_dsi_dcs_write_seq_multi(ctx, 0xb0, 0x67);
-@@ -508,6 +510,7 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
+@@ -510,6 +512,7 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
  		return dev_err_probe(dev, PTR_ERR(ctx->dsi[1]), "failed to register second DSI device\n");
  
  	mipi_dsi_set_drvdata(dsi, ctx);
 +	ams968hh01_gamma_init(ctx);
  
- 	drm_panel_init(&ctx->panel, dev, &ams968hh01_panel_funcs,
- 		       DRM_MODE_CONNECTOR_DSI);
--- 
-2.56.0
-
+ 	ctx->panel.prepare_prev_first = true;
+ 	drm_panel_add(&ctx->panel);

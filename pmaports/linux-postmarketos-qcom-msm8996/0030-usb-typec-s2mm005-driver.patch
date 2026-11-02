@@ -32,7 +32,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 drivers/usb/typec/s2mm005.c
 
 diff --git a/drivers/usb/typec/Kconfig b/drivers/usb/typec/Kconfig
-index 2f80c2792..18829aaf0 100644
+index 2f80c2792d..18829aaf01 100644
 --- a/drivers/usb/typec/Kconfig
 +++ b/drivers/usb/typec/Kconfig
 @@ -77,6 +77,20 @@ config TYPEC_RT1719
@@ -57,7 +57,7 @@ index 2f80c2792..18829aaf0 100644
  	tristate "TI HD3SS3220 Type-C DRP Port controller driver"
  	depends on I2C
 diff --git a/drivers/usb/typec/Makefile b/drivers/usb/typec/Makefile
-index 7a368fea6..48067c9d9 100644
+index 8a6a1c663e..b74fa6a3ee 100644
 --- a/drivers/usb/typec/Makefile
 +++ b/drivers/usb/typec/Makefile
 @@ -10,5 +10,6 @@ obj-$(CONFIG_TYPEC_ANX7411)	+= anx7411.o
@@ -69,7 +69,7 @@ index 7a368fea6..48067c9d9 100644
  obj-$(CONFIG_TYPEC)		+= mux/
 diff --git a/drivers/usb/typec/s2mm005.c b/drivers/usb/typec/s2mm005.c
 new file mode 100644
-index 000000000..48800abf1
+index 0000000000..48800abf11
 --- /dev/null
 +++ b/drivers/usb/typec/s2mm005.c
 @@ -0,0 +1,446 @@
@@ -519,6 +519,3 @@ index 000000000..48800abf1
 +
 +MODULE_DESCRIPTION("Samsung S2MM005 USB Type-C and PD controller driver");
 +MODULE_LICENSE("GPL");
--- 
-2.53.0
-

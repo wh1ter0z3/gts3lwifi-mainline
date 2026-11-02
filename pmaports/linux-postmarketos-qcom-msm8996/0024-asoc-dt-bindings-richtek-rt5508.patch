@@ -17,7 +17,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 diff --git a/Documentation/devicetree/bindings/sound/richtek,rt5508.yaml b/Documentation/devicetree/bindings/sound/richtek,rt5508.yaml
 new file mode 100644
-index 000000000..9da649cf8
+index 0000000000..9da649cf82
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/sound/richtek,rt5508.yaml
 @@ -0,0 +1,97 @@
@@ -118,6 +118,3 @@ index 000000000..9da649cf8
 +            richtek,data-out-enable;
 +        };
 +    };
--- 
-2.53.0
-

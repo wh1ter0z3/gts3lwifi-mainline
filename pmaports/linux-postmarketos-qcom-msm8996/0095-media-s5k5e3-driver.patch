@@ -34,12 +34,12 @@ Signed-off-by: Jayden Milne <linux@jayd.ml>
  create mode 100644 drivers/media/i2c/s5k5e3.c
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index b2d66d28cb8e..9aa91d4bef62 100644
+index 9bc9a4663f..ce3f51475f 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -23340,6 +23340,14 @@ L:	linux-media@vger.kernel.org
- S:	Supported
- F:	drivers/media/i2c/s5k5baf.c
+@@ -24442,6 +24442,14 @@ T:	git git://linuxtv.org/media_tree.git
+ F:	Documentation/devicetree/bindings/media/i2c/samsung,s5kjn1.yaml
+ F:	drivers/media/i2c/s5kjn1.c
  
 +SAMSUNG S5K5E3 IMAGE SENSOR DRIVER
 +M:	Jayden Milne <linux@jayd.ml>
@@ -53,10 +53,10 @@ index b2d66d28cb8e..9aa91d4bef62 100644
  M:	Krzysztof Kozlowski <krzk@kernel.org>
  M:	Vladimir Zapolskiy <vz@mleia.com>
 diff --git a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kconfig
-index 861e8c41b2cb..bc3c0cfff745 100644
+index 4ea9dc4a89..29b924d0c3 100644
 --- a/drivers/media/i2c/Kconfig
 +++ b/drivers/media/i2c/Kconfig
-@@ -763,6 +763,16 @@ config VIDEO_S5K5BAF
+@@ -824,6 +824,16 @@ config VIDEO_S5K5BAF
  	  This is a V4L2 sensor driver for Samsung S5K5BAF 2M
  	  camera sensor with an embedded SoC image signal processor.
  
@@ -74,20 +74,20 @@ index 861e8c41b2cb..bc3c0cfff745 100644
  	tristate "Samsung S5K6A3 sensor support"
  	help
 diff --git a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
-index 7e76b7cc4dc1..f68e77cd6d2e 100644
+index dbe6968013..8c259bb895 100644
 --- a/drivers/media/i2c/Makefile
 +++ b/drivers/media/i2c/Makefile
-@@ -127,6 +127,7 @@ obj-$(CONFIG_VIDEO_RDACM21) += rdacm21.o
- obj-$(CONFIG_VIDEO_RJ54N1) += rj54n1cb0c.o
+@@ -132,6 +132,7 @@ obj-$(CONFIG_VIDEO_RJ54N1) += rj54n1cb0c.o
  obj-$(CONFIG_VIDEO_S5C73M3) += s5c73m3/
+ obj-$(CONFIG_VIDEO_S5K3M5) += s5k3m5.o
  obj-$(CONFIG_VIDEO_S5K5BAF) += s5k5baf.o
 +obj-$(CONFIG_VIDEO_S5K5E3) += s5k5e3.o
  obj-$(CONFIG_VIDEO_S5K6A3) += s5k6a3.o
+ obj-$(CONFIG_VIDEO_S5KJN1) += s5kjn1.o
  obj-$(CONFIG_VIDEO_SAA6588) += saa6588.o
- obj-$(CONFIG_VIDEO_SAA6752HS) += saa6752hs.o
 diff --git a/drivers/media/i2c/s5k5e3.c b/drivers/media/i2c/s5k5e3.c
 new file mode 100644
-index 000000000000..b694c50317bb
+index 0000000000..b694c50317
 --- /dev/null
 +++ b/drivers/media/i2c/s5k5e3.c
 @@ -0,0 +1,1029 @@
@@ -1120,6 +1120,3 @@ index 000000000000..b694c50317bb
 +MODULE_AUTHOR("Jayden Milne <linux@jayd.ml>");
 +MODULE_DESCRIPTION("Samsung S5K5E3 image sensor driver");
 +MODULE_LICENSE("GPL");
--- 
-2.56.0
-

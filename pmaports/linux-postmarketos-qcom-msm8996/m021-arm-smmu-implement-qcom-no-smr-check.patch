@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Konrad Dybcio <konradybcio@gmail.com>
+Date: Sat, 11 Jul 2020 14:24:41 +0200
+Subject: [PATCH] arm-smmu: implement qcom,no-smr-check
+
+Some SMMUs happen to crash the entire platform when the SMRs are checked.
+To avoid that behaviour, introduce a property to skip the checking.
+
+This is required on at least one platform (sdm630) for the multimedia
+SMMU to function properly.
+
+Signed-off-by: Konrad Dybcio <konradybcio@gmail.com>
+[Yassine: Add missing type in dt schema]
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ Documentation/devicetree/bindings/iommu/arm,smmu.yaml | 7 +++++++
+ drivers/iommu/arm/arm-smmu/arm-smmu.c                 | 9 ++++++++-
+ 2 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/Documentation/devicetree/bindings/iommu/arm,smmu.yaml b/Documentation/devicetree/bindings/iommu/arm,smmu.yaml
+index ffa33b7f4a..3406b30386 100644
+--- a/Documentation/devicetree/bindings/iommu/arm,smmu.yaml
++++ b/Documentation/devicetree/bindings/iommu/arm,smmu.yaml
+@@ -226,6 +226,13 @@ properties:
+       access to SMMU configuration registers. In this case non-secure aliases of
+       secure registers have to be used during SMMU configuration.
+ 
++  qcom,no-smr-check:
++    type: boolean
++    description: |
++      As the name suggests, this property skips checking of SMRs.
++      This is required for some SMMUs to function properly, mostly
++      concerning ones associated with the multimedia subsystem.
++
+   stream-match-mask:
+     $ref: /schemas/types.yaml#/definitions/uint32
+     description: |
+diff --git a/drivers/iommu/arm/arm-smmu/arm-smmu.c b/drivers/iommu/arm/arm-smmu/arm-smmu.c
+index 889a0966d3..876991ce48 100644
+--- a/drivers/iommu/arm/arm-smmu/arm-smmu.c
++++ b/drivers/iommu/arm/arm-smmu/arm-smmu.c
+@@ -994,8 +994,15 @@ static void arm_smmu_test_smr_masks(struct arm_smmu_device *smmu)
+ 	u32 smr;
+ 	int i;
+ 
+-	if (!smmu->smrs)
++	if (!smmu->smrs && !(of_find_property(smmu->dev->of_node, "qcom,no-smr-check", NULL)))
+ 		return;
++
++	if (of_find_property(smmu->dev->of_node, "qcom,no-smr-check", NULL)) {
++		smmu->streamid_mask = 0x7FFF;
++		smmu->smr_mask_mask = 0x7FFF;
++		return;
++	}
++
+ 	/*
+ 	 * If we've had to accommodate firmware memory regions, we may
+ 	 * have live SMRs by now; tread carefully...

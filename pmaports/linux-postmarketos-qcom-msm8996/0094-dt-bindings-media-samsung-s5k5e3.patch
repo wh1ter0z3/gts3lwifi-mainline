@@ -16,7 +16,7 @@ Signed-off-by: Jayden Milne <linux@jayd.ml>
 
 diff --git a/Documentation/devicetree/bindings/media/i2c/samsung,s5k5e3.yaml b/Documentation/devicetree/bindings/media/i2c/samsung,s5k5e3.yaml
 new file mode 100644
-index 000000000000..6302ef948a4d
+index 0000000000..6302ef948a
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/media/i2c/samsung,s5k5e3.yaml
 @@ -0,0 +1,100 @@
@@ -120,6 +120,3 @@ index 000000000000..6302ef948a4d
 +          };
 +      };
 +...
--- 
-2.56.0
-

@@ -15,7 +15,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 diff --git a/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml
 new file mode 100644
-index 000000000..87b8e4d7b
+index 0000000000..87b8e4d7b9
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml
 @@ -0,0 +1,59 @@
@@ -78,6 +78,3 @@ index 000000000..87b8e4d7b
 +        extcon = <&muic>;
 +      };
 +    };
--- 
-2.53.0
-

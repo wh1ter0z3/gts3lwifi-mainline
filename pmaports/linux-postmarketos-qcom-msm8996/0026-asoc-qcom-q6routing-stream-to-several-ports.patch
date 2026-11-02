@@ -25,10 +25,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 56 insertions(+), 53 deletions(-)
 
 diff --git a/sound/soc/qcom/qdsp6/q6routing.c b/sound/soc/qcom/qdsp6/q6routing.c
-index aaa3af9f1..d90230305 100644
+index d076c99f19..f2f9252f35 100644
 --- a/sound/soc/qcom/qdsp6/q6routing.c
 +++ b/sound/soc/qcom/qdsp6/q6routing.c
-@@ -325,7 +325,8 @@
+@@ -353,7 +353,8 @@
  
  struct session_data {
  	int state;
@@ -38,7 +38,7 @@ index aaa3af9f1..d90230305 100644
  	int path_type;
  	int app_type;
  	int acdb_id;
-@@ -333,9 +334,9 @@ struct session_data {
+@@ -361,9 +362,9 @@ struct session_data {
  	int bits_per_sample;
  	int channels;
  	int perf_mode;
@@ -50,7 +50,7 @@ index aaa3af9f1..d90230305 100644
  	struct q6copp *copps[MAX_COPPS_PER_PORT];
  };
  
-@@ -348,6 +349,15 @@ struct msm_routing_data {
+@@ -376,6 +377,15 @@ struct msm_routing_data {
  
  static struct msm_routing_data *routing_data;
  
@@ -66,7 +66,7 @@ index aaa3af9f1..d90230305 100644
  /**
   * q6routing_stream_open() - Register a new stream for route setup
   *
-@@ -361,11 +371,10 @@ static struct msm_routing_data *routing_data;
+@@ -389,11 +399,10 @@ static struct msm_routing_data *routing_data;
  int q6routing_stream_open(int fedai_id, int perf_mode,
  			   int stream_id, int stream_type)
  {
@@ -81,7 +81,7 @@ index aaa3af9f1..d90230305 100644
  
  	if (!routing_data) {
  		pr_err("Routing driver not yet ready\n");
-@@ -373,53 +382,57 @@ int q6routing_stream_open(int fedai_id, int perf_mode,
+@@ -401,53 +410,57 @@ int q6routing_stream_open(int fedai_id, int perf_mode,
  	}
  
  	session = &routing_data->sessions[stream_id - 1];
@@ -167,7 +167,7 @@ index aaa3af9f1..d90230305 100644
  }
  EXPORT_SYMBOL_GPL(q6routing_stream_open);
  
-@@ -447,21 +460,15 @@ static struct session_data *get_session_from_id(struct msm_routing_data *data,
+@@ -475,21 +488,15 @@ static struct session_data *get_session_from_id(struct msm_routing_data *data,
  void q6routing_stream_close(int fedai_id, int stream_type)
  {
  	struct session_data *session;
@@ -192,7 +192,7 @@ index aaa3af9f1..d90230305 100644
  }
  EXPORT_SYMBOL_GPL(q6routing_stream_close);
  
-@@ -476,10 +483,7 @@ static int msm_routing_get_audio_mixer(struct snd_kcontrol *kcontrol,
+@@ -504,10 +511,7 @@ static int msm_routing_get_audio_mixer(struct snd_kcontrol *kcontrol,
  	struct msm_routing_data *priv = dev_get_drvdata(c->dev);
  	struct session_data *session = &priv->sessions[session_id];
  
@@ -204,7 +204,7 @@ index aaa3af9f1..d90230305 100644
  
  	return 0;
  }
-@@ -497,17 +501,16 @@ static int msm_routing_put_audio_mixer(struct snd_kcontrol *kcontrol,
+@@ -525,17 +529,16 @@ static int msm_routing_put_audio_mixer(struct snd_kcontrol *kcontrol,
  	int session_id = mc->shift;
  	struct session_data *session = &data->sessions[session_id];
  
@@ -225,7 +225,7 @@ index aaa3af9f1..d90230305 100644
  		snd_soc_dapm_mixer_update_power(dapm, kcontrol, 0, update);
  	}
  
-@@ -1096,7 +1099,7 @@ static int msm_routing_probe(struct snd_soc_component *c)
+@@ -1172,7 +1175,7 @@ static int msm_routing_probe(struct snd_soc_component *c)
  	int i;
  
  	for (i = 0; i < MAX_SESSIONS; i++) {
@@ -234,6 +234,3 @@ index aaa3af9f1..d90230305 100644
  		routing_data->sessions[i].fedai_id = -1;
  	}
  
--- 
-2.53.0
-

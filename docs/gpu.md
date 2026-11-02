@@ -55,9 +55,7 @@ earlier, while the GPU ran a KWin submit that still sampled it.
 Dmitry Baryshkov's series "drm/msm: fix dma-buf sharing on targets without
 per-process pgtables" (v1, 2026-08-22, not merged yet; its 2/2 names
 A530/MSM8996) moves the teardown on shared VMs to the last reference drop.
-Patches 0122-0123 carry it. v6.19 lacks 00dfa76bdfc2 ("drm/msm: Allow lazy
-VM creation to fail"), so 0123 sets `vm_shared` on the plain `gpu->vm`
-fallback (noted in the patch).
+Patches 0122-0123 carry it; 7.3.1 does not have it yet.
 
 Tested on the tablet: the same 8 rotations gave 0 faults without the lock
 screen (929 submits) and with it (905 submits); four later runs also had 0.

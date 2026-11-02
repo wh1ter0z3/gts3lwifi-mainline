@@ -22,7 +22,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 51 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
-index c54dc2479..fd59af05c 100644
+index c54dc24796..fd59af05c9 100644
 --- a/drivers/power/supply/sm5705_charger.c
 +++ b/drivers/power/supply/sm5705_charger.c
 @@ -17,6 +17,7 @@
@@ -157,6 +157,3 @@ index c54dc2479..fd59af05c 100644
  	}
  
  	chg->regmap = devm_regmap_init_i2c(client, &sm5705_chg_regmap_config);
--- 
-2.53.0
-

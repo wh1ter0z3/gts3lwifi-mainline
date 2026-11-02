@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Wed, 3 May 2023 17:20:03 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996-{xiaomi/oneplus}-common: Remove
+ clocks node
+
+Remove clocks node and move clocks in it one level up to make them probe again.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ .../boot/dts/qcom/msm8996-oneplus-common.dtsi | 32 +++++++++----------
+ 1 file changed, 15 insertions(+), 17 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+index 99fb70495b..972ec798a8 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+@@ -29,24 +29,22 @@ chosen {
+ 		stdout-path = "serial1:115200n8";
+ 	};
+ 
+-	clocks {
+-		div1_mclk: div1-clk {
+-			compatible = "gpio-gate-clock";
+-			pinctrl-names = "default";
+-			pinctrl-0 = <&audio_mclk>;
+-			#clock-cells = <0>;
+-			clocks = <&rpmcc RPM_SMD_DIV_CLK1>;
+-			enable-gpios = <&pm8994_gpios 15 GPIO_ACTIVE_HIGH>;
+-		};
++	div1_mclk: div1-clk {
++		compatible = "gpio-gate-clock";
++		pinctrl-names = "default";
++		pinctrl-0 = <&audio_mclk>;
++		#clock-cells = <0>;
++		clocks = <&rpmcc RPM_SMD_DIV_CLK1>;
++		enable-gpios = <&pm8994_gpios 15 GPIO_ACTIVE_HIGH>;
++	};
+ 
+-		divclk4: div4-clk {
+-			compatible = "fixed-clock";
+-			pinctrl-names = "default";
+-			pinctrl-0 = <&divclk4_pin_a>;
+-			#clock-cells = <0>;
+-			clock-frequency = <32768>;
+-			clock-output-names = "divclk4";
+-		};
++	divclk4: div4-clk {
++		compatible = "fixed-clock";
++		pinctrl-names = "default";
++		pinctrl-0 = <&divclk4_pin_a>;
++		#clock-cells = <0>;
++		clock-frequency = <32768>;
++		clock-output-names = "divclk4";
+ 	};
+ 
+ 	reserved-memory {

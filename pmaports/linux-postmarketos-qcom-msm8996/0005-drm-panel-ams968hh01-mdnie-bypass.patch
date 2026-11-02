@@ -1,4 +1,4 @@
-From 0a6dce6c82b7a00d06ae1ad66d47e7db0a60f645 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 8 Oct 2026 11:08:46 +0530
 Subject: [PATCH] drm/panel: samsung-ams968hh01: program the mDNIe block to
@@ -18,7 +18,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
  1 file changed, 306 insertions(+), 32 deletions(-)
 
 diff --git a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-index 9900bda9f..2d8aa255d 100644
+index 78e9655234..73af6812e2 100644
 --- a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 +++ b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 @@ -10,16 +10,18 @@
@@ -41,7 +41,7 @@ index 9900bda9f..2d8aa255d 100644
  
  #include <drm/drm_mipi_dsi.h>
  #include <drm/drm_modes.h>
-@@ -41,11 +43,30 @@ static inline struct ams968hh01 *to_ams968hh01(struct drm_panel *panel)
+@@ -42,11 +44,30 @@ static inline struct ams968hh01 *to_ams968hh01(struct drm_panel *panel)
  }
  
  /*
@@ -75,7 +75,7 @@ index 9900bda9f..2d8aa255d 100644
  	.clock = 253613,		/* 2720 * 1554 * 60 Hz / 1000 */
  	.hdisplay = 2048,
  	.hsync_start = 2048 + 424,
-@@ -60,46 +81,258 @@ static const struct drm_display_mode ams968hh01_mode = {
+@@ -61,46 +82,258 @@ static const struct drm_display_mode ams968hh01_mode = {
  	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
  };
  
@@ -357,7 +357,7 @@ index 9900bda9f..2d8aa255d 100644
  }
  
  static void ams968hh01_power_off(struct ams968hh01 *ctx)
-@@ -114,7 +347,8 @@ static int ams968hh01_prepare(struct drm_panel *panel)
+@@ -115,7 +348,8 @@ static int ams968hh01_prepare(struct drm_panel *panel)
  {
  	struct ams968hh01 *ctx = to_ams968hh01(panel);
  	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi[0] };
@@ -367,7 +367,7 @@ index 9900bda9f..2d8aa255d 100644
  
  	ret = regulator_enable(ctx->vdd);
  	if (ret)
-@@ -126,14 +360,24 @@ static int ams968hh01_prepare(struct drm_panel *panel)
+@@ -127,14 +361,24 @@ static int ams968hh01_prepare(struct drm_panel *panel)
  	 * DDI wants 70 ms plus margin between LP11 and reset.
  	 */
  	msleep(75);
@@ -394,7 +394,7 @@ index 9900bda9f..2d8aa255d 100644
  
  	ams968hh01_init(&dsi_ctx);
  	if (dsi_ctx.accum_err) {
-@@ -141,6 +385,8 @@ static int ams968hh01_prepare(struct drm_panel *panel)
+@@ -142,6 +386,8 @@ static int ams968hh01_prepare(struct drm_panel *panel)
  		return dsi_ctx.accum_err;
  	}
  
@@ -403,7 +403,7 @@ index 9900bda9f..2d8aa255d 100644
  	return 0;
  }
  
-@@ -149,10 +395,37 @@ static int ams968hh01_enable(struct drm_panel *panel)
+@@ -150,10 +396,37 @@ static int ams968hh01_enable(struct drm_panel *panel)
  	struct ams968hh01 *ctx = to_ams968hh01(panel);
  	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi[0] };
  
@@ -442,7 +442,7 @@ index 9900bda9f..2d8aa255d 100644
  }
  
  static int ams968hh01_disable(struct drm_panel *panel)
-@@ -175,7 +448,8 @@ static int ams968hh01_unprepare(struct drm_panel *panel)
+@@ -176,7 +449,8 @@ static int ams968hh01_unprepare(struct drm_panel *panel)
  static int ams968hh01_get_modes(struct drm_panel *panel,
  				struct drm_connector *connector)
  {

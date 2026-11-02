@@ -27,7 +27,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  3 files changed, 17 insertions(+)
 
 diff --git a/sound/soc/qcom/qdsp6/q6afe-dai.c b/sound/soc/qcom/qdsp6/q6afe-dai.c
-index ef956f00f..91673c571 100644
+index 93c46c6a61..26bf8f6af6 100644
 --- a/sound/soc/qcom/qdsp6/q6afe-dai.c
 +++ b/sound/soc/qcom/qdsp6/q6afe-dai.c
 @@ -234,6 +234,7 @@ static int q6tdm_set_channel_map(struct snd_soc_dai *dai,
@@ -47,10 +47,10 @@ index ef956f00f..91673c571 100644
  
  		break;
 diff --git a/sound/soc/qcom/qdsp6/q6afe.c b/sound/soc/qcom/qdsp6/q6afe.c
-index fb323c882..e8d9b823b 100644
+index 5e796e9206..07bc9d49a0 100644
 --- a/sound/soc/qcom/qdsp6/q6afe.c
 +++ b/sound/soc/qcom/qdsp6/q6afe.c
-@@ -1363,6 +1363,20 @@ void q6afe_tdm_port_prepare(struct q6afe_port *port,
+@@ -1410,6 +1410,20 @@ void q6afe_tdm_port_prepare(struct q6afe_port *port,
  
  	pcfg->tdm_cfg.slot_width = cfg->slot_width;
  	pcfg->tdm_cfg.slot_mask = cfg->slot_mask;
@@ -68,14 +68,14 @@ index fb323c882..e8d9b823b 100644
 +	if (!cfg->ch_mapping_valid)
 +		return;
 +
- 	port->scfg = kzalloc(sizeof(*port->scfg), GFP_KERNEL);
+ 	port->scfg = kzalloc_obj(*port->scfg);
  	if (!port->scfg)
  		return;
 diff --git a/sound/soc/qcom/qdsp6/q6afe.h b/sound/soc/qcom/qdsp6/q6afe.h
-index a16da6373..ba9c41e87 100644
+index 7bb28aaaa1..aebbd4bc99 100644
 --- a/sound/soc/qcom/qdsp6/q6afe.h
 +++ b/sound/soc/qcom/qdsp6/q6afe.h
-@@ -196,6 +196,7 @@ struct q6afe_tdm_cfg {
+@@ -197,6 +197,7 @@ struct q6afe_tdm_cfg {
  	u16	slot_mask;
  	u32	data_align_type;
  	u16	ch_mapping[AFE_MAX_CHAN_COUNT];
@@ -83,6 +83,3 @@ index a16da6373..ba9c41e87 100644
  };
  
  struct q6afe_cdc_dma_cfg {
--- 
-2.53.0
-
