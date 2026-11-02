@@ -9,6 +9,12 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
   (see [docs/kernel-7.3.md](docs/kernel-7.3.md)), packaged as postmarketOS `linux-postmarketos-qcom-msm8996`
   with our patches (`pmaports/`)
 
+## Preview image
+
+An image to flash, for testers: [install guide](docs/install-preview.md),
+[release notes](docs/release-notes-preview.md). Built by `scripts/build-preview.py` from
+`scripts/preview/lock.json`.
+
 ## Models
 
 One kernel and one device package boot both models: the package carries both
@@ -99,7 +105,7 @@ from either model help, the SM-T825 most of all:
 - `dts/` - device trees for both models (the SM-T825 one includes the SM-T820 one), plus test variants; the panel temperature channel is still test-only
 - `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage and GNSS), the kernel patches, libcamera with autofocus, KWin with rotation fixes, iio-sensor-proxy with a restart fix, and gnss-share with a QMI LOC driver
 - `lk2nd/` - lk2nd device entries for the Wi-Fi and LTE models
-- `scripts/` - regenerate the kernel patch, build tester packages
+- `scripts/` - regenerate the kernel patch, build tester packages, build the preview image
 - `tools/` - on-device debugging aids: MMIO and PMIC (SPMI) register access, manual PCIe link retrain, TLMM pin sampling, RT5508 amplifier probe, GNSS test helper and QMI LOC client
 - `kernel/` - out-of-tree kernel additions (panel, fuel gauge, charger and MUIC drivers, bindings, Kconfig snippet)
 - `docs/` - notes per subsystem, the postmarketOS install, tester instructions and boot logs
