@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=6.19.5
-pkgrel=10
+pkgrel=11
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -155,6 +155,7 @@ source="
 	0143-iio-qcom-smgr-sampling-frequency.patch
 	0144-iio-qcom-smgr-soft-timestamp-channel.patch
 	0145-iio-qcom-smgr-gyro-magn-mount-matrix.patch
+	0148-drm-msm-mdp5-assign-pipes-on-resume.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -309,4 +310,5 @@ d51b6b7b607f3b954de6d6080bc06803db1f5aac780d39e52bf7a910866ac7fb25a7b169219ec433
 fd8bb449c1f1eca21e1ec4633cf4ce04d97bdfa9ff98eea299f4adecce49f99e8f563ee4979daa18103a7c764f5a991df90097a27bba22aab8fbe9a18f989118  0143-iio-qcom-smgr-sampling-frequency.patch
 c17e72a1157a39d665017a8e4566165efbdf11f2401ea5af7a7be784f33a3082ef3374efa23611e2feb8d3eb9b45810581cb779de5bcaa45a7aa57d5add96f32  0144-iio-qcom-smgr-soft-timestamp-channel.patch
 ea7cff53a84e59e40e0e45eb00e4330b2f393f81cfe4b651926fd2b486f0e7113945dbea2e8d7cd43053756b38989d6b7ddc870579a99e0be84d8f082b41e4c9  0145-iio-qcom-smgr-gyro-magn-mount-matrix.patch
+8dd4e3b04c27d060c9bf3fab1c314fa0c391bb32275673347ac6bef853fce88bac28c0294c70194a1bbec91b4a184f866138363bcecc92d613c48a04a80f5f72  0148-drm-msm-mdp5-assign-pipes-on-resume.patch
 "

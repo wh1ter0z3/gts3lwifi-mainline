@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 02:55:38 -0700
+Subject: [PATCH] drm/msm/mdp5: Assign pipes again to a plane state restored on
+ resume
+
+drm_atomic_helper_suspend() saves the plane states and disables the planes,
+which gives their pipes back in the MDP5 global state. The global state is
+not saved. drm_atomic_helper_resume() then commits plane states that still
+name those pipes, and atomic check keeps them, so the planes run on pipes the
+global state calls free.
+
+The next disable finds no owner, and system suspend fails at prepare:
+
+  WARNING: drivers/gpu/drm/msm/disp/mdp5/mdp5_pipe.c:138 at mdp5_pipe_release+0xd8/0xe8 [msm]
+  PM: Some devices failed to suspend, or early wake event detected
+
+A new plane state is a copy of the current one, so it can only name pipes
+the current one lacks if it was restored. Drop them in that case, and let
+atomic check assign pipes as for any newly enabled plane.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
+index adb4d1d50807..45e29409da9b 100644
+--- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
++++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
+@@ -240,6 +240,14 @@ static int mdp5_plane_atomic_check_with_state(struct drm_crtc_state *crtc_state,
+ 		if (plane->type == DRM_PLANE_TYPE_CURSOR)
+ 			caps |= MDP_PIPE_CAP_CURSOR;
+ 
++		/*
++		 * A state restored on resume names the pipes the plane had before
++		 * suspend, but disabling the plane gave them back in the global
++		 * state. Assign them again.
++		 */
++		if (!to_mdp5_plane_state(old_state)->hwpipe)
++			mdp5_state->hwpipe = mdp5_state->r_hwpipe = NULL;
++
+ 		/* (re)allocate hw pipe if we don't have one or caps-mismatch: */
+ 		if (!mdp5_state->hwpipe || (caps & ~mdp5_state->hwpipe->caps))
+ 			new_hwpipe = true;
