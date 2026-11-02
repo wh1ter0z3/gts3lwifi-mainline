@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sun, 1 Nov 2026 20:04:13 -0700
+Subject: [PATCH] iio: qcom_smgr: give the gyroscope and magnetometer a
+ rotation matrix
+
+All 3-axis sensors share one mount matrix, [0, -1, 0; -1, 0, 0; 0, 0, 1].
+On the Galaxy Tab S3, SMGR reports them in north-east-down coordinates: X
+towards the top edge in portrait, Y to the right and Z into the screen.
+The rotation into the device frame of the mount-matrix binding (X right,
+Y top, Z out of the screen) is [0, 1, 0; 1, 0, 0; 0, 0, -1]. The shared
+matrix is its negation, which is not a rotation and flips the sign of
+every axis.
+
+For the gyroscope and the magnetometer that inverts every reading: a
+compass heading from the magnetometer pointed south when the device
+pointed north, and a counter-clockwise turn of the device lying face up
+gave a negative angular velocity around Z. Give them the rotation.
+
+Leave the accelerometer's matrix alone. SMGR reports +1 g upwards and
+iio-sensor-proxy takes a negative Y as upright, so its X and Y signs are
+what screen rotation on a board without a matrix of its own relies on.
+Its Z is not what iio-sensor-proxy's tilt expects (lying face up reads as
+face down), which this patch does not change.
+
+The other boards this driver runs on have not been checked: the axes SMGR
+reports may depend on the board.
+
+The driver is in the msm8996-mainline tree (v6.19.5-msm8996), not in
+mainline yet.
+
+Tested on a Galaxy Tab S3 (SM-T820) lying flat, with the shared matrix: a
+heading from the magnetometer's X and Y read 180 degrees when a phone
+compass said north and 270 at east, and counter-clockwise turns read
+about -0.6 rad/s on the gyroscope's Z. The rotation negates all three, so
+north comes to 0, east to 90 and the turn to a positive value. With this
+patch in_mount_matrix reads the rotation for both sensors and the
+accelerometer's is unchanged. The readings were not repeated with the
+patch, and the magnetometer's Z and the gyroscope's X and Y were not
+checked.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/iio/common/qcom_smgr/qcom_smgr.c | 23 ++++++++++++++++++++++-
+ 1 file changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+index 248215257cbc..4cb9c9926bc6 100644
+--- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
++++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+@@ -398,8 +398,26 @@ static const struct iio_buffer_setup_ops qcom_smgr_buffer_ops = {
+ 	.predisable = &qcom_smgr_sensor_predisable
+ };
+ 
+-/* SMGR reports values for 3-axis sensors in north-east-down coordinates */
++/*
++ * SMGR reports values for 3-axis sensors in north-east-down coordinates:
++ * X towards the top of the screen, Y towards its right side and Z into it.
++ * This rotation turns them into the usual device frame: X right, Y top,
++ * Z out of the screen.
++ */
+ static const struct iio_mount_matrix qcom_smgr_iio_mount_matrix = {
++	.rotation = {
++		"0", "1", "0",
++		"1", "0", "0",
++		"0", "0", "-1"
++	}
++};
++
++/*
++ * SMGR reports +1 g upwards at rest, while iio-sensor-proxy takes a negative
++ * Y as the upright orientation. The matrix the accelerometer has always had
++ * negates the rotation above to give that, which is not a rotation itself.
++ */
++static const struct iio_mount_matrix qcom_smgr_iio_accel_mount_matrix = {
+ 	.rotation = {
+ 		"0", "-1", "0",
+ 		"-1", "0", "0",
+@@ -411,6 +429,9 @@ static const struct iio_mount_matrix *
+ qcom_smgr_iio_get_mount_matrix(const struct iio_dev *iio_dev,
+ 			       const struct iio_chan_spec *chan)
+ {
++	if (chan->type == IIO_ACCEL)
++		return &qcom_smgr_iio_accel_mount_matrix;
++
+ 	return &qcom_smgr_iio_mount_matrix;
+ }
+ 
+-- 
+2.56.0
+

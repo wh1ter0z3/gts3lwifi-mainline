@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..747f5e591a 100644
+index 601fa9f44e..486784051e 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
@@ -7,11 +7,11 @@ index 601fa9f44e..747f5e591a 100644
  pkgname=linux-$_flavor
  pkgver=6.19.5
 -pkgrel=0
-+pkgrel=9
++pkgrel=10
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
-@@ -32,6 +32,123 @@ _tag=v${pkgver//_/-}-msm8996
+@@ -32,6 +32,129 @@ _tag=v${pkgver//_/-}-msm8996
  source="
  	linux-$_tag.tar.gz::$url/-/archive/$_tag/linux-$_tag.tar.gz
  	config-$_flavor.$arch
@@ -132,10 +132,16 @@ index 601fa9f44e..747f5e591a 100644
 +	0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
 +	0122-drm-msm-locking-put-iova-spaces.patch
 +	0123-drm-msm-shared-vm-keep-mappings-on-close.patch
++	0140-iio-qcom-smgr-sample-timestamp.patch
++	0141-iio-qcom-smgr-push-enabled-axes.patch
++	0142-iio-qcom-smgr-push-every-sample.patch
++	0143-iio-qcom-smgr-sampling-frequency.patch
++	0144-iio-qcom-smgr-soft-timestamp-channel.patch
++	0145-iio-qcom-smgr-gyro-magn-mount-matrix.patch
  "
  builddir="$srcdir/linux-$_tag"
  
-@@ -62,5 +179,122 @@ package() {
+@@ -62,5 +185,128 @@ package() {
  }
  sha512sums="
  dd30dd113ad9f0b4ab3771ea655de2becce7ddaf5066d2f860b7bb1eb78573137313191d9da740b152348f9f89894ace2bb94fb195e340f7b6dabedeebbc929f  linux-v6.19.5-msm8996.tar.gz
@@ -258,4 +264,10 @@ index 601fa9f44e..747f5e591a 100644
 +23596e25a689a7e0a4b261ffb79475f8175b6a8b5348cadbdd489ffad47235879ea0c6c9d225269a435cf8280756f206d9faa458bf557c1d47e189550cc25b77  0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
 +014236501dbf2fd474e1bfead8bf5f18bc53f8235ae328a126fb12e43cf4a32ec8bf149ec06dfff722f0bfe993aa6b838d7b13d431614b393ffcab1d8bc103c6  0122-drm-msm-locking-put-iova-spaces.patch
 +03d8c5d5e0ddcf7e58502a975ba2eca13decf840e25b95a37366fb1899f6fad26dec27e93e9cea9dabfa78cc18569b32714a2f8be8cec47bd896c6bfedcd13ac  0123-drm-msm-shared-vm-keep-mappings-on-close.patch
++bc2f8a57cd1f26bcf6d30328b86b16c31b3e13c064b34d6cd59fd51596ba89b311799128a3aeef8efe0de48d49c07f983f2719af6e960df7b54dfbe557c2c09d  0140-iio-qcom-smgr-sample-timestamp.patch
++d51b6b7b607f3b954de6d6080bc06803db1f5aac780d39e52bf7a910866ac7fb25a7b169219ec433c65f859da8c956f677b770f41c42843b9ccbccfa291d9185  0141-iio-qcom-smgr-push-enabled-axes.patch
++150473dd03373dcf88ef59d71658b47ee51fffe56fb175caa5ef63c57cf06d5a3d786fdd50652f224e2b452ecc478150388c061018fa547bcb439edf3b666872  0142-iio-qcom-smgr-push-every-sample.patch
++fd8bb449c1f1eca21e1ec4633cf4ce04d97bdfa9ff98eea299f4adecce49f99e8f563ee4979daa18103a7c764f5a991df90097a27bba22aab8fbe9a18f989118  0143-iio-qcom-smgr-sampling-frequency.patch
++c17e72a1157a39d665017a8e4566165efbdf11f2401ea5af7a7be784f33a3082ef3374efa23611e2feb8d3eb9b45810581cb779de5bcaa45a7aa57d5add96f32  0144-iio-qcom-smgr-soft-timestamp-channel.patch
++ea7cff53a84e59e40e0e45eb00e4330b2f393f81cfe4b651926fd2b486f0e7113945dbea2e8d7cd43053756b38989d6b7ddc870579a99e0be84d8f082b41e4c9  0145-iio-qcom-smgr-gyro-magn-mount-matrix.patch
  "

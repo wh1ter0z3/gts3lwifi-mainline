@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sun, 1 Nov 2026 20:04:12 -0700
+Subject: [PATCH] iio: qcom_smgr: stream at the sampling frequency userspace
+ set
+
+sampling_frequency is writable, but the value was never used: every
+buffer enable picked the fastest native rate again, and a buffer disable
+set the stored rate to 0, so the attribute read 0 until the next enable.
+SMGR sends one QMI indication for nearly every sample, so a sensor kept
+streaming at its top rate wakes the application processor that often even
+when the reader only wants a few samples a second (iio-sensor-proxy reads
+the accelerometer for screen rotation every 700 ms).
+
+Keep the requested rate across buffer disables, use it at buffer enable,
+and start from the same default as before: the fastest native rate,
+capped at the SMGR maximum. Rates under 1 Hz are rejected. Rates above
+the maximum are capped to it rather than rejected, so that such a write
+keeps working: iio-sensor-proxy writes 10 Hz to a sensor that reads under
+10 Hz when it opens it, and the light sensor's maximum is 5 Hz. Fractions
+are dropped, as SMGR takes whole hertz.
+
+The attribute reads back the requested rate. What SMGR then streams at
+can differ: it uses the sensor's native rates, the accelerometer's lowest
+being about 12.5 Hz.
+
+Only the result of the buffering response is checked, as before: its
+ack_nak field is 1 for the light sensor, which streams normally.
+
+The driver is in the msm8996-mainline tree (v6.19.5-msm8996), not in
+mainline yet.
+
+Tested on a Galaxy Tab S3 (SM-T820), counting samples over six seconds:
+the accelerometer at 12, 50, 100, 200 and 416 Hz streams at 12.2, 49.3,
+98.6, 197 and 394 Hz, the gyroscope at 10, 100 and 416 Hz at 12.2, 99 and
+396 Hz, the magnetometer at 10 and 50 Hz at 10.1 and 50.0 Hz. Writing
+10 Hz to the light sensor reads back 5 and streams at 4.8 Hz, and
+iio-sensor-proxy claims and reads it with no warning.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/iio/common/qcom_smgr/qcom_smgr.c | 50 ++++++++++++++++--------
+ 1 file changed, 34 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+index e3bc6c272ddd..a88a9f554572 100644
+--- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
++++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+@@ -159,6 +159,24 @@ static int qcom_smgr_request_single_sensor_info(struct qcom_smgr *smgr,
+ 	return 0;
+ }
+ 
++/*
++ * The sample rate to stream at until userspace sets another: the fastest
++ * native rate of the sensor, capped at the maximum SMGR supports for it,
++ * which may be lower.
++ */
++static u16 qcom_smgr_default_sample_rate(const struct qcom_smgr_data_type_item *dt)
++{
++	u16 rate = 0;
++
++	if (dt->native_sample_rates)
++		rate = dt->native_sample_rates[dt->native_sample_rate_count - 1];
++
++	if (rate == 0 || rate > dt->max_sample_rate)
++		rate = dt->max_sample_rate;
++
++	return rate;
++}
++
+ static int qcom_smgr_request_buffering(struct qcom_smgr *smgr,
+ 				       struct qcom_smgr_sensor *sensor,
+ 				       bool enable)
+@@ -189,20 +207,14 @@ static int qcom_smgr_request_buffering(struct qcom_smgr *smgr,
+ 		 * A report cannot have 0 samples, therefore report rate cannot
+ 		 * be higher than sample rate.
+ 		 *
+-		 * Fow now we default to the maximum sample rate and set the
+-		 * report rate such that every report contains only 1 sample.
+-		 * This gives us the lowest latency.
+-		 */
+-		if (dt->native_sample_rates)
+-			sample_rate = dt->native_sample_rates
+-					[dt->native_sample_rate_count - 1];
+-
+-		/*
+-		 * SMGR may support a lower maximum sample rate than natively
+-		 * supported by the sensor.
++		 * Stream at the sampling frequency set through sysfs (by
++		 * default the fastest one) and set the report rate to match,
++		 * so that a report usually contains 1 sample. This gives us
++		 * the lowest latency.
+ 		 */
++		sample_rate = dt->cur_sample_rate;
+ 		if (sample_rate == 0 || sample_rate > dt->max_sample_rate)
+-			sample_rate = dt->max_sample_rate;
++			sample_rate = qcom_smgr_default_sample_rate(dt);
+ 
+ 		req.report_rate = sample_rate * SMGR_REPORT_RATE_HZ;
+ 
+@@ -252,7 +264,8 @@ static int qcom_smgr_request_buffering(struct qcom_smgr *smgr,
+ 	}
+ 
+ 	/* Keep track of requested sample rate */
+-	dt->cur_sample_rate = sample_rate;
++	if (enable)
++		dt->cur_sample_rate = sample_rate;
+ 
+ 	return 0;
+ }
+@@ -440,13 +453,19 @@ static int qcom_smgr_iio_write_raw(struct iio_dev *iio_dev,
+ 				   int val2, long mask)
+ {
+ 	struct qcom_smgr_iio_priv *priv = iio_priv(iio_dev);
++	struct qcom_smgr_data_type_item *dt =
++		&priv->sensor->data_types[priv->sensor->data_type];
+ 
+ 	switch (mask) {
+ 	case IIO_CHAN_INFO_SAMP_FREQ:
++		if (val < 1)
++			return -EINVAL;
++
+ 		if (!iio_device_claim_direct(iio_dev))
+ 			return -EBUSY;
+ 
+-		priv->sensor->data_types[priv->sensor->data_type].cur_sample_rate = val;
++		/* SMGR takes whole hertz, up to the maximum it reports */
++		dt->cur_sample_rate = min_t(int, val, dt->max_sample_rate);
+ 
+ 		iio_device_release_direct(iio_dev);
+ 		return 0;
+@@ -894,9 +913,8 @@ static int qcom_smgr_probe(struct qrtr_device *qdev)
+ 				smgr->sensors[i].id);
+ 
+ 		for (j = 0; j < smgr->sensors[i].data_type_count; j++) {
+-			/* Default to maximum sample rate */
+ 			smgr->sensors[i].data_types[j].cur_sample_rate =
+-				smgr->sensors[i].data_types[j].max_sample_rate;
++				qcom_smgr_default_sample_rate(&smgr->sensors[i].data_types[j]);
+ 
+ 			dev_dbg(smgr->dev, "0x%02x,%d: type %u, %s %s, max %u Hz, range %u\n",
+ 				smgr->sensors[i].id, j,
+-- 
+2.56.0
+
