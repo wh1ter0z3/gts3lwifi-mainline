@@ -76,6 +76,17 @@ msm-id 246, board-id 8/x) and `LK2ND_DTB=msm8996-samsung-gts3llte`:
 (donor used: LineageOS 21 gts3llte boot.img). Built 2026-10-22, not yet
 tested on hardware. Checksums in `lk2nd/lk2nd-gts3llte.sha256`.
 
+## Preview release (2026-11-02)
+
+`scripts/preview/lk2nd-images.py` builds both models from upstream lk2nd at the commit in
+`scripts/preview/lock.json`, plus `lk2nd/preview-base.patch` (the SM-T820 entry, high-speed-only
+USB and the MUIC switch) and, for the SM-T825, `lk2nd/preview-t825.patch`.
+
+| Image | State |
+|---|---|
+| `lk2nd-gts3lwifi.img` | sha256 `008ae3e9...`, on our SM-T820 since 2026-10-28. A rebuild has the same lk.bin and device trees; only the empty ramdisk's timestamp differs |
+| `lk2nd-gts3llte.img` | New. The SM-T825 entry now has the MUIC switch and high-speed-only USB: the stock SM-T825 device tree has the MUIC on the same bus and address as the SM-T820, and TLMM 32 and 33 aren't reserved. Not run on hardware. The older `lk2nd-gts3llte.img` above has neither |
+
 ## Installed pmOS behind lk2nd (2026-10-28)
 
 The 4 MiB lk2nd image is in the boot partition (mmcblk0p28, 76 MiB) and the
