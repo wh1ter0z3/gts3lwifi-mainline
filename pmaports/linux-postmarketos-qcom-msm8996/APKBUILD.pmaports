@@ -147,6 +147,8 @@ source="
 	0119-extcon-sm5705-cover-with-vbus.patch
 	0120-mfd-stmpe-irq-domain-after-children.patch
 	0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
+	0122-drm-msm-locking-put-iova-spaces.patch
+	0123-drm-msm-shared-vm-keep-mappings-on-close.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -293,4 +295,6 @@ f0e4c91db4c2395adff8e2e4c4f9c2c7e10b3eade605754863f939957a683dbb559d829a15c422f9
 3d648bf9253bd6bb7a6819b965a3d4ee7d5dc676170a79c670624eaf310a00ebb13cf27ba265b14285bc2cc2b0f1c759058cf93f19125c233e787412184085e0  0119-extcon-sm5705-cover-with-vbus.patch
 bbecdbf485ef8d9b4148ee1645319347916a8be06b0ee7596f695c6098ab424191ce782c494dd6c1c2574d5ebd735954757b5880738ee5c79ec96bb6ddee8f72  0120-mfd-stmpe-irq-domain-after-children.patch
 23596e25a689a7e0a4b261ffb79475f8175b6a8b5348cadbdd489ffad47235879ea0c6c9d225269a435cf8280756f206d9faa458bf557c1d47e189550cc25b77  0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
+014236501dbf2fd474e1bfead8bf5f18bc53f8235ae328a126fb12e43cf4a32ec8bf149ec06dfff722f0bfe993aa6b838d7b13d431614b393ffcab1d8bc103c6  0122-drm-msm-locking-put-iova-spaces.patch
+03d8c5d5e0ddcf7e58502a975ba2eca13decf840e25b95a37366fb1899f6fad26dec27e93e9cea9dabfa78cc18569b32714a2f8be8cec47bd896c6bfedcd13ac  0123-drm-msm-shared-vm-keep-mappings-on-close.patch
 "

@@ -59,7 +59,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Video decode / encode (Venus) | Partial | H.264, VP8, VP9 decode; H.264 and HEVC encode, 4K30 HEVC from the camera; HEVC decode fails ([venus](docs/venus.md)) |
 | Cameras (front, rear) | Works | rear 13 MP with autofocus, front 5 MP, through libcamera (`pmaports/libcamera` for AF) ([camera](docs/camera.md)) |
 | **Sensors** | | |
-| Accelerometer, gyroscope, magnetometer | Works | auto-rotate with iio-sensor-proxy ([sensors](docs/sensors.md)) |
+| Accelerometer, gyroscope, magnetometer | Works | auto-rotate with iio-sensor-proxy; KWin rotation fixes in `pmaports/kwin` ([sensors](docs/sensors.md)) |
 | Light sensor | Works | lux through iio-sensor-proxy, for auto-brightness (patch 0077, [sensors](docs/sensors.md)) |
 | Cover (hall) sensor | Not yet | waits for reliable suspend |
 | Fingerprint (Home key) | Blocked | its pins are owned by Samsung's TrustZone |
@@ -71,7 +71,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 ## Layout
 
 - `dts/` - device trees for both models (the SM-T825 one includes the SM-T820 one), plus test variants; the panel temperature channel is still test-only
-- `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage), the kernel patches, and libcamera with autofocus
+- `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage), the kernel patches, libcamera with autofocus, and KWin with rotation fixes
 - `lk2nd/` - lk2nd device entries for the Wi-Fi and LTE models
 - `scripts/` - regenerate the kernel patch, build tester packages
 - `tools/` - on-device debugging aids: MMIO and PMIC (SPMI) register access, manual PCIe link retrain, TLMM pin sampling, RT5508 amplifier probe

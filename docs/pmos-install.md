@@ -13,7 +13,10 @@ SLIMbus controller at boot and 0113 a 5 s timeout when the DSP closes an
 audio stream (docs/audio.md). The keyboard cover joined the
 main DTS on 2026-10-31, and since 2026-11-01 0114-0120 and
 `CONFIG_I2C_HOTPLUG_GPIO=m` hot-plug it, with 0121 for power cycles the
-MUIC misses (docs/input.md); only the panel
+MUIC misses (docs/input.md); 0122-0123 fix GPU faults when a buffer is
+shared between processes, e.g. while the screen rotates (docs/gpu.md).
+`pmaports/kwin` is KWin with two rotation fixes (docs/sensors.md); put it
+in place of pmaports' `extra-repos/systemd/kwin`. Only the panel
 temperature channel (`dts/test/test-display-temp.dts`) is still a test DT.
 The rest of this page records the original install.
 

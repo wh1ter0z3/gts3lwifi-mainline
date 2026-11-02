@@ -65,6 +65,43 @@ cleaner, but the SMGR sensors have no DT nodes of their own.
 If iio-sensor-proxy was installed after the sensors appeared, run
 `udevadm trigger --subsystem-match=iio --action=add` once (or reboot).
 
+### KWin (`pmaports/kwin`)
+
+KWin 6.8.1 rotates the screen from the sensor. Two KWin bugs showed up on
+this tablet; `pmaports/kwin` is postmarketOS's systemd KWin package
+(extra-repos/systemd/kwin, 99996.8.1-r0) with a fix for each (pkgrel 100,
+both fixes are for upstream KWin and not merged yet):
+
+- 0001, snow during the rotation animation: the animation snapshots the old
+  frame with `Scene::paint()`, which takes a region in device pixels, but it
+  is passed the logical geometry. At 175% only the top left 1171x878 of the
+  2048x1536 snapshot was painted; the rest showed whatever the texture
+  memory held (noise, pieces of old frames). Fixed by painting the whole
+  device rect. Checked with scanout buffer dumps during a rotation.
+- 0002, the screen turns on in the wrong orientation: auto-rotate stops
+  listening to the sensor while the screen is off. On wake the new sensor
+  subscription reported "undefined" before iio-sensor-proxy answered, so
+  KWin applied the manual transform (portrait) and rotated back to
+  landscape about a second later: two rotations on every wake. KWin now
+  keeps the last reading until the first real one arrives, and still
+  re-applies that reading once, so a transform changed while the screen
+  was off is corrected. Checked with a webcam on the screen: normal wakes
+  and lock screen wakes stay in landscape; a wake after a manual portrait
+  rotation turns back to landscape right away.
+
+The package also drops the `CAP_SYS_NICE` file capability that KWin's
+install step puts on `kwin_wayland` (for real-time scheduling). On musl, a
+file capability makes the program AT_SECURE, `issetugid()` returns true,
+and libdbus then ignores `DBUS_SESSION_BUS_ADDRESS`: KWin lost the session
+bus (no `org.kde.KWin`, global shortcuts and session management broken).
+postmarketOS's builds don't ship the capability today only because
+fakeroot 1.38.1 loses it. Real-time scheduling without a capability works
+with `RLIMIT_RTPRIO` 1 for KWin, e.g. with systemd drop-ins:
+`LimitRTPRIO=0:1` for `user@.service` and `LimitRTPRIO=1` for the user
+unit `plasma-kwin_wayland.service`. KWin then puts its main, DRM commit and
+libinput threads at SCHED_RR priority 1 by itself. That isn't part of the
+device package.
+
 ## Light sensor
 
 SMGR lists the CM3323 under the proximity/light sensor ID (0x28) with a

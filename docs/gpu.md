@@ -37,6 +37,32 @@ On a Tab S3 with no panel attached, booted from RAM with
 - `msm` is a module; load it with `modprobe msm` (nothing autoloads it
   without the display).
 
+## Faults when buffers are shared between processes (fixed, 0122-0123)
+
+Under Plasma, rotating the screen gave bursts of GPU faults
+(`*** gpu fault: ... dir=READ type=TRANSLATION`), most often with the lock
+screen up. A run of 8 rotations caught 1822 faults, in 7 bursts.
+
+The A5xx has no per-process page tables, so every DRM file shares one GPU
+address space (`gpu->vm`). Since v6.17 (111fdd2198e6, "drm/msm: drm_gpuvm
+conversion"), `msm_gem_close()` unmaps a buffer from that shared VM as soon
+as any one process closes its handle. A dma-buf imported by another
+process keeps the old address, and the next allocation reuses it. Kprobes
+on `msm_gem_vma_unmap` and the fault handler showed every burst hitting a
+14.7 MB buffer that `kscreenlocker_greeter` had unmapped ("close") 0-33 ms
+earlier, while the GPU ran a KWin submit that still sampled it.
+
+Dmitry Baryshkov's series "drm/msm: fix dma-buf sharing on targets without
+per-process pgtables" (v1, 2026-08-22, not merged yet; its 2/2 names
+A530/MSM8996) moves the teardown on shared VMs to the last reference drop.
+Patches 0122-0123 carry it. v6.19 lacks 00dfa76bdfc2 ("drm/msm: Allow lazy
+VM creation to fail"), so 0123 sets `vm_shared` on the plain `gpu->vm`
+fallback (noted in the patch).
+
+Tested on the tablet: the same 8 rotations gave 0 faults without the lock
+screen (929 submits) and with it (905 submits); four later runs also had 0.
+No GPU hangs or recoveries.
+
 ## Next
 
 - Move the GPU nodes into the main DTS once the regulator choice is settled
