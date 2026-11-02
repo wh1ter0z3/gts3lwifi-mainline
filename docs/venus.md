@@ -39,6 +39,8 @@ Open:
 - **HEVC decoding:** the firmware never reports the stream resolution, so
   GStreamer fails to negotiate ("Video device returned invalid dimensions").
   Seen with libx265 Main profile streams at 720p and 1080p.
+  Works on Linux 7.3.1 (a 1080p clip matches a software decode), commit not
+  identified: see [kernel-7.3](kernel-7.3.md).
 - ~~**Encoding through GStreamer (`v4l2h264enc`):** the firmware stops with
   `Err_Fatal ... venus\utils\src\vbuffer.c:1219` after about 5 frames.~~
   Fixed by patch 0099 (above).

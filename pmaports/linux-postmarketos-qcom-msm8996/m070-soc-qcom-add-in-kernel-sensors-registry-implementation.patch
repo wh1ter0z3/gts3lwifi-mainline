@@ -78,7 +78,7 @@ index 658b65b12b..8ac8050ce1 100644
  obj-$(CONFIG_QCOM_SMEM_STATE) += smem_state.o
 diff --git a/drivers/soc/qcom/qcom_sns_reg.c b/drivers/soc/qcom/qcom_sns_reg.c
 new file mode 100644
-index 0000000000..ba12076321
+index 0000000000..eb23b25397
 --- /dev/null
 +++ b/drivers/soc/qcom/qcom_sns_reg.c
 @@ -0,0 +1,601 @@
@@ -120,7 +120,7 @@ index 0000000000..ba12076321
 +struct sns_reg_group_resp {
 +	unsigned short result;
 +	unsigned short id;
-+	unsigned short data_len;
++	u32 data_len;
 +	unsigned char data[SNS_REG_GROUP_DATA_MAX_LEN];
 +};
 +

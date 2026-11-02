@@ -38,6 +38,11 @@ from `mdp5_pipe_release`. After resume the plane runs on a pipe the MDP5 global 
 calls free, so disabling it again fails. With the patch, four 20 s cycles in a row
 all sleep and resume, and Wi-Fi and Bluetooth still work (SM-T820, 2026-11-02).
 
+## Linux 7.3
+
+Patch 0037 is not enough on 7.3: mainline now cuts vddpe-3v3 during suspend, so
+patch 0147 keeps the link up. See [kernel-7.3](kernel-7.3.md).
+
 ## Not yet looked at
 
 - During the 20 s suspends without Wi-Fi, the RPM sleep counters

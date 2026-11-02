@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 02:24:33 -0700
+Subject: [PATCH] PCI: qcom: Keep the link up across system suspend on MSM8996
+
+Since commit 2cc0e7454c ("PCI: qcom: Add D3cold support"), system suspend
+powers down the host and vddpe-3v3 whenever the endpoint is in D3hot.
+
+MSM8996 boards feed the whole endpoint from that supply. On the Galaxy Tab
+S3 it is WLAN_EN of a QCA6174, and it pulls in the chip's 3.3 V rail, which
+the Bluetooth half needs too. The link does not come back on resume, and
+Wi-Fi is gone until the next boot:
+
+  qcom-pcie 600000.pcie: Device not found
+  ath10k_pci 0000:01:00.0: Unable to change power state from D3hot to D0, device inaccessible
+
+Holding BT_EN low across the suspend does not help. Why the link fails to
+train is not understood.
+
+Before that commit the driver kept the host up while the link was up. Do
+that again on this controller by skipping the D3cold sequence while a device
+is attached, so the endpoint stays powered in D3hot.
+
+Fixes: 2cc0e7454c ("PCI: qcom: Add D3cold support")
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/pci/controller/dwc/pcie-qcom.c | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/pci/controller/dwc/pcie-qcom.c b/drivers/pci/controller/dwc/pcie-qcom.c
+index b58a607b71..e0d45cb924 100644
+--- a/drivers/pci/controller/dwc/pcie-qcom.c
++++ b/drivers/pci/controller/dwc/pcie-qcom.c
+@@ -281,6 +281,7 @@ struct qcom_pcie_cfg {
+ 	bool override_no_snoop;
+ 	bool firmware_managed;
+ 	bool no_l0s;
++	bool no_d3cold;
+ };
+ 
+ struct qcom_pcie_perst {
+@@ -1612,6 +1613,7 @@ static const struct qcom_pcie_cfg cfg_2_1_0 = {
+ static const struct qcom_pcie_cfg cfg_2_3_2 = {
+ 	.ops = &ops_2_3_2,
+ 	.no_l0s = true,
++	.no_d3cold = true,
+ };
+ 
+ static const struct qcom_pcie_cfg cfg_2_3_3 = {
+@@ -2346,9 +2348,16 @@ static int qcom_pcie_suspend_noirq(struct device *dev)
+ 	if (!pcie)
+ 		return 0;
+ 
+-	ret = dw_pcie_suspend_noirq(pcie->pci);
+-	if (ret)
+-		return ret;
++	/*
++	 * MSM8996 boards power the whole endpoint from vddpe-3v3, often a
++	 * Wi-Fi/Bluetooth combo chip. Cutting it takes Bluetooth down too, and
++	 * on the Galaxy Tab S3 the link does not train again on resume.
++	 */
++	if (!pcie->cfg->no_d3cold || !dw_pcie_link_up(pcie->pci)) {
++		ret = dw_pcie_suspend_noirq(pcie->pci);
++		if (ret)
++			return ret;
++	}
+ 
+ 	if (pcie->pci->suspended) {
+ 		ret = icc_disable(pcie->icc_mem);

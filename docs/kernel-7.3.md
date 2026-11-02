@@ -8,14 +8,15 @@ the base is the kernel.org tarball and we carry their patches ourselves.
 
 Merge this after everything else in flight. The branch is stacked on `gps` and
 `sensors`, neither merged yet. Whatever lands on main first has to be redone on
-top of this: add the patch, then regenerate it with the steps below.
+top of this: add the patch, then regenerate it with the steps below. The exception
+is `mdp5-resume`: its patch 0148 is already here.
 
 ## Patches
 
 | Files | What | Count |
 |---|---|---|
 | `m001`-`m071` | msm8996-mainline's commits on `v6.19.5`, rebased | 70 |
-| `0001`-`0145` | ours, numbers unchanged, with gaps where a patch dropped | 109 |
+| `0001`-`0148` | ours, numbers unchanged, with gaps where a patch dropped | 112 |
 
 To regenerate: `git format-patch` each commit of a branch on `v7.3.1`. The
 order is the order in `APKBUILD.pmaports`. To move to a newer stable, rebase
@@ -63,6 +64,26 @@ that branch, then update `pkgver`, the checksums and the config.
 - **msm8996 haptics binding:** now `qcom,pmi8998-haptics.yaml`, because mainline
   took `qcom,spmi-haptics.yaml` for a different block (HAP530).
 - **`qcom-smbchg`:** the AICL warning printed an uninitialized variable.
+- **`qcom_smgr`, `qcom_sns_reg`:** `QMI_DATA_LEN` fields are `u32` now (mainline
+  fe099c387e), so the length fields changed type. Without this, QMI encoding fails
+  and the sensors never appear.
+- **Board DT:** `cdc_reset_active` drops `bias-pull-down`, because mainline's pin
+  state now sets a bias of its own and two are rejected. The pin is driven high.
+
+## New patches
+
+None of these are in 7.4-rc1.
+
+- **0146 `net: qrtr`:** since mainline 544d85de4d, a packet other than HELLO fails
+  until our HELLO has gone out. If the remote's HELLO gets to the name server first,
+  the service announcement is lost, and the modem crashes about 40 s later.
+- **0147 `PCI: qcom`:** since mainline 2cc0e7454c, suspend cuts vddpe-3v3, which on
+  this board is the Wi-Fi chip's power. The link never returned, and Wi-Fi stayed
+  dead until reboot. This keeps the link up during suspend, as 6.19 did. Why it
+  doesn't retrain is unknown: holding BT_EN low doesn't help.
+- **0148 `drm/msm/mdp5`:** not caused by 7.3, 6.19 has the same bug. The second
+  suspend after a boot failed at `prepare`. See [suspend](suspend.md) and the fork
+  branch `mdp5-resume`, which carries it for 6.19.
 
 ## Config
 
@@ -80,6 +101,46 @@ The compiled T820 and T825 trees match r10 except for a new disabled SPI node
 
 ## Test status
 
-Builds with `pmbootstrap build` (7.3.1-r0), no new warnings. Both device trees
-compile. **Not booted yet**: the tablet was asleep when this was pushed. Nobody has
-run it on an SM-T825.
+SM-T820, 2026-11-02, on a package built with `pmbootstrap build`. Nobody has booted
+it on an SM-T825: only its device tree is compile-tested.
+
+| Check | Result |
+|---|---|
+| Install | `apk add` runs `boot-deploy`, the image boots normally, and `apk add` of r10 goes back |
+| Boots with 0146 | 13 of 13 clean: no announce failures or modem crashes. Without it, a crash on 2 of 4 |
+| Suspend, 20 s by RTC | 4 of 4 in a row, as RAM boot and as installed. Wi-Fi passes traffic after, Bluetooth stays powered |
+| Sensors | accelerometer, gyroscope, magnetometer, light, ADC; orientation reads normal |
+| GNSS | session starts and stops; no fix indoors, same as 6.19 |
+| Venus decode | H.264 and HEVC both match a software decode |
+| Cameras | both capture |
+| Audio | capture and muted playback through the DSP, no errors. **Not heard yet** |
+| KWin, modem, ADSP, SLPI, USB gadget | running |
+
+Sensors, GNSS and cameras ran on the build before 0147 and 0148, which don't touch them.
+
+**Needs a person:** the picture on the panel, rotation, touch, pen, and speakers by
+ear. Nobody has checked these on 7.3.1 by looking at the tablet.
+
+### Worse than 6.19, or maybe
+
+From the journal, 33 boots of 6.19.5 and 17 of 7.3.1:
+
+| | 6.19.5 | 7.3.1 | Fisher p |
+|---|---|---|---|
+| `pclk0_clk_src: rcg didn't update its configuration` | 12 | 12 | 0.036 |
+| Bluetooth `Opcode 0x0c03 failed: -110` | 2 | 4 | 0.16 |
+
+The clock warning looks like a real increase. The DSI clocks still end up at the
+right rates, but nobody has looked at the panel on such a boot. The cause is unknown.
+
+The Bluetooth timeout comes at the end of the second setup during boot, with the same
+timeline on both kernels, so it isn't new. These numbers can't say whether it got more
+frequent. That boot has no controller, and rfkill or restarting `bluetooth` doesn't
+help. `rmmod hci_uart; modprobe hci_uart` brings it back. 15 of those re-probes in a
+row never hit the timeout, so it seems to take the load of a boot to trigger it.
+
+### Better than 6.19
+
+HEVC decode works. The same 1080p clip hangs on r10 until the test's 90 s timeout
+(`docs/venus.md`) and matches a software decode here. We haven't looked for the
+commit that fixed it.

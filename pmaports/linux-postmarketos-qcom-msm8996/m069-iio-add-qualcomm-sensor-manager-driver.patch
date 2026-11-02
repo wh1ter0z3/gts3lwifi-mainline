@@ -18,10 +18,10 @@ Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
  drivers/iio/common/qcom_smgr/Makefile         |   8 +
  drivers/iio/common/qcom_smgr/qcom_smgr.c      | 839 ++++++++++++++++++
  drivers/iio/common/qcom_smgr/qmi/Makefile     |   3 +
- .../iio/common/qcom_smgr/qmi/qmi_sns_smgr.c   | 713 +++++++++++++++
+ .../iio/common/qcom_smgr/qmi/qmi_sns_smgr.c   | 699 +++++++++++++++
  .../iio/common/qcom_smgr/qmi/qmi_sns_smgr.h   | 161 ++++
  include/linux/iio/common/qcom_smgr.h          |  80 ++
- 11 files changed, 1973 insertions(+)
+ 11 files changed, 1959 insertions(+)
  create mode 100644 drivers/iio/accel/qcom_smgr_accel.c
  create mode 100644 drivers/iio/common/qcom_smgr/Kconfig
  create mode 100644 drivers/iio/common/qcom_smgr/Makefile
@@ -1113,10 +1113,10 @@ index 0000000000..e69208db49
 +obj-$(CONFIG_IIO_QCOM_SMGR)	+= qmi_sns_smgr.o
 diff --git a/drivers/iio/common/qcom_smgr/qmi/qmi_sns_smgr.c b/drivers/iio/common/qcom_smgr/qmi/qmi_sns_smgr.c
 new file mode 100644
-index 0000000000..1b58e26628
+index 0000000000..dee74b8cff
 --- /dev/null
 +++ b/drivers/iio/common/qcom_smgr/qmi/qmi_sns_smgr.c
-@@ -0,0 +1,713 @@
+@@ -0,0 +1,699 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * QMI element info arrays and helper functions for Qualcomm Sensor Manager
@@ -1142,8 +1142,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size =
-+			sizeof_field(struct sns_smgr_all_sensor_info, type_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.offset = offsetof(struct sns_smgr_all_sensor_info, type_len),
 +	},
@@ -1173,8 +1172,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(struct sns_smgr_all_sensor_info_resp,
-+					  item_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.tlv_type = 0x03,
 +		.offset = offsetof(struct sns_smgr_all_sensor_info_resp,
@@ -1236,8 +1234,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(
-+			struct sns_smgr_single_sensor_info_data_type, name_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.offset = offsetof(struct sns_smgr_single_sensor_info_data_type,
 +				   name_len),
@@ -1253,9 +1250,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(
-+			struct sns_smgr_single_sensor_info_data_type,
-+			vendor_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.offset = offsetof(struct sns_smgr_single_sensor_info_data_type,
 +				   vendor_len),
@@ -1334,8 +1329,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(
-+			struct sns_smgr_single_sensor_info_native_sample_rates, rate_count),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.offset = offsetof(struct sns_smgr_single_sensor_info_native_sample_rates,
 +				   rate_count),
@@ -1367,8 +1361,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(
-+			struct sns_smgr_single_sensor_info_resp, data_type_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.tlv_type = 0x03,
 +		.offset = offsetof(struct sns_smgr_single_sensor_info_resp,
@@ -1388,8 +1381,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(
-+			struct sns_smgr_single_sensor_info_resp, data1_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.tlv_type = 0x10,
 +		.offset = offsetof(struct sns_smgr_single_sensor_info_resp,
@@ -1417,8 +1409,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(
-+			struct sns_smgr_single_sensor_info_resp, data3_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.tlv_type = 0x12,
 +		.offset = offsetof(struct sns_smgr_single_sensor_info_resp,
@@ -1436,9 +1427,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(
-+			struct sns_smgr_single_sensor_info_resp,
-+			native_sample_rates_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.tlv_type = 0x13,
 +		.offset = offsetof(struct sns_smgr_single_sensor_info_resp,
@@ -1458,8 +1447,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(
-+			struct sns_smgr_single_sensor_info_resp, data5_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.tlv_type = 0x14,
 +		.offset = offsetof(struct sns_smgr_single_sensor_info_resp,
@@ -1588,8 +1576,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size =
-+			sizeof_field(struct sns_smgr_buffering_req, item_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.tlv_type = 0x04,
 +		.offset = offsetof(struct sns_smgr_buffering_req, item_len),
@@ -1773,8 +1760,7 @@ index 0000000000..1b58e26628
 +	{
 +		.data_type = QMI_DATA_LEN,
 +		.elem_len = 1,
-+		.elem_size = sizeof_field(struct sns_smgr_buffering_report_ind,
-+					  samples_len),
++		.elem_size = sizeof(u8),
 +		.array_type = NO_ARRAY,
 +		.tlv_type = 0x03,
 +		.offset = offsetof(struct sns_smgr_buffering_report_ind,
@@ -1832,7 +1818,7 @@ index 0000000000..1b58e26628
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/iio/common/qcom_smgr/qmi/qmi_sns_smgr.h b/drivers/iio/common/qcom_smgr/qmi/qmi_sns_smgr.h
 new file mode 100644
-index 0000000000..5d0d622b93
+index 0000000000..04bd66afd5
 --- /dev/null
 +++ b/drivers/iio/common/qcom_smgr/qmi/qmi_sns_smgr.h
 @@ -0,0 +1,161 @@
@@ -1882,13 +1868,13 @@ index 0000000000..5d0d622b93
 +
 +struct sns_smgr_all_sensor_info {
 +	u8 id;
-+	u8 type_len;
++	u32 type_len;
 +	char type[SNS_SMGR_SENSOR_TYPE_MAX_LEN];
 +};
 +
 +struct sns_smgr_all_sensor_info_resp {
 +	u16 result;
-+	u8 item_len;
++	u32 item_len;
 +	struct sns_smgr_all_sensor_info items[SNS_SMGR_ALL_SENSOR_INFO_MAX_LEN];
 +};
 +
@@ -1899,9 +1885,9 @@ index 0000000000..5d0d622b93
 +struct sns_smgr_single_sensor_info_data_type {
 +	u8 sensor_id;
 +	u8 data_type;
-+	u8 name_len;
++	u32 name_len;
 +	char name[0xff];
-+	u8 vendor_len;
++	u32 vendor_len;
 +	char vendor[0xff];
 +	/*
 +	 * Might be separate u8 or u16 fields, but taken as a u32 it is seen
@@ -1916,23 +1902,23 @@ index 0000000000..5d0d622b93
 +};
 +
 +struct sns_smgr_single_sensor_info_native_sample_rates {
-+	u8 rate_count;
++	u32 rate_count;
 +	u16 rates[SNS_SMGR_NATIVE_SAMPLE_RATES_MAX_LEN];
 +};
 +
 +struct sns_smgr_single_sensor_info_resp {
 +	u16 result;
-+	u8 data_type_len;
++	u32 data_type_len;
 +	struct sns_smgr_single_sensor_info_data_type data_types[SNS_SMGR_DATA_TYPE_COUNT];
-+	u8 data1_len;
++	u32 data1_len;
 +	u32 data1[SNS_SMGR_DATA_TYPE_COUNT];
 +	u32 data2;
-+	u8 data3_len;
++	u32 data3_len;
 +	u64 data3[SNS_SMGR_DATA_TYPE_COUNT];
-+	u8 native_sample_rates_len;
++	u32 native_sample_rates_len;
 +	struct sns_smgr_single_sensor_info_native_sample_rates
 +		native_sample_rates[SNS_SMGR_DATA_TYPE_COUNT];
-+	u8 data5_len;
++	u32 data5_len;
 +	u32 data5[SNS_SMGR_DATA_TYPE_COUNT];
 +};
 +
@@ -1953,7 +1939,7 @@ index 0000000000..5d0d622b93
 +	u8 report_id;
 +	u8 action;
 +	u32 report_rate;
-+	u8 item_len;
++	u32 item_len;
 +	struct sns_smgr_buffering_req_item items[SNS_SMGR_DATA_TYPE_COUNT];
 +	u8 notify_suspend_valid;
 +	struct sns_smgr_buffering_req_notify_suspend notify_suspend;
@@ -1982,7 +1968,7 @@ index 0000000000..5d0d622b93
 +struct sns_smgr_buffering_report_ind {
 +	u8 report_id;
 +	struct sns_smgr_buffering_report_metadata metadata;
-+	u8 samples_len;
++	u32 samples_len;
 +	struct sns_smgr_buffering_report_sample samples[SNS_SMGR_SAMPLES_MAX_LEN];
 +	u8 val2;
 +};

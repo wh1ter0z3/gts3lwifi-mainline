@@ -1953,6 +1953,7 @@
 		pins = "gpio74";
 		function = "gpio";
 		drive-strength = <16>;
+		/delete-property/ bias-pull-down;
 		bias-disable;
 		output-high;
 	};

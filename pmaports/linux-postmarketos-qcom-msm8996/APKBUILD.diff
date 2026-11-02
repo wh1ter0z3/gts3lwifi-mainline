@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..2f022b1e26 100644
+index 601fa9f44e..ba69c3ff06 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -17,7 +17,7 @@ index 601fa9f44e..2f022b1e26 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,12 +28,190 @@ makedepends="
+@@ -28,12 +28,193 @@ makedepends="
  "
  
  # Source
@@ -205,13 +205,16 @@ index 601fa9f44e..2f022b1e26 100644
 +	0143-iio-qcom-smgr-sampling-frequency.patch
 +	0144-iio-qcom-smgr-soft-timestamp-channel.patch
 +	0145-iio-qcom-smgr-gyro-magn-mount-matrix.patch
++	0146-net-qrtr-send-pending-hello-first.patch
++	0147-pci-qcom-keep-link-up-across-suspend-msm8996.patch
++	0148-drm-msm-mdp5-assign-pipes-on-resume.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
  
  prepare() {
  	default_prepare
-@@ -61,6 +239,185 @@ package() {
+@@ -61,6 +242,188 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -286,10 +289,10 @@ index 601fa9f44e..2f022b1e26 100644
 +6d0ec60d3d7c842787ef214c4d001cf857218b6ec221e34f159ddd825705ddfdd7fd9948bda76a64a0417c644fd7e6c02cd9c34118ef14da229020a8684b042d  m066-net-qrtr-smd-rename-qdev-to-qsdev.patch
 +637e04673af8d6bdc626375623f8cbd4aee2334c20a25391c7167b1daa9cca586444b41eac0fc92d0ba840bba4cc8ca879cf2b227df4c330e59972fb2791c849  m067-net-qrtr-turn-qrtr-into-a-bus.patch
 +f352ba7a9fd210eee00133f56785eec5786ad37f28bf8b145b6396da2d2b66f44de6669fbbfc923594301fc2496610b33fa4437544a6b23a830f9ba33c49155e  m068-net-qrtr-define-macro-to-convert-qmi-version-and-instance-to.patch
-+45df04aaea6e07c17033dfd1c041c1afc26ae8325c92c1e3e93a60af050cb4d921e8fef26b7966a87d62df1e45373e7396ec4ca1a15c041e7b9d65efda52ba8c  m069-iio-add-qualcomm-sensor-manager-driver.patch
-+0049a15f8262a8b821de4cfedffee8578f1dba7f58ea359eb0be92c5b73ce6c657ff9949885f3e9026c3cc6eec58bd5ed04ca4ed3465067dec0ecddb5f839eee  m070-soc-qcom-add-in-kernel-sensors-registry-implementation.patch
++55728038f8518d35b8f191f8c61c465931bebfee629dc46a67c7a32cdbb9c030aaf22928ecc7f3e2f51dc8bee3969448f9615e32b690311c9355d0c3205b51dc  m069-iio-add-qualcomm-sensor-manager-driver.patch
++99c812263fdd1459c1f8ade474d0f67d2674c7a4840b271eeeac7624a6994fc0a374ad9ed8e927f6e733cf415a4f9857b8f0db1f724c37968e5892c65b063ca7  m070-soc-qcom-add-in-kernel-sensors-registry-implementation.patch
 +cbb3e21bb9d760e1a79563215465be1a1f0608ba42745d412f27b6397e11363ca52067e1b471adc992edacd58befd99443894d75437867f8cbcdb7580f18d481  m071-remoteproc-qcom-enable-in-kernel-sns-reg.patch
-+177b1c0eff8d71e6d906af5a1191dd6bf570f6534c6b30e722e423e54b51b0168a0fb6362d001c0819f99dba08bcdd4826bfe07235eb064575fe073531dcc584  0001-add-samsung-gts3lwifi-dts.patch
++7d50d2cdafd1964f7f8d024465249fb5f512de01d89cc6c76ff703af586867439c7c30992974462b397c724ce65bb8e805a6a12050c0f66dc74733761edb6ab0  0001-add-samsung-gts3lwifi-dts.patch
 +964a367bc0e25ed4bcc414d7a184e519169796cc91de2b2a8838cf505ee006e7f6d84db89ed298ecbab99be2fcd9060deaed840be574ccfb08f6be0dc001a1d5  0002-drm-panel-add-samsung-ams968hh01.patch
 +22818c232f0be8233a0550e4a470295c1c99969ed089610603033d0409e310461b5a719e5ca6f9eb338a877ab8fe691d345de2d93d5daceebcb3689449f64731  0003-drm-msm-mdp5-split-display-bonded-dsi.patch
 +4521cbc37842219bedae736850e6199892dfe92fdf7f7e516c17cc12dc951835aba20a973db673d0a20205f416d4fa3d44c18bd87f0807df4a833427d3cc8986  0004-drm-msm-dpu-msm8996-split-display-ctls.patch
@@ -398,4 +401,7 @@ index 601fa9f44e..2f022b1e26 100644
 +bb0abd7b92c2a0886067de748ced85695c1af721f5765905556eb3a3d4e37f10b5b6f3dc6abf51808d9c87c433efae4017d6a4253482944887ed0062065c9691  0143-iio-qcom-smgr-sampling-frequency.patch
 +107b09c18916d581caade3195cb9822251027e29f9b32670f1448eb66da2e6611dc4a8aca7c55b58e84a34c18da7c0329da3cb796f380da6ef2066ddaf2d46b4  0144-iio-qcom-smgr-soft-timestamp-channel.patch
 +0bab4727cb5cbcf9498aca5b1f22d42c68ffabbae951f36b8881047dc73e6bd76cca30f4ec07fea3693857fd79307ceae5a864c739a2b723bafb067ff9e880b6  0145-iio-qcom-smgr-gyro-magn-mount-matrix.patch
++218b7f1427a252c56544ca238e4a5eb32138f8074f149f10dd05c729700cdacb2b791b72873ca09140c627f493764d6f5c9b204b4e6e979fe61802a7910b77fe  0146-net-qrtr-send-pending-hello-first.patch
++d3f63e62acf02212316637b61c4387562a7d34cc7b00e7622c46798cb768399d47e5635d39ec6d160b65cd966c7a23ca15d6353d0dc478e936cd254b4fd06d9c  0147-pci-qcom-keep-link-up-across-suspend-msm8996.patch
++cb711e5336e88d23c37a440c233a148f48eda00fb88f6076c3514d2b15bd577ecf266df050d5a4cacb958324fc6dff1ca638447b4c2e7967b4812e51a13d9fbd  0148-drm-msm-mdp5-assign-pipes-on-resume.patch
  "

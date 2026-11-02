@@ -26,7 +26,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 8 insertions(+)
 
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
-index adb4d1d50807..45e29409da9b 100644
+index 0341f56237..cab8e1e6b2 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_plane.c
 @@ -240,6 +240,14 @@ static int mdp5_plane_atomic_check_with_state(struct drm_crtc_state *crtc_state,
