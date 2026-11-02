@@ -1,0 +1,104 @@
+From 07a6ecdeae084326ee85b5632092c0418487a20a Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Mon, 2 Nov 2026 16:35:27 +0530
+Subject: [PATCH 4/5] irqchip: qcom-mpm: ack the doorbell, program the wakeup
+ timer
+
+The APCS doorbell has no TX-done interrupt: acknowledge each message (as qcom_smd does), or every later one stays queued, the queue overflows and the system domain power-off fails.
+
+Write the wakeup time into the two words before the vMPM registers, as downstream mpm-of.c does: the arch counter value of the system domain's next timer event (from the child domain's governor data), ~0 in suspend to idle. WIP: the tablet still gets stuck in plain idle without PCIe (see wip/suspend/NOTES.md).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/irqchip/irq-qcom-mpm.c | 48 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 48 insertions(+)
+
+diff --git a/drivers/irqchip/irq-qcom-mpm.c b/drivers/irqchip/irq-qcom-mpm.c
+index 83f31ea65..afce55360 100644
+--- a/drivers/irqchip/irq-qcom-mpm.c
++++ b/drivers/irqchip/irq-qcom-mpm.c
+@@ -19,6 +19,8 @@
+ #include <linux/platform_device.h>
+ #include <linux/pm_domain.h>
+ #include <linux/slab.h>
++#include <linux/suspend.h>
++#include <clocksource/arm_arch_timer.h>
+ #include <linux/soc/qcom/irq.h>
+ #include <linux/spinlock.h>
+ 
+@@ -292,12 +294,50 @@ static irqreturn_t qcom_mpm_handler(int irq, void *dev_id)
+ 	return ret;
+ }
+ 
++/*
++ * The two words in front of the vMPM registers hold the wakeup time: the
++ * arch counter value at which the RPM has to bring the AP back from XO
++ * shutdown / VDD minimization. The CPU timers stop there, so without it a
++ * deep idle never ends. Downstream (mpm-of.c) writes the next timer event,
++ * or ~0 for none; take it from the child domains' governor (the system
++ * domain of the CPUs). In suspend to idle only the wakeup interrupts count.
++ */
++static u64 mpm_next_wakeup(struct generic_pm_domain *genpd)
++{
++	ktime_t next = KTIME_MAX, now;
++	struct gpd_link *link;
++
++	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
++		return U64_MAX;
++
++	list_for_each_entry(link, &genpd->parent_links, parent_node) {
++		struct generic_pm_domain *child = link->child;
++
++		if (child->gd && ktime_before(child->gd->next_hrtimer, next))
++			next = child->gd->next_hrtimer;
++	}
++	if (next == KTIME_MAX)
++		return U64_MAX;
++
++	now = ktime_get();
++	if (!ktime_after(next, now))
++		return arch_timer_read_counter();
++
++	return arch_timer_read_counter() +
++	       mul_u64_u32_div(ktime_to_ns(ktime_sub(next, now)),
++			       arch_timer_get_rate(), NSEC_PER_SEC);
++}
++
+ static int mpm_pd_power_off(struct generic_pm_domain *genpd)
+ {
+ 	struct qcom_mpm_priv *priv = container_of(genpd, struct qcom_mpm_priv,
+ 						  genpd);
++	u64 wakeup = mpm_next_wakeup(genpd);
+ 	int i, ret;
+ 
++	writel_relaxed(lower_32_bits(wakeup), priv->base);
++	writel_relaxed(upper_32_bits(wakeup), priv->base + 4);
++
+ 	for (i = 0; i < priv->reg_stride; i++)
+ 		qcom_mpm_write(priv, MPM_REG_STATUS, i, 0);
+ 
+@@ -306,6 +346,13 @@ static int mpm_pd_power_off(struct generic_pm_domain *genpd)
+ 	if (ret < 0)
+ 		return ret;
+ 
++	/*
++	 * The APCS doorbell has no TX-done interrupt: acknowledge the message
++	 * here, as qcom_smd does, or every later one stays queued and the
++	 * queue overflows (-ENOBUFS), failing the domain power-off.
++	 */
++	mbox_client_txdone(priv->mbox_chan, 0);
++
+ 	return 0;
+ }
+ 
+@@ -434,6 +481,7 @@ static int qcom_mpm_probe(struct platform_device *pdev, struct device_node *pare
+ 	}
+ 
+ 	priv->mbox_client.dev = dev;
++	priv->mbox_client.knows_txdone = true;
+ 	priv->mbox_chan = mbox_request_channel(&priv->mbox_client, 0);
+ 	if (IS_ERR(priv->mbox_chan)) {
+ 		ret = PTR_ERR(priv->mbox_chan);
+-- 
+2.53.0
+

@@ -1,0 +1,73 @@
+From 801c98538fddd45e363ce5e61944e0cecb043ccf Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sun, 1 Nov 2026 20:03:59 +0530
+Subject: [PATCH 1/5] firmware: psci: save the context for MSM8996 L2 power
+ collapse
+
+The MSM8996 PSCI firmware (Samsung Galaxy Tab S3) runs in OS-initiated
+mode with the extended StateID format, and composes StateIDs the
+downstream lpm-levels way: CPU mode in bits 3:0, L2 mode in 7:4, system
+mode in 15:8, affinity level at 24. It refuses the power-down bit for the
+CPU alone (0x40000004, NOT_SUPPORTED) and answers DENIED to L2 power
+collapse with it (0x41000044) while the other CPU of the cluster asked for
+its mode 4 without it. Downstream never sets the bit: L2 power collapse
+is 0x01000044 and system power collapse 0x02003444, always entered with
+the context saved and cpu_resume as the entry point.
+
+Treat StateIDs with the L2 in mode 4 as losing context on msm8996/apq8096,
+so that cpuidle-psci saves the context and passes the resume address for
+them. If the firmware returns instead of powering down, cpu_suspend()
+reports an error and the state counts as rejected.
+
+With cluster (0x01000044) and system (0x02003444) power collapse added as
+domain idle states, the Tab S3's idle floor drops from 133 to 88 mA at
+4.3 V (Wi-Fi connected), and s2idle suspends and resumes as before.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/firmware/psci/psci.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/firmware/psci/psci.c b/drivers/firmware/psci/psci.c
+index 38ca190d4..a805191c0 100644
+--- a/drivers/firmware/psci/psci.c
++++ b/drivers/firmware/psci/psci.c
+@@ -91,12 +91,24 @@ bool psci_has_osi_support(void)
+ 	return psci_cpu_suspend_feature & PSCI_1_0_OS_INITIATED;
+ }
+ 
++/*
++ * MSM8996: the firmware takes Qualcomm's L2 mode 4 (power collapse, StateID
++ * bits 7:4) without the power-down bit, and answers DENIED to the bit while
++ * the cluster's other CPU asked for its own mode 4 without it. Downstream
++ * never sets the bit and always saves the context and passes the resume
++ * address; do the same for these states.
++ */
++static bool psci_qcom_l2_pc_quirk;
++
+ static inline bool psci_power_state_loses_context(u32 state)
+ {
+ 	const u32 mask = psci_has_ext_power_state() ?
+ 					PSCI_1_0_EXT_POWER_STATE_TYPE_MASK :
+ 					PSCI_0_2_POWER_STATE_TYPE_MASK;
+ 
++	if (psci_qcom_l2_pc_quirk && ((state >> 4) & 0xf) == 4)
++		return true;
++
+ 	return state & mask;
+ }
+ 
+@@ -588,6 +600,9 @@ static void __init psci_init_cpu_suspend(void)
+ 
+ 	if (feature != PSCI_RET_NOT_SUPPORTED)
+ 		psci_cpu_suspend_feature = feature;
++
++	psci_qcom_l2_pc_quirk = of_machine_is_compatible("qcom,msm8996") ||
++				of_machine_is_compatible("qcom,apq8096");
+ }
+ 
+ /*
+-- 
+2.53.0
+

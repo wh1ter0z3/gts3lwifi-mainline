@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "test-mpm.dts"
+
+/* Test: as test-mpm.dts, without Wi-Fi's PCIe link (it holds XO on) */
+
+&pcie0 {
+	status = "disabled";
+};
+
+&pcie_phy {
+	status = "disabled";
+};

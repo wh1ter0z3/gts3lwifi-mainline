@@ -1,0 +1,29 @@
+From 85422f4a643d0c0e2e1e6cc61baacd51a1fb69af Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Mon, 2 Nov 2026 16:35:27 +0530
+Subject: [PATCH 3/5] cpuidle: psci: init after the deferred probes
+
+The CPU PM domains can wait for a parent domain (the vMPM on MSM8996) and a faux device cannot defer its probe, so run psci_idle_init at late_initcall_sync. Without this, cpuidle-psci gives up at device_initcall and the CPUs only use WFI.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/cpuidle/cpuidle-psci.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/cpuidle/cpuidle-psci.c b/drivers/cpuidle/cpuidle-psci.c
+index dcf20ea5e..377a12f52 100644
+--- a/drivers/cpuidle/cpuidle-psci.c
++++ b/drivers/cpuidle/cpuidle-psci.c
+@@ -489,4 +489,8 @@ static int __init psci_idle_init(void)
+ 
+ 	return 0;
+ }
+-device_initcall(psci_idle_init);
++/*
++ * After the deferred probes: the CPU PM domains can wait for a parent domain
++ * (the MPM on MSM8996), and a faux device cannot defer its probe.
++ */
++late_initcall_sync(psci_idle_init);
+-- 
+2.53.0
+

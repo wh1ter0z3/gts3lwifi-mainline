@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "test-energy.dts"
+
+/*
+ * Test: suspend and energy-aware scheduling on the panel-less development
+ * tablet: the energy model from test-energy.dts with the display off as in
+ * test-headless.dts (boot with msm.separate_gpu_kms=1).
+ */
+
+&mdss {
+	status = "disabled";
+};
+
+&mdp_smmu {
+	status = "disabled";
+};

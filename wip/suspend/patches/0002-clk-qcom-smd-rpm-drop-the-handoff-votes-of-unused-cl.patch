@@ -1,0 +1,109 @@
+From f76945100083abb9ce8d35e38372b706c801548a Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sun, 1 Nov 2026 20:03:59 +0530
+Subject: [PATCH 2/5] clk: qcom: smd-rpm: drop the handoff votes of unused
+ clocks
+
+At probe every RPM clock is voted on, in the active and the sleep set
+(clk_smd_rpm_handoff()), but the clock framework is not told: there is no
+.is_prepared, so clk_disable_unused() never unprepares the clocks nobody
+uses. On MSM8996 the XO buffers (bb_clk1/2, rf_clk1/2, div_clk1-3,
+ln_bb_clk_a) and the CE1 and QDSS clocks stay voted on in the sleep set
+forever, which alone keeps the RPM from shutting XO down.
+
+Track the handoff vote and report it through .is_prepared, so that
+clk_disable_unused() drops it for unused clocks. The IPA clock keeps its
+vote: on the Galaxy Tab S3, dropping it resets the SoC during system
+suspend right after the USB controller suspends (bisected: every other
+clock can go).
+
+With this and without clk_ignore_unused, the Tab S3's idle floor goes from
+88 to 78 mA; suspend and resume work as before.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/clk/qcom/clk-smd-rpm.c | 31 ++++++++++++++++++++++++++++++-
+ 1 file changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/clk/qcom/clk-smd-rpm.c b/drivers/clk/qcom/clk-smd-rpm.c
+index 103db984a..331ccf1ee 100644
+--- a/drivers/clk/qcom/clk-smd-rpm.c
++++ b/drivers/clk/qcom/clk-smd-rpm.c
+@@ -165,6 +165,8 @@ struct clk_smd_rpm {
+ 	const int rpm_clk_id;
+ 	const bool active_only;
+ 	bool enabled;
++	/* on since probe, voted for by clk_smd_rpm_handoff() */
++	bool handoff;
+ 	bool branch;
+ 	struct clk_smd_rpm *peer;
+ 	struct clk_hw hw;
+@@ -294,8 +296,10 @@ static int clk_smd_rpm_prepare(struct clk_hw *hw)
+ 		ret = clk_smd_rpm_set_rate_active(r, peer_rate);
+ 
+ out:
+-	if (!ret)
++	if (!ret) {
+ 		r->enabled = true;
++		r->handoff = false;
++	}
+ 
+ 	mutex_unlock(&rpm_smd_clk_lock);
+ 
+@@ -331,6 +335,28 @@ static void clk_smd_rpm_unprepare(struct clk_hw *hw)
+ 		return;
+ 
+ 	r->enabled = false;
++	r->handoff = false;
++}
++
++/*
++ * The handoff votes every clock on, in the active and the sleep set. Report
++ * that, so that clk_disable_unused() drops the votes of the clocks nobody
++ * uses (XO buffers left on in the sleep set keep the RPM from shutting XO
++ * down).
++ */
++static int clk_smd_rpm_is_prepared(struct clk_hw *hw)
++{
++	struct clk_smd_rpm *r = to_clk_smd_rpm(hw);
++
++	/*
++	 * MSM8996: with the IPA clock dropped, system suspend resets the SoC
++	 * right after the USB controller suspends (nothing on this side uses
++	 * IPA). Keep its handoff vote.
++	 */
++	if (r->handoff && strstr(clk_hw_get_name(hw), "ipa"))
++		return false;
++
++	return r->enabled || r->handoff;
+ }
+ 
+ static int clk_smd_rpm_set_rate(struct clk_hw *hw, unsigned long rate,
+@@ -426,6 +452,7 @@ static int clk_smd_rpm_enable_scaling(void)
+ static const struct clk_ops clk_smd_rpm_ops = {
+ 	.prepare	= clk_smd_rpm_prepare,
+ 	.unprepare	= clk_smd_rpm_unprepare,
++	.is_prepared	= clk_smd_rpm_is_prepared,
+ 	.set_rate	= clk_smd_rpm_set_rate,
+ 	.determine_rate = clk_smd_rpm_determine_rate,
+ 	.recalc_rate	= clk_smd_rpm_recalc_rate,
+@@ -434,6 +461,7 @@ static const struct clk_ops clk_smd_rpm_ops = {
+ static const struct clk_ops clk_smd_rpm_branch_ops = {
+ 	.prepare	= clk_smd_rpm_prepare,
+ 	.unprepare	= clk_smd_rpm_unprepare,
++	.is_prepared	= clk_smd_rpm_is_prepared,
+ 	.recalc_rate	= clk_smd_rpm_recalc_rate,
+ };
+ 
+@@ -1371,6 +1399,7 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
+ 		ret = clk_smd_rpm_handoff(rpm_smd_clks[i]);
+ 		if (ret)
+ 			goto err;
++		rpm_smd_clks[i]->handoff = true;
+ 	}
+ 
+ 	for (i = 0; i < desc->num_icc_clks; i++) {
+-- 
+2.53.0
+

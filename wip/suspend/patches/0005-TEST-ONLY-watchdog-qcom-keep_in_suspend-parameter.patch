@@ -1,0 +1,47 @@
+From 2375ce26fd6e534a597a6599398200d18a1fbd80 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Mon, 2 Nov 2026 16:35:28 +0530
+Subject: [PATCH 5/5] TEST ONLY: watchdog: qcom: keep_in_suspend parameter
+
+Keep the APSS watchdog counting through system suspend, to catch a failed wakeup. Not for packaging.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/watchdog/qcom-wdt.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/drivers/watchdog/qcom-wdt.c b/drivers/watchdog/qcom-wdt.c
+index dfaac5995..f7d48576f 100644
+--- a/drivers/watchdog/qcom-wdt.c
++++ b/drivers/watchdog/qcom-wdt.c
+@@ -303,10 +303,17 @@ static int qcom_wdt_probe(struct platform_device *pdev)
+ 	return 0;
+ }
+ 
++/* TEST ONLY: keep counting through system suspend, to catch a failed wakeup */
++static bool keep_in_suspend;
++module_param(keep_in_suspend, bool, 0644);
++
+ static int __maybe_unused qcom_wdt_suspend(struct device *dev)
+ {
+ 	struct qcom_wdt *wdt = dev_get_drvdata(dev);
+ 
++	if (keep_in_suspend)
++		return 0;
++
+ 	if (watchdog_active(&wdt->wdd))
+ 		qcom_wdt_stop(&wdt->wdd);
+ 
+@@ -317,6 +324,9 @@ static int __maybe_unused qcom_wdt_resume(struct device *dev)
+ {
+ 	struct qcom_wdt *wdt = dev_get_drvdata(dev);
+ 
++	if (keep_in_suspend)
++		return 0;
++
+ 	if (watchdog_active(&wdt->wdd))
+ 		qcom_wdt_start(&wdt->wdd);
+ 
+-- 
+2.53.0
+

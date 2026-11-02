@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "test-wdt.dts"
+
+/*
+ * Test: the MSM8996 vMPM, so that the SoC can be woken from XO shutdown /
+ * VDD minimization. Downstream (msm8996-pm.dtsi, qcom,mpm-v2): vMPM at
+ * 0x681b8 in RPM message RAM, IPC through APCS global offset 0x10 bit 1
+ * (apcs_glb channel 1), MPM interrupt SPI 171, 96 pins; its gic-map lists
+ * GIC interrupt IDs (SPI + 32): pin 87 = 358 = the SPMI arbiter's SPI 326,
+ * through which the PMIC (RTC alarm, charger, keys) wakes the AP.
+ * The MPM is the parent of the system PSCI domain: its power-off hands the
+ * wake configuration to the RPM when the system domain goes down.
+ */
+
+/ {
+	mpm: interrupt-controller {
+		compatible = "qcom,mpm";
+		qcom,rpm-msg-ram = <&apss_mpm>;
+		interrupts = <GIC_SPI 171 IRQ_TYPE_EDGE_RISING>;
+		mboxes = <&apcs_glb 1>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+		#power-domain-cells = <0>;
+		interrupt-parent = <&intc>;
+		qcom,mpm-pin-count = <96>;
+		qcom,mpm-pin-map = <87 326>;	/* SPMI arbiter (PMIC) */
+	};
+};
+
+&rpm_msg_ram {
+	#address-cells = <1>;
+	#size-cells = <1>;
+	ranges = <0 0x00068000 0x6000>;
+
+	apss_mpm: sram@1b8 {
+		reg = <0x1b8 0x48>;
+	};
+};
+
+&system_pd {
+	power-domains = <&mpm>;
+};
+
+&spmi_bus {
+	/delete-property/ interrupts;
+	interrupts-extended = <&mpm 87 IRQ_TYPE_LEVEL_HIGH>;
+};

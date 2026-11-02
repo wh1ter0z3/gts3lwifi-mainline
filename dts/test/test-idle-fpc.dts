@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "test-suspend.dts"
+
+/*
+ * Test: downstream's L2 power collapse (pwr/perf-l2-fpc, 0x01000044) and
+ * system power collapse (system-fpc, 0x02003444, the level that notifies
+ * the RPM), composed as downstream does: no power-down bit, context saved
+ * by the kernel (psci.c quirk for msm8996). The CPUs lose their local
+ * timers in these states, so the CPU state is marked local-timer-stop.
+ */
+
+/ {
+	domain-idle-states {
+		cluster_fpc: cluster-fpc {
+			compatible = "domain-idle-state";
+			arm,psci-suspend-param = <0x01000044>;
+			entry-latency-us = <500>;
+			exit-latency-us = <1000>;
+			min-residency-us = <5000>;
+		};
+
+		system_fpc: system-fpc {
+			compatible = "domain-idle-state";
+			arm,psci-suspend-param = <0x02003444>;
+			entry-latency-us = <2000>;
+			exit-latency-us = <11000>;
+			min-residency-us = <30000>;
+		};
+	};
+};
+
+&cpu_sleep_0 {
+	local-timer-stop;
+};
+
+&cluster0_pd {
+	domain-idle-states = <&cluster_gdhs &cluster_fpc>;
+};
+
+&cluster1_pd {
+	domain-idle-states = <&cluster_gdhs &cluster_fpc>;
+};
+
+&system_pd {
+	domain-idle-states = <&system_ret &system_fpc>;
+};

@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "../apq8096-samsung-gts3lwifi.dts"
+
+/*
+ * Test: an energy model for the CPUs, so that the scheduler's energy-aware
+ * placement (EAS) can use the little cluster. Both clusters are Kryo with
+ * the same capacity per MHz, so they only differ by their top clock
+ * (1593.6 vs 2150.4 MHz); mainline's OPP tables carry no voltages, so the
+ * model comes from opp-microwatt. Values: the downstream msm8996.dtsi
+ * sched-energy-costs busy-cost-data per core (core-cost0 / core-cost1),
+ * which lists the same frequency steps in order (capacity = MHz x 1024 /
+ * 2150.4), taken as mW. Steps that only other speed bins enable are
+ * interpolated. The per-cluster cost downstream adds (4 at every step) is
+ * left out; mainline's model is per CPU.
+ */
+
+&cluster0_opp {
+	opp-307200000 {
+		opp-microwatt = <90000>;
+	};
+	opp-422400000 {
+		opp-microwatt = <122000>;
+	};
+	opp-480000000 {
+		opp-microwatt = <140000>;
+	};
+	opp-556800000 {
+		opp-microwatt = <166000>;
+	};
+	opp-652800000 {
+		opp-microwatt = <196000>;
+	};
+	opp-729600000 {
+		opp-microwatt = <231000>;
+	};
+	opp-844800000 {
+		opp-microwatt = <306000>;
+	};
+	opp-960000000 {
+		opp-microwatt = <367000>;
+	};
+	opp-1036800000 {
+		opp-microwatt = <423000>;
+	};
+	opp-1113600000 {
+		opp-microwatt = <480000>;
+	};
+	opp-1190400000 {
+		opp-microwatt = <536000>;
+	};
+	opp-1228800000 {
+		opp-microwatt = <566000>;
+	};
+	opp-1324800000 {
+		opp-microwatt = <642000>;
+	};
+	opp-1363200000 {
+		opp-microwatt = <676000>;
+	};
+	opp-1401600000 {
+		opp-microwatt = <711000>;
+	};
+	opp-1478400000 {
+		opp-microwatt = <800000>;
+	};
+	opp-1497600000 {
+		opp-microwatt = <821000>;
+	};
+	opp-1593600000 {
+		opp-microwatt = <925000>;
+	};
+};
+
+&cluster1_opp {
+	opp-307200000 {
+		opp-microwatt = <93000>;
+	};
+	opp-403200000 {
+		opp-microwatt = <117000>;
+	};
+	opp-480000000 {
+		opp-microwatt = <140000>;
+	};
+	opp-556800000 {
+		opp-microwatt = <166000>;
+	};
+	opp-652800000 {
+		opp-microwatt = <196000>;
+	};
+	opp-729600000 {
+		opp-microwatt = <231000>;
+	};
+	opp-806400000 {
+		opp-microwatt = <281000>;
+	};
+	opp-883200000 {
+		opp-microwatt = <322000>;
+	};
+	opp-940800000 {
+		opp-microwatt = <356000>;
+	};
+	opp-1036800000 {
+		opp-microwatt = <423000>;
+	};
+	opp-1113600000 {
+		opp-microwatt = <480000>;
+	};
+	opp-1190400000 {
+		opp-microwatt = <536000>;
+	};
+	opp-1248000000 {
+		opp-microwatt = <582000>;
+	};
+	opp-1324800000 {
+		opp-microwatt = <642000>;
+	};
+	opp-1401600000 {
+		opp-microwatt = <711000>;
+	};
+	opp-1478400000 {
+		opp-microwatt = <800000>;
+	};
+	opp-1555200000 {
+		opp-microwatt = <887000>;
+	};
+	opp-1632000000 {
+		opp-microwatt = <972000>;
+	};
+	opp-1708800000 {
+		opp-microwatt = <1046000>;
+	};
+	opp-1785600000 {
+		opp-microwatt = <1141000>;
+	};
+	opp-1804800000 {
+		opp-microwatt = <1175000>;
+	};
+	opp-1824000000 {
+		opp-microwatt = <1209000>;
+	};
+	opp-1900800000 {
+		opp-microwatt = <1307000>;
+	};
+	opp-1920000000 {
+		opp-microwatt = <1331000>;
+	};
+	opp-1996800000 {
+		opp-microwatt = <1451000>;
+	};
+	opp-2073600000 {
+		opp-microwatt = <1560000>;
+	};
+	opp-2150400000 {
+		opp-microwatt = <1715000>;
+	};
+};
