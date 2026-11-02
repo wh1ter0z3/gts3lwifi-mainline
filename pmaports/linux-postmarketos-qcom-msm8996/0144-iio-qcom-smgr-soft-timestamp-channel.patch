@@ -1,0 +1,147 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sun, 1 Nov 2026 20:04:13 -0700
+Subject: [PATCH] iio: qcom_smgr: use the standard soft timestamp channel
+
+Every scan type declares its timestamp channel as unsigned with 32 real
+bits in 64 storage bits. The driver pushes a 64-bit iio_get_time_ns()
+value, so a reader that honours realbits, such as
+tools/iio/iio_generic_buffer, cuts it to 32 bits and sees it wrap every
+4.3 seconds.
+
+Use IIO_CHAN_SOFT_TIMESTAMP(), which declares it as s64, like other IIO
+drivers do for their software timestamps. The scan index stays 3.
+
+The driver is in the msm8996-mainline tree (v6.19.5-msm8996), not in
+mainline yet.
+
+Tested on a Galaxy Tab S3 (SM-T820): in_timestamp_type reads
+le:s64/64>>0 for all four sensors.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/iio/common/qcom_smgr/qcom_smgr.c | 72 ++----------------------
+ 1 file changed, 6 insertions(+), 66 deletions(-)
+
+diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+index a88a9f554572..248215257cbc 100644
+--- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
++++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+@@ -544,17 +544,7 @@ static const struct iio_chan_spec qcom_smgr_accel_iio_channels[] = {
+ 					    BIT(IIO_CHAN_INFO_SAMP_FREQ),
+ 		.ext_info = qcom_smgr_iio_ext_info
+ 	},
+-	{
+-		.type = IIO_TIMESTAMP,
+-		.channel = -1,
+-		.scan_index = 3,
+-		.scan_type = {
+-			.sign = 'u',
+-			.realbits = 32,
+-			.storagebits = 64,
+-			.endianness = IIO_LE,
+-		},
+-	}
++	IIO_CHAN_SOFT_TIMESTAMP(3),
+ };
+ 
+ static const struct iio_chan_spec qcom_smgr_gyro_iio_channels[] = {
+@@ -603,17 +593,7 @@ static const struct iio_chan_spec qcom_smgr_gyro_iio_channels[] = {
+ 					    BIT(IIO_CHAN_INFO_SAMP_FREQ),
+ 		.ext_info = qcom_smgr_iio_ext_info
+ 	},
+-	{
+-		.type = IIO_TIMESTAMP,
+-		.channel = -1,
+-		.scan_index = 3,
+-		.scan_type = {
+-			.sign = 'u',
+-			.realbits = 32,
+-			.storagebits = 64,
+-			.endianness = IIO_LE,
+-		},
+-	}
++	IIO_CHAN_SOFT_TIMESTAMP(3),
+ };
+ 
+ static const struct iio_chan_spec qcom_smgr_mag_iio_channels[] = {
+@@ -662,17 +642,7 @@ static const struct iio_chan_spec qcom_smgr_mag_iio_channels[] = {
+ 					    BIT(IIO_CHAN_INFO_SAMP_FREQ),
+ 		.ext_info = qcom_smgr_iio_ext_info
+ 	},
+-	{
+-		.type = IIO_TIMESTAMP,
+-		.channel = -1,
+-		.scan_index = 3,
+-		.scan_type = {
+-			.sign = 'u',
+-			.realbits = 32,
+-			.storagebits = 64,
+-			.endianness = IIO_LE,
+-		},
+-	}
++	IIO_CHAN_SOFT_TIMESTAMP(3),
+ };
+ 
+ static const struct iio_chan_spec qcom_smgr_prox_iio_channels[] = {
+@@ -688,17 +658,7 @@ static const struct iio_chan_spec qcom_smgr_prox_iio_channels[] = {
+ 		.info_mask_separate = BIT(IIO_CHAN_INFO_SCALE) |
+ 				      BIT(IIO_CHAN_INFO_SAMP_FREQ)
+ 	},
+-	{
+-		.type = IIO_TIMESTAMP,
+-		.channel = -1,
+-		.scan_index = 3,
+-		.scan_type = {
+-			.sign = 'u',
+-			.realbits = 32,
+-			.storagebits = 64,
+-			.endianness = IIO_LE,
+-		},
+-	},
++	IIO_CHAN_SOFT_TIMESTAMP(3),
+ };
+ 
+ /*
+@@ -721,17 +681,7 @@ static const struct iio_chan_spec qcom_smgr_light_iio_channels[] = {
+ 		.info_mask_separate = BIT(IIO_CHAN_INFO_SCALE) |
+ 				      BIT(IIO_CHAN_INFO_SAMP_FREQ)
+ 	},
+-	{
+-		.type = IIO_TIMESTAMP,
+-		.channel = -1,
+-		.scan_index = 3,
+-		.scan_type = {
+-			.sign = 'u',
+-			.realbits = 32,
+-			.storagebits = 64,
+-			.endianness = IIO_LE,
+-		},
+-	},
++	IIO_CHAN_SOFT_TIMESTAMP(3),
+ };
+ 
+ static const struct iio_chan_spec qcom_smgr_pressure_iio_channels[] = {
+@@ -747,17 +697,7 @@ static const struct iio_chan_spec qcom_smgr_pressure_iio_channels[] = {
+ 		.info_mask_separate = BIT(IIO_CHAN_INFO_SCALE) |
+ 				      BIT(IIO_CHAN_INFO_SAMP_FREQ)
+ 	},
+-	{
+-		.type = IIO_TIMESTAMP,
+-		.channel = -1,
+-		.scan_index = 3,
+-		.scan_type = {
+-			.sign = 'u',
+-			.realbits = 32,
+-			.storagebits = 64,
+-			.endianness = IIO_LE,
+-		},
+-	}
++	IIO_CHAN_SOFT_TIMESTAMP(3),
+ };
+ 
+ static const char *const qcom_smgr_sensor_type_device_names[] = {
+-- 
+2.56.0
+

@@ -1,7 +1,11 @@
 # Accelerometer orientation for iio-sensor-proxy (and so for KDE/GNOME
-# auto-rotate), SM-T825 only. The SLPI hands out accelerometer axes in a
-# frame set by each model's sensor registry: on the SM-T820 the SMGR
-# driver's default mount matrix gives the right orientation, on the SM-T825
-# the axes come out turned by 90 degrees (confirmed in all positions on an
-# SM-T825 with this matrix). The model is the first root compatible.
-SUBSYSTEM=="iio", ATTR{name}=="qcom-smgr-accel", PROGRAM="/bin/grep -q samsung,gts3llte /sys/firmware/devicetree/base/compatible", ENV{ACCEL_MOUNT_MATRIX}="1, 0, 0; 0, -1, 0; 0, 0, 1"
+# auto-rotate), both models. The compositor turns the output by the panel's
+# mount (the landscape panel sits at 270 degrees) and the sensor orientation
+# on top, so the accelerometer has to be given in the panel's frame: upright
+# on the keyboard stand is "normal". SMGR reports north-east-down axes and
+# +1 g upwards; this matrix is a rotation into the panel's frame, so the
+# tilt (face up or down) comes out right too. On an SM-T820 on the keyboard
+# stand it gives normal and tilted-up (the SMGR driver's own matrix gives
+# right-up there); on an SM-T825 the same X and Y were confirmed in all
+# positions (with Z +1, which turned only the tilt over).
+SUBSYSTEM=="iio", ATTR{name}=="qcom-smgr-accel", ENV{ACCEL_MOUNT_MATRIX}="1, 0, 0; 0, -1, 0; 0, 0, -1"

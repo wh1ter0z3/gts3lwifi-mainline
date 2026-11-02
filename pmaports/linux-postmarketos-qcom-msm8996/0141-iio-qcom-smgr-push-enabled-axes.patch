@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sun, 1 Nov 2026 20:04:12 -0700
+Subject: [PATCH] iio: qcom_smgr: push only the enabled axes
+
+The report handler always pushes X, Y and Z of an accelerometer,
+gyroscope or magnetometer sample in that order, which is the scan layout
+only when all three channels are enabled. A buffer with fewer axes
+enabled (in_accel_z_en alone, say) got X where it expected its first
+enabled channel.
+
+Copy just the enabled axes into the sample. The handler takes them from
+a copy of the mask made when the buffer is enabled: the core frees
+active_scan_mask when the buffer is disabled, and a report can still be
+on its way then.
+
+Not declaring the full mask in available_scan_masks and leaving the
+demux to the core is deliberate. With the last channels of a scan off,
+the core's demux takes the timestamp from the wrong offset (x+timestamp
+reads the Z sample as the timestamp), in mainline as well.
+
+The driver is in the msm8996-mainline tree (v6.19.5-msm8996), not in
+mainline yet.
+
+Tested on a Galaxy Tab S3 (SM-T820) lying still, with the whole series:
+every subset of the axes, with and without the timestamp, on the
+accelerometer, gyroscope and magnetometer, and the light sensor with and
+without it. Records have the size the channels imply, the padding is zero
+and timestamps rise at the set rate. Each axis matches a full scan on the
+accelerometer and magnetometer. The gyroscope's offset moves between
+buffer enables, so its values were not compared.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/iio/common/qcom_smgr/qcom_smgr.c | 16 ++++++++++++----
+ include/linux/iio/common/qcom_smgr.h     |  3 +++
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+index b4f016bdab50..9cadbc5d89a0 100644
+--- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
++++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+@@ -268,7 +268,7 @@ static void qcom_smgr_buffering_report_handler(struct qmi_handle *hdl,
+ 	struct qcom_smgr_sensor *sensor;
+ 	struct qcom_smgr_iio_data iio_data;
+ 	int temp;
+-	u8 i, j;
++	u8 i, j, n;
+ 
+ 	for (i = 0; i < smgr->sensor_count; ++i) {
+ 		sensor = &smgr->sensors[i];
+@@ -289,11 +289,13 @@ static void qcom_smgr_buffering_report_handler(struct qmi_handle *hdl,
+ 	 * Construct data to be passed to IIO. Since we are matching report rate
+ 	 * with sample rate, we only get a single sample in every report. Clear
+ 	 * it first, so that the padding before the timestamp does not pass
+-	 * stack contents to userspace.
++	 * stack contents to userspace. A report has all axes of the sensor;
++	 * a scan has only the enabled ones, with no gaps.
+ 	 */
+ 	memset(&iio_data, 0, sizeof(iio_data));
+-	for (j = 0; j < ARRAY_SIZE(ind->samples[0].values); ++j)
+-		iio_data.values[j] = ind->samples[0].values[j];
++	n = 0;
++	for_each_set_bit(j, &sensor->scan_mask, ARRAY_SIZE(ind->samples[0].values))
++		iio_data.values[n++] = ind->samples[0].values[j];
+ 
+ 	/*
+ 	 * SMGR reports sensor data in 32-bit fixed-point values, with 16 bits
+@@ -339,6 +341,12 @@ static int qcom_smgr_sensor_postenable(struct iio_dev *iio_dev)
+ 	struct qcom_smgr_iio_priv *priv = iio_priv(iio_dev);
+ 	struct qcom_smgr_sensor *sensor = priv->sensor;
+ 
++	/*
++	 * The core frees active_scan_mask when the buffer is disabled, and a
++	 * report can still be on its way then: keep a copy for the handler.
++	 */
++	sensor->scan_mask = *iio_dev->active_scan_mask;
++
+ 	return qcom_smgr_request_buffering(smgr, sensor, true);
+ }
+ 
+diff --git a/include/linux/iio/common/qcom_smgr.h b/include/linux/iio/common/qcom_smgr.h
+index 25ee29a323c8..ce726b382dfa 100644
+--- a/include/linux/iio/common/qcom_smgr.h
++++ b/include/linux/iio/common/qcom_smgr.h
+@@ -55,6 +55,9 @@ struct qcom_smgr_sensor {
+ 	 */
+ 	u8 data_type;
+ 
++	/* The channels enabled in the buffer, for the report handler */
++	unsigned long scan_mask;
++
+ 	struct iio_dev *iio_dev;
+ };
+ 
+-- 
+2.56.0
+

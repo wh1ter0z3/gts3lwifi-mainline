@@ -1,0 +1,147 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sun, 1 Nov 2026 20:04:12 -0700
+Subject: [PATCH] iio: qcom_smgr: push every sample of a report
+
+The report handler pushes samples[0] and ignores samples_len, because
+the report rate equals the sample rate, which should give one sample per
+report. SMGR does not always do that: most streams have one report with
+two samples, and the second was lost.
+
+Push them all. The only time the driver has for them is the arrival of
+the report, so the last sample gets that and the earlier ones are spaced
+back from it by the sampling period.
+
+The driver is in the msm8996-mainline tree (v6.19.5-msm8996), not in
+mainline yet.
+
+Tested on a Galaxy Tab S3 (SM-T820) with counters in the handler, over
+six seconds per rate. One report had two samples on the accelerometer at
+50, 100, 200 and 416 Hz (at 416 Hz, 2372 reports and 2373 samples), on
+the gyroscope at 100 and 416 Hz and on the magnetometer at 10 and 50 Hz.
+None did on the accelerometer at 12 Hz, the gyroscope at 10 Hz or the
+light sensor at 5 Hz. After this patch the first timestamp step of a
+stream equals the sampling period at those rates, and no step in the six
+seconds is zero or negative.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/iio/common/qcom_smgr/qcom_smgr.c | 87 +++++++++++++++---------
+ 1 file changed, 54 insertions(+), 33 deletions(-)
+
+diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+index 9cadbc5d89a0..e3bc6c272ddd 100644
+--- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
++++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
+@@ -257,45 +257,22 @@ static int qcom_smgr_request_buffering(struct qcom_smgr *smgr,
+ 	return 0;
+ }
+ 
+-static void qcom_smgr_buffering_report_handler(struct qmi_handle *hdl,
+-					       struct sockaddr_qrtr *sq,
+-					       struct qmi_txn *txn,
+-					       const void *data)
++static void qcom_smgr_push_sample(struct qcom_smgr_sensor *sensor,
++				  const struct sns_smgr_buffering_report_sample *sample,
++				  s64 timestamp)
+ {
+-	struct qcom_smgr *smgr =
+-		container_of(hdl, struct qcom_smgr, sns_smgr_hdl);
+-	const struct sns_smgr_buffering_report_ind *ind = data;
+-	struct qcom_smgr_sensor *sensor;
+ 	struct qcom_smgr_iio_data iio_data;
++	unsigned int bit, n = 0;
+ 	int temp;
+-	u8 i, j, n;
+-
+-	for (i = 0; i < smgr->sensor_count; ++i) {
+-		sensor = &smgr->sensors[i];
+-
+-		/* Find sensor matching report */
+-		if (sensor->id == ind->report_id)
+-			break;
+-	}
+-
+-	if (i == smgr->sensor_count) {
+-		dev_warn_ratelimited(smgr->dev,
+-			"Received buffering report with unknown ID: %02x",
+-			ind->report_id);
+-		return;
+-	}
+ 
+ 	/*
+-	 * Construct data to be passed to IIO. Since we are matching report rate
+-	 * with sample rate, we only get a single sample in every report. Clear
+-	 * it first, so that the padding before the timestamp does not pass
+-	 * stack contents to userspace. A report has all axes of the sensor;
+-	 * a scan has only the enabled ones, with no gaps.
++	 * Clear the data first, so that the padding before the timestamp does
++	 * not pass stack contents to userspace. A sample has all axes of the
++	 * sensor; a scan has only the enabled ones, with no gaps.
+ 	 */
+ 	memset(&iio_data, 0, sizeof(iio_data));
+-	n = 0;
+-	for_each_set_bit(j, &sensor->scan_mask, ARRAY_SIZE(ind->samples[0].values))
+-		iio_data.values[n++] = ind->samples[0].values[j];
++	for_each_set_bit(bit, &sensor->scan_mask, ARRAY_SIZE(sample->values))
++		iio_data.values[n++] = sample->values[bit];
+ 
+ 	/*
+ 	 * SMGR reports sensor data in 32-bit fixed-point values, with 16 bits
+@@ -321,7 +298,51 @@ static void qcom_smgr_buffering_report_handler(struct qmi_handle *hdl,
+ 	}
+ 
+ 	iio_push_to_buffers_with_ts(sensor->iio_dev, &iio_data, sizeof(iio_data),
+-				    iio_get_time_ns(sensor->iio_dev));
++				    timestamp);
++}
++
++static void qcom_smgr_buffering_report_handler(struct qmi_handle *hdl,
++					       struct sockaddr_qrtr *sq,
++					       struct qmi_txn *txn,
++					       const void *data)
++{
++	struct qcom_smgr *smgr =
++		container_of(hdl, struct qcom_smgr, sns_smgr_hdl);
++	const struct sns_smgr_buffering_report_ind *ind = data;
++	struct qcom_smgr_sensor *sensor;
++	s64 now, period = 0;
++	u16 rate;
++	u8 i;
++
++	for (i = 0; i < smgr->sensor_count; ++i) {
++		sensor = &smgr->sensors[i];
++
++		/* Find sensor matching report */
++		if (sensor->id == ind->report_id)
++			break;
++	}
++
++	if (i == smgr->sensor_count) {
++		dev_warn_ratelimited(smgr->dev,
++			"Received buffering report with unknown ID: %02x",
++			ind->report_id);
++		return;
++	}
++
++	/*
++	 * The report rate is the sample rate, so a report usually has one
++	 * sample, but SMGR can put more in one. Their only time here is the
++	 * arrival of the report: space the earlier ones back from it by the
++	 * sampling period.
++	 */
++	rate = sensor->data_types[sensor->data_type].cur_sample_rate;
++	if (rate)
++		period = NSEC_PER_SEC / rate;
++
++	now = iio_get_time_ns(sensor->iio_dev);
++	for (i = 0; i < ind->samples_len; i++)
++		qcom_smgr_push_sample(sensor, &ind->samples[i],
++				      now - (ind->samples_len - 1 - i) * period);
+ }
+ 
+ static const struct qmi_msg_handler qcom_smgr_msg_handlers[] = {
+-- 
+2.56.0
+

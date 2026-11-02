@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "../msm8996-samsung-gts3llte.dts"
+
+/*
+ * Test, SM-T825 only: the grip (SAR proximity) sensor next to the LTE
+ * antenna, a Semtech SX9310.  Needs CONFIG_SX9310 (=m), which the package
+ * config does not set.
+ *
+ * Stock (msm8996-sec-gts3llte-r05.dtsi, "grip"): sx9310-i2c@28 on a GPIO
+ * I2C bus, SDA TLMM 81, SCL TLMM 82, interrupt TLMM 132; the pins have no
+ * pull (msm8996-pinctrl-sec-gts3llte-r05.dtsi grip_i2c_active,
+ * grip_int_active) and drivers/sensors/sx9310.c requests the interrupt
+ * falling edge, so the line is active low.  The DT names no supply.  The
+ * LTE defconfig builds only this driver (CONFIG_SENSORS_SX9310); the second
+ * chip in the same DT ("grip wifi", TLMM 49/50, interrupt TLMM 53, driver
+ * CONFIG_SENSORS_SX9310_WIFI) is not built, so it is left out here.  The
+ * Wi-Fi model has neither.
+ *
+ * The register setup is the mainline driver's default, not Samsung's
+ * (drivers/sensors/sx9310_reg.h setup_reg[]: 400 ms scan period, CS1 the
+ * main sensor); the readings tell whether the semtech,* tuning properties
+ * are needed.  The chip scans only while a channel is read or an event is
+ * enabled, and sleeps in system suspend.  Nothing in a Linux desktop reads
+ * it: on Android the modem lowers its transmit power when it reports near.
+ */
+
+&tlmm {
+	grip_i2c_default: grip-i2c-default-state {
+		pins = "gpio81", "gpio82";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	grip_int_default: grip-int-default-state {
+		pins = "gpio132";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};
+
+/ {
+	i2c-grip {
+		compatible = "i2c-gpio";
+		sda-gpios = <&tlmm 81 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&tlmm 82 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-0 = <&grip_i2c_default>;
+		pinctrl-names = "default";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		proximity@28 {
+			compatible = "semtech,sx9310";
+			reg = <0x28>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <132 IRQ_TYPE_LEVEL_LOW>;
+			pinctrl-0 = <&grip_int_default>;
+			pinctrl-names = "default";
+			#io-channel-cells = <1>;
+		};
+	};
+};

@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <iio-sensor-proxy@jayd.ml>
+Date: Sun, 1 Nov 2026 19:04:15 -0700
+Subject: [PATCH] main: Return pending Claim() calls when the last client
+ releases
+
+Claim() returns only after the sensor's first reading, so that the
+client has a valid value right away. If the last client releases the
+sensor (or leaves the bus) before that reading, polling stops and the
+pending Claim() calls are never returned: the caller waits for its D-Bus
+timeout, or gets NoReply when the daemon exits. KWin claims the
+accelerometer only while the screen is on, and got NoReply this way when
+the screen turned off just after iio-sensor-proxy had restarted.
+
+Return them when polling stops for want of clients. This also sends a
+driver change that was held back for a hotplugged sensor's first
+reading; with no clients left there is nothing to wait for.
+---
+ src/iio-sensor-proxy.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/iio-sensor-proxy.c b/src/iio-sensor-proxy.c
+index bfc7ae8..6e2e16f 100644
+--- a/src/iio-sensor-proxy.c
++++ b/src/iio-sensor-proxy.c
+@@ -429,6 +429,9 @@ client_release (SensorData            *data,
+ 	    g_hash_table_size (ht) == 0) {
+ 		SensorDevice *sensor_device = DEVICE_FOR_TYPE(driver_type);
+ 		driver_set_polling (sensor_device, FALSE);
++		/* The last client left before the first reading: no reading
++		 * will come to return the pending Claim() calls. */
++		maybe_notify_sensor_startup_finished (data, driver_type);
+ 	}
+ }
+ 
