@@ -98,7 +98,34 @@ geoclue's stock configuration and a real fix (it would go online, below).
   fine, and so does turning off any other single source. Not chased
   further.
 
-Next: the regression checklist on the main DT (step 10).
+### On a package install with the main DT (step 10, 2026-11-01)
+
+Kernel r10 and device r7, built from this branch plus the sensors series,
+installed with `apk add -u` from a local repository, then booted normally
+(no RAM boot):
+
+- **Packages:** asking for the device package alone pulled in the `-gnss`
+  subpackage, gnss-share, `gnss-share-geoclue` and `gnss-share-systemd`.
+- **Modem:** up about 25 s into each of 6 boots. With its firmware removed
+  from the rootfs (a first boot), `gts3-firmware` installed 105 files and the
+  modem came up on that same boot, 3 out of 3 times.
+- **ADSP, SLPI:** running; the IIO sensors report, orientation correct.
+- **GPU:** KWin composites with OpenGL ES.
+- **Venus:** H.264 720p through `v4l2h264dec` is byte-identical to a software
+  decode. HEVC fails to negotiate, the limitation in `docs/venus.md`.
+- **Idle:** the modem adds no interrupts we can see (under 1/s); the 396/s on
+  `smd-edge` is the accelerometer.
+- **GNSS session at a desk:** starts with the client and stops with it. No
+  satellites indoors, as before.
+
+Open: audio by ear, a fix at a window on this build, and any boot on an
+SM-T825.
+
+**Bluetooth timed out once in 6 boots:** `hci0: Opcode 0x0c03 failed: -110`
+after its second setup, on the first boot of this install, and the adapter
+was missing until a reboot. The other 5 boots were fine, with the same
+timing, and it was not seen in earlier boots without the modem. Cause
+unknown.
 
 ## Evidence
 
