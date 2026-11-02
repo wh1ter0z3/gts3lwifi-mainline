@@ -1,0 +1,122 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 15:13:54 -0700
+Subject: [PATCH] ASoC: qcom: apq8096: Add a headset jack
+
+Register a jack with the codec on the first non-TDM back end, the same
+way sdm845 does. A codec or board without detection returns -ENOTSUPP,
+in which case the card comes up as before, without one.
+
+Buttons get the keys the Android headset specification asks for, with
+KEY_PLAYPAUSE for the main button. "Headphone Jack" also covers line
+out: both want the headphone output.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ sound/soc/qcom/apq8096.c | 66 +++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 65 insertions(+), 1 deletion(-)
+
+diff --git a/sound/soc/qcom/apq8096.c b/sound/soc/qcom/apq8096.c
+index 35b343910c..dae2d2f4de 100644
+--- a/sound/soc/qcom/apq8096.c
++++ b/sound/soc/qcom/apq8096.c
+@@ -3,11 +3,13 @@
+ 
+ #include <linux/module.h>
+ #include <linux/platform_device.h>
++#include <sound/jack.h>
+ #include <sound/soc.h>
+ #include <sound/soc-dapm.h>
+ #include <sound/pcm.h>
+ #include <sound/pcm_params.h>
+ #include <dt-bindings/sound/qcom,q6afe.h>
++#include <uapi/linux/input-event-codes.h>
+ #include "common.h"
+ #include "qdsp6/q6afe.h"
+ 
+@@ -29,6 +31,20 @@ static const unsigned int apq8096_tdm_clk_id[APQ8096_NUM_TDM] = {
+ 
+ struct apq8096_card_data {
+ 	unsigned int tdm_clk_count[APQ8096_NUM_TDM];
++	struct snd_soc_jack jack;
++	bool jack_setup;
++};
++
++static struct snd_soc_jack_pin apq8096_jack_pins[] = {
++	{
++		.pin = "Mic Jack",
++		.mask = SND_JACK_MICROPHONE,
++	},
++	{
++		/* a line out plays through the same headphone amplifier */
++		.pin = "Headphone Jack",
++		.mask = SND_JACK_HEADPHONE | SND_JACK_LINEOUT,
++	},
+ };
+ 
+ /* TDM interface of a CPU DAI, or -1 */
+@@ -199,6 +215,54 @@ static const struct snd_soc_ops apq8096_ops = {
+ 	.hw_params = apq8096_snd_hw_params,
+ };
+ 
++static void apq8096_jack_free(struct snd_jack *jack)
++{
++	struct snd_soc_component *component = jack->private_data;
++
++	snd_soc_component_set_jack(component, NULL, NULL);
++}
++
++static int apq8096_jack_init(struct snd_soc_pcm_runtime *rtd)
++{
++	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
++	struct snd_soc_card *card = rtd->card;
++	struct apq8096_card_data *data = snd_soc_card_get_drvdata(card);
++	struct snd_jack *jack;
++	int ret;
++
++	if (data->jack_setup)
++		return 0;
++
++	ret = snd_soc_card_jack_new_pins(card, "Headset Jack",
++					 SND_JACK_HEADSET | SND_JACK_LINEOUT |
++					 SND_JACK_MECHANICAL |
++					 SND_JACK_BTN_0 | SND_JACK_BTN_1 |
++					 SND_JACK_BTN_2 | SND_JACK_BTN_3,
++					 &data->jack, apq8096_jack_pins,
++					 ARRAY_SIZE(apq8096_jack_pins));
++	if (ret)
++		return dev_err_probe(card->dev, ret, "Failed to add the jack\n");
++
++	jack = data->jack.jack;
++	snd_jack_set_key(jack, SND_JACK_BTN_0, KEY_PLAYPAUSE);
++	snd_jack_set_key(jack, SND_JACK_BTN_1, KEY_VOICECOMMAND);
++	snd_jack_set_key(jack, SND_JACK_BTN_2, KEY_VOLUMEUP);
++	snd_jack_set_key(jack, SND_JACK_BTN_3, KEY_VOLUMEDOWN);
++
++	data->jack_setup = true;
++
++	ret = snd_soc_component_set_jack(codec_dai->component, &data->jack, NULL);
++	if (ret && ret != -ENOTSUPP)
++		return dev_err_probe(card->dev, ret, "Failed to set the jack\n");
++
++	if (!ret) {
++		jack->private_data = codec_dai->component;
++		jack->private_free = apq8096_jack_free;
++	}
++
++	return 0;
++}
++
+ static int apq8096_init(struct snd_soc_pcm_runtime *rtd)
+ {
+ 	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
+@@ -225,7 +289,7 @@ static int apq8096_init(struct snd_soc_pcm_runtime *rtd)
+ 	snd_soc_dai_set_sysclk(codec_dai, 0, WCD9335_DEFAULT_MCLK_RATE,
+ 				SNDRV_PCM_STREAM_PLAYBACK);
+ 
+-	return 0;
++	return apq8096_jack_init(rtd);
+ }
+ 
+ static void apq8096_add_be_ops(struct snd_soc_card *card)

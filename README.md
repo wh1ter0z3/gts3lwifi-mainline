@@ -57,7 +57,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
 | Flash LED | Works | as a torch |
 | **Multimedia** | | |
-| Speakers (4), headphones, microphones | Works | headphone jack detection and headset mic not yet ([audio](docs/audio.md)) |
+| Speakers (4), headphones, microphones, headset mic | Works | jack detection and centre button tested on the T820 ([audio](docs/audio.md)) |
 | Video decode / encode (Venus) | Partial | H.264, VP8, VP9 decode; H.264 and HEVC encode, 4K30 HEVC from the camera; HEVC decode fails ([venus](docs/venus.md)) |
 | Cameras (front, rear) | Works | rear 13 MP with autofocus, front 5 MP, through libcamera (`pmaports/libcamera` for AF) ([camera](docs/camera.md)) |
 | **Sensors** | | |
