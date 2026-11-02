@@ -27,7 +27,7 @@ Not done yet:
 | | |
 |---|---|
 | ADSP firmware | Samsung-signed `image/adsp.mdt` + `.b00`-`.b09` from the **modem** partition (`ADSP.8996.2.7.1.C1-00013`; the `dsp` partition only holds ADSP modules). Copy to `/lib/firmware/qcom/msm8996/samsung/gts3/`; not in this repo |
-| ADSP memory | the image spans 0x2100000 bytes, more than msm8996.dtsi's 27 MB `adsp_mem`. The test DT grows it to 0x8ea00000-0x90f00000 and moves the unused `slpi_mem` to 0x91700000, inside the stock `peripheral_region` |
+| ADSP memory | the image spans 0x2100000 bytes, more than msm8996.dtsi's 27 MB `adsp_mem`. The main DT gives it 0x8fe00000-0x91f00000, where the stock kernel loads it, inside the stock `peripheral_region` (layout in docs/gnss.md) |
 | Codec | WCD9335 v2.0 on SLIMbus (NGD at 0x91c0000), PGD `1,0`, IFD `0,0` |
 | Codec reset | TLMM 74 (stock `wcd_gpio_ctrl`). The Xiaomi boards use 64 |
 | Codec interrupt | TLMM 79, one line (`intr1`). The Xiaomi boards use 54/53 |

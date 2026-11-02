@@ -1,6 +1,6 @@
 #!/bin/sh
 # GNSS hardware test helper (docs/gnss.md). Run as root on the tablet,
-# booted with dts/test/test-gnss.dts (SM-T820) or test-gnss-lte.dts (SM-T825).
+# booted with a DT that enables the modem DSP (the main DT, both models).
 #
 #   gnss-test.sh backup [dir]  copy modemst1, modemst2, fsg and fsc (the
 #                              modem's file system) to dir (default
@@ -85,7 +85,7 @@ status() {
 }
 
 up() {
-	r=$(mss_rproc) || die "no MSS remoteproc: not booted with a GNSS test DT?"
+	r=$(mss_rproc) || die "no MSS remoteproc: is the MSS node enabled in this DT?"
 	[ -f "$FW/modem.mdt" ] || die "no $FW/modem.mdt: run gts3-firmware first"
 	# Keep the first crash readable: no restart loop, no 100 MB core dump
 	if [ "${KEEP_RECOVERY:-0}" != 1 ]; then

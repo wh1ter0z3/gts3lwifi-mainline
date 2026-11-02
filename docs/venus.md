@@ -58,9 +58,10 @@ Samsung's signed firmware is on the tablet's `apnhlos` partition
 `/lib/firmware/qcom/msm8996/samsung/gts3/`; it is not in this repo.
 TrustZone authenticates it (PAS id 9).
 
-The segments are relocatable and span 5 MB, so they load into msm8996.dtsi's
-`venus_mem` at 0x91000000. That region lies inside the stock
-`peripheral_region` (0x8f400000, 49 MB).
+The segments are relocatable and span 5 MB, so they fit msm8996.dtsi's
+5 MB `venus_mem`. The main DT places it at 0x92000000, where the stock
+kernel loads Venus, at the end of the stock `peripheral_region`
+(0x8f400000, 49 MB); see docs/gnss.md for the layout.
 
 ```dts
 &venus {

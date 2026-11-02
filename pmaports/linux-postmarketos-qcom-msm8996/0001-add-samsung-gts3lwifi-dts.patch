@@ -17,21 +17,22 @@ CAMSS, the SLPI sensor core (accelerometer, gyroscope and magnetometer),
 audio (ADSP + WCD9335 on SLIMbus, four RT5508 speaker amplifiers on two
 TDM buses), the SM5705 fuel gauge, charger (with the OTG boost) and
 MUIC, the S2MM005 USB Type-C/PD controller (dual role, 9 V sink), the
-rear flash LED as a torch, and CPU, cluster and system idle
-(hierarchical PSCI, OSI).
+rear flash LED as a torch, CPU, cluster and system idle (hierarchical
+PSCI, OSI), and the modem DSP for GNSS, with the firmware regions in the
+stock layout.
 
 The LTE model (SM-T825, MSM8996) shares the board: its device tree includes
 the Wi-Fi one and changes the SoC ID, reserves the modem's shared memory
-and leaves out the pins TrustZone may own on that model. The modem itself
-is not supported yet.
+and leaves out the pins TrustZone may own on that model. The modem DSP
+stays off there until it is tested on that model.
 
 Signed-off-by: psigod <psigod@example.com>
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  arch/arm64/boot/dts/qcom/Makefile             |    2 +
- .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 2054 +++++++++++++++++
- .../dts/qcom/msm8996-samsung-gts3llte.dts     |   46 +
- 3 files changed, 2102 insertions(+)
+ .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 2110 +++++++++++++++++
+ .../dts/qcom/msm8996-samsung-gts3llte.dts     |   52 +
+ 3 files changed, 2164 insertions(+)
  create mode 100644 arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
  create mode 100644 arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts
 
@@ -57,16 +58,17 @@ index 821146b..39b7195 100644
  dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-keyaki.dtb
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 new file mode 100644
-index 0000000..610ac6c
+index 0000000..9072302
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
-@@ -0,0 +1,2054 @@
+@@ -0,0 +1,2110 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Samsung Galaxy Tab S3 Wi-Fi (SM-T820), codename gts3lwifi, board rev 05
 + *
 + * SoC / PMIC set, from the live downstream DTB (qcom,pmic-id = <0x20009 0x1000c>):
-+ *   APQ8096 (msm-id 291) + PM8994 + PM8004. No PMI8994, no modem.
++ *   APQ8096 (msm-id 291) + PM8994 + PM8004. No PMI8994. No cellular modem,
++ *   but the modem DSP is there and runs a GNSS-only image.
 + * Internal storage: eMMC on SDHC1 (cmdline: androidboot.bootdevice=7464900.sdhci).
 + *   UFS silicon is present but unpopulated; ufshc/ufsphy stay disabled.
 + *
@@ -77,12 +79,13 @@ index 0000000..610ac6c
 + * amplifiers), SM5705 fuel gauge, charger, MUIC and flash LED (torch),
 + * S2MM005 USB Type-C/PD (sink up to 9 V, source), accelerometer, gyroscope
 + * and magnetometer (through the SLPI sensor core), CPU/cluster/system idle,
-+ * both cameras, the Book Cover Keyboard (hot-plugged through the MUIC).
-+ * The panel's temperature input has a test DT; the cover's hall sensor is
-+ * not here yet.
++ * both cameras, the Book Cover Keyboard (hot-plugged through the MUIC),
++ * GNSS (on the modem DSP). The panel's temperature input has a test DT; the
++ * cover's hall sensor is not here yet.
 + *
-+ * GPU zap shader, Venus, ADSP and SLPI firmware are Samsung-signed and come
-+ * from the device (apnhlos and modem partitions), under
++ * GPU zap shader, Venus, ADSP, SLPI and modem DSP firmware are
++ * Samsung-signed and come from the device (apnhlos and modem partitions),
++ * under
 + * qcom/msm8996/samsung/gts3/; the device package's gts3-firmware copies
 + * them, and the sensor registry from the efs partition, on first boot.
 + *
@@ -113,6 +116,18 @@ index 0000000..610ac6c
 +#include "msm8996.dtsi"
 +#include "pm8994.dtsi"
 +#include "pm8004.dtsi"
++
++/*
++ * The firmware regions get the stock SM-T820 layout (reserved-memory
++ * below): the modem image needs the whole stock modem carve-out, which is
++ * larger than msm8996.dtsi's mpss_mem, so the regions after it move.
++ */
++/delete-node/ &mpss_mem;
++/delete-node/ &slpi_mem;
++/delete-node/ &adsp_mem;
++/delete-node/ &gpu_mem;
++/delete-node/ &venus_mem;
++/delete-node/ &mba_mem;
 +
 +/ {
 +	model = "Samsung Galaxy Tab S3 Wi-Fi";
@@ -145,10 +160,9 @@ index 0000000..610ac6c
 +
 +	/*
 +	 * Fixed regions from the downstream tree that msm8996.dtsi does not
-+	 * already cover. hyp/xbl/smem/tz (0x85800000-0x88800000) and the PIL
-+	 * regions (0x88800000-0x91700000) in msm8996.dtsi are subsets of the
-+	 * downstream removed/modem/peripheral carve-outs, so they are kept
-+	 * as they are and only the gaps are added here.
++	 * already cover, and the firmware regions with the stock layout.
++	 * hyp/xbl/smem/tz (0x85800000-0x88800000) in msm8996.dtsi are subsets
++	 * of the downstream removed carve-out, so they are kept as they are.
 +	 */
 +	reserved-memory {
 +		/* Downstream ss_plog@84700000 */
@@ -184,13 +198,45 @@ index 0000000..610ac6c
 +		};
 +
 +		/*
-+		 * Tail of the downstream peripheral_region@8f400000
-+		 * (0x8f400000-0x92500000) not covered by msm8996.dtsi. adsp_mem
-+		 * is grown and slpi_mem moved into 0x91700000-0x92100000 below,
-+		 * so only the last 4 MiB are left.
++		 * Firmware regions, as the stock kernel places them on the
++		 * SM-T820 (all of these images are relocatable). The modem
++		 * image spans 0x6c00000 bytes from its lowest segment to the end
++		 * of its last: the downstream modem_mem carve-out
++		 * (msm8996-sec-common.dtsi), where stock loads it.
++		 * qcom_q6v5_mss refuses a segment that ends past mpss_mem, and
++		 * msm8996.dtsi's is 0x6200000. SLPI, ADSP (its segments span
++		 * 0x2100000 bytes), the A530 zap shader and Venus then fill the
++		 * downstream peripheral_region (0x8f400000-0x92500000), and the
++		 * MBA, which stock allocates dynamically, goes right after it.
 +		 */
-+		memory@92100000 {
-+			reg = <0x0 0x92100000 0x0 0x400000>;
++		mpss_mem: mpss@88800000 {
++			reg = <0x0 0x88800000 0x0 0x6c00000>;
++			no-map;
++		};
++
++		slpi_mem: slpi@8f400000 {
++			reg = <0x0 0x8f400000 0x0 0xa00000>;
++			no-map;
++		};
++
++		adsp_mem: adsp@8fe00000 {
++			reg = <0x0 0x8fe00000 0x0 0x2100000>;
++			no-map;
++		};
++
++		gpu_mem: gpu@91f00000 {
++			compatible = "shared-dma-pool";
++			reg = <0x0 0x91f00000 0x0 0x100000>;
++			no-map;
++		};
++
++		venus_mem: venus@92000000 {
++			reg = <0x0 0x92000000 0x0 0x500000>;
++			no-map;
++		};
++
++		mba_mem: mba@92500000 {
++			reg = <0x0 0x92500000 0x0 0x200000>;
 +			no-map;
 +		};
 +
@@ -1296,9 +1342,8 @@ index 0000000..610ac6c
 + * Audio
 + * -----
 + * ADSP with Samsung's signed firmware from the modem partition. Its
-+ * segments span 0x2100000 bytes, more than msm8996.dtsi's adsp_mem, so
-+ * adsp_mem grows to the start of gpu_mem and slpi_mem (unused) moves into
-+ * the tail of the downstream peripheral_region.
++ * segments span 0x2100000 bytes, more than msm8996.dtsi's adsp_mem; the
++ * stock region (reserved-memory above) fits them.
 + *
 + * WCD9335 on SLIMbus like apq8096-db820c: reset TLMM 74, one interrupt line
 + * on TLMM 79, MCLK from PM8994 GPIO 15, all supplies PM8994 S4. Headphones
@@ -1323,14 +1368,6 @@ index 0000000..610ac6c
 + * (the keyboard cover's orientation) the top speakers are on the left: they
 + * play the left channel, the bottom ones the right.
 + */
-+&adsp_mem {
-+	reg = <0x0 0x8ea00000 0x0 0x2500000>;
-+};
-+
-+&slpi_mem {
-+	reg = <0x0 0x91700000 0x0 0xa00000>;
-+};
-+
 +&adsp_pil {
 +	firmware-name = "qcom/msm8996/samsung/gts3/adsp.mdt";
 +	status = "okay";
@@ -1352,6 +1389,26 @@ index 0000000..610ac6c
 +&slpi_pil {
 +	firmware-name = "qcom/msm8996/samsung/gts3/slpi.mdt";
 +	px-supply = <&vreg_lvs2a_1p8>;
++	status = "okay";
++};
++
++/*
++ * GNSS
++ * ----
++ * The GNSS engine runs on the modem DSP (MSS, Hexagon QDSP6 v5.5) on both
++ * models: the SM-T820 carries a GNSS-only modem image (Product_Flavor
++ * "modemlite" in the modem partition's verinfo), the SM-T825 the full LTE
++ * one. The MSS has auto_boot off: rmtfs, which serves it the modemst1,
++ * modemst2, fsg and fsc partitions, starts it ("rmtfs -s"), and the
++ * location service (QMI LOC) is then reached over QRTR. Firmware from the
++ * tablet's own modem partition (image/mba.mbn and image/modem.*). PLL
++ * supply: PM8994 L12 at 1.8 V, as downstream vdd_pll-supply
++ * (msm8996.dtsi qcom,mss@2080000).
++ */
++&mss_pil {
++	firmware-name = "qcom/msm8996/samsung/gts3/mba.mbn",
++			"qcom/msm8996/samsung/gts3/modem.mdt";
++	pll-supply = <&vreg_l12a_1p8>;
 +	status = "okay";
 +};
 +
@@ -2117,10 +2174,10 @@ index 0000000..610ac6c
 +};
 diff --git a/arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts b/arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts
 new file mode 100644
-index 0000000..15f5d2b
+index 0000000..be9504c
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,52 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Samsung Galaxy Tab S3 LTE (SM-T825), codename gts3llte: the Wi-Fi model's
@@ -2129,8 +2186,10 @@ index 0000000..15f5d2b
 + * and one device package boot both, lk2nd picks the device tree by its
 + * compatible.
 + *
-+ * Not here yet: the modem (LTE, SIM, GPS) - only its shared memory region is
-+ * reserved. TLMM 58-61 stay reserved: stock comments out the eSE SPI on both
++ * The firmware regions use the Wi-Fi model's DT, the stock layout of both
++ * models. The modem DSP stays off here until GNSS is tested on this model
++ * (docs/gnss.md). Not here yet: LTE and the SIM; the modem's shared memory
++ * region is reserved. TLMM 58-61 stay reserved: stock comments out the eSE SPI on both
 + * models and they are free on the Wi-Fi model, but which pins TrustZone owns
 + * is set by its firmware and an owned pin resets the tablet about 9 s into
 + * boot. So the top speaker pair (quaternary TDM on those pins) is left out
@@ -2155,6 +2214,10 @@ index 0000000..15f5d2b
 +			no-map;
 +		};
 +	};
++};
++
++&mss_pil {
++	status = "disabled";
 +};
 +
 +&tlmm {

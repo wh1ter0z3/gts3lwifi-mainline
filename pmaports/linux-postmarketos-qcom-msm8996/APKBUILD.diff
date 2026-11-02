@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..c98191424e 100644
+index 601fa9f44e..a1efbf5d4b 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
@@ -7,7 +7,7 @@ index 601fa9f44e..c98191424e 100644
  pkgname=linux-$_flavor
  pkgver=6.19.5
 -pkgrel=0
-+pkgrel=11
++pkgrel=12
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -148,7 +148,7 @@ index 601fa9f44e..c98191424e 100644
  dd30dd113ad9f0b4ab3771ea655de2becce7ddaf5066d2f860b7bb1eb78573137313191d9da740b152348f9f89894ace2bb94fb195e340f7b6dabedeebbc929f  linux-v6.19.5-msm8996.tar.gz
 -6a1e3a18fb454378ef5569a6951426d118144985c9028e663f46d28cde6784723296601d3756176045e22d706a9195938804c6a82f02fcf548e18d2e66c35b27  config-postmarketos-qcom-msm8996.aarch64
 +e6d57aa02b41b8f361890d9df74a5c8fa2865d618ec8b0c145d199e1e15010e2d24ed742b2ffba5be1c9978a71f9e08db138164264f92118e4d5011f1ed30993  config-postmarketos-qcom-msm8996.aarch64
-+44578e7bca9ad240c61dae66a26221f3113dcaa74db193249495989506c4b1342402667d39a999cd37938e7feb291919bdc027ece4695cc3dba893a5a3ed999b  0001-add-samsung-gts3lwifi-dts.patch
++549e76d4dfcfc48a0af64d9fd10da4a41770180dd5d3d56286ec7bdb8d563d61d8c09d096a61e3a09f0fea8cc0cbf97f624bab9a3ed1ceb55a5cf0e2de554f54  0001-add-samsung-gts3lwifi-dts.patch
 +feede8e07c71e0b9faaac14a97baebcd9ff347f9e6288ca3690bfcf4331b12788167dd69079fedf7856fa3b28494d19b397f8a69c01d00008544aa20785d0064  0002-drm-panel-add-samsung-ams968hh01.patch
 +71cef6df692ccaeb8575bce830b32bbf4c11debdda209b7ac3f7a19dee9395f88d0981f46b72534d1d9a2f3cd742e721167afaff91ed7b0ce92c5b481ce05787  0003-drm-msm-mdp5-split-display-bonded-dsi.patch
 +81ef96ef5e975c6c7b1249ea37b02f8a69154a399cd1426f234a0e44a8f5e4e9357da99dcd64629da0c7922678c0bb3e42dc8b05e53a72449dc8328c7c3655cb  0004-drm-msm-dpu-msm8996-split-display-ctls.patch

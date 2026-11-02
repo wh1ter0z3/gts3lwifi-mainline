@@ -6,8 +6,10 @@
  * and one device package boot both, lk2nd picks the device tree by its
  * compatible.
  *
- * Not here yet: the modem (LTE, SIM, GPS) - only its shared memory region is
- * reserved. TLMM 58-61 stay reserved: stock comments out the eSE SPI on both
+ * The firmware regions use the Wi-Fi model's DT, the stock layout of both
+ * models. The modem DSP stays off here until GNSS is tested on this model
+ * (docs/gnss.md). Not here yet: LTE and the SIM; the modem's shared memory
+ * region is reserved. TLMM 58-61 stay reserved: stock comments out the eSE SPI on both
  * models and they are free on the Wi-Fi model, but which pins TrustZone owns
  * is set by its firmware and an owned pin resets the tablet about 9 s into
  * boot. So the top speaker pair (quaternary TDM on those pins) is left out
@@ -32,6 +34,10 @@
 			no-map;
 		};
 	};
+};
+
+&mss_pil {
+	status = "disabled";
 };
 
 &tlmm {

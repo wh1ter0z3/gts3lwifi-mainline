@@ -49,7 +49,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | USB device mode | Works | network, serial, storage |
 | USB host / OTG, USB 3 | Works | 5 Gbit/s as a host ([usb](docs/usb.md)) |
 | USB-C power (PD) | Works | 5 V / 3 A or 9 V / 1.65 A sink, 5 V / 1.5 A source ([usb](docs/usb.md)) |
-| GPS / GNSS (both models) | Partial | SM-T820: fix on mainline with the test DT (modem DSP, QMI LOC, about 10 m); geoclue bridge (gnss-share `qmi_loc` driver, optional `-gnss` subpackage) not yet tested on the tablet. SM-T825 untested ([gnss](docs/gnss.md)) |
+| GPS / GNSS | Works on the SM-T820 | through geoclue (modem DSP in the main DT, gnss-share `qmi_loc` driver), first fix 2.5-8 min after boot; regression pass pending. Off on the SM-T825 until tested ([gnss](docs/gnss.md)) |
 | LTE modem, SIM (SM-T825) | Not yet | planned |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
@@ -73,7 +73,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 ## Layout
 
 - `dts/` - device trees for both models (the SM-T825 one includes the SM-T820 one), plus test variants; the panel temperature channel is still test-only
-- `pmaports/` - postmarketOS device package (with the optional Waydroid and GNSS subpackages), the kernel patches, libcamera with autofocus, KWin with rotation fixes, iio-sensor-proxy with a restart fix, and gnss-share with a QMI LOC driver
+- `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage and GNSS), the kernel patches, libcamera with autofocus, KWin with rotation fixes, iio-sensor-proxy with a restart fix, and gnss-share with a QMI LOC driver
 - `lk2nd/` - lk2nd device entries for the Wi-Fi and LTE models
 - `scripts/` - regenerate the kernel patch, build tester packages
 - `tools/` - on-device debugging aids: MMIO and PMIC (SPMI) register access, manual PCIe link retrain, TLMM pin sampling, RT5508 amplifier probe, GNSS test helper and QMI LOC client
