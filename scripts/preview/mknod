@@ -1,0 +1,13 @@
+#!/bin/sh
+# Rootless containers cannot mknod. pmbootstrap only creates these nodes
+# for its chroots: bind the container's own nodes instead. They belong to
+# the host's root, and an O_CREAT open of a node in a sticky world-writable
+# directory is refused unless the directory's owner owns it, so give the
+# chroot's /dev tmpfs devtmpfs's mode 755.
+case "$2:$3:$4" in
+c:1:3) n=null ;; c:1:5) n=zero ;; c:1:7) n=full ;; c:1:8) n=random ;;
+c:1:9) n=urandom ;; c:5:0) n=tty ;; c:5:2) n=ptmx ;;
+*) exec /bin/busybox mknod "$@" ;;
+esac
+/bin/busybox chmod 755 "$(dirname "$1")"
+touch "$1" && mount --bind "/dev/$n" "$1"
