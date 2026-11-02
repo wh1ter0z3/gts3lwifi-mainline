@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <kwin@jayd.ml>
+Date: Sun, 1 Nov 2026 07:56:05 -0700
+Subject: [PATCH] utils/orientationsensor: Don't report Undefined rotation
+ readings on subscribe
+
+After cycling the screen, subscribe() can report an Undefined rotation
+immediately, sending the output to its manual transform. This causes a device
+to turn on the screen in the wrong orientation and immediately rotate to the
+correct one.
+
+Instead, clear stale readings on unsubscribe and report nothing on subscribe,
+and fetch the orientation after the claim is answered.
+
+Fixes: b035005191 ("utils: Port away from Qt sensors")
+---
+ src/utils/orientationsensor.cpp | 26 +++++++++++++-------------
+ 1 file changed, 13 insertions(+), 13 deletions(-)
+
+diff --git a/src/utils/orientationsensor.cpp b/src/utils/orientationsensor.cpp
+index fe4cbb5611..f3c25c7f12 100644
+--- a/src/utils/orientationsensor.cpp
++++ b/src/utils/orientationsensor.cpp
+@@ -65,18 +65,20 @@ OrientationSensorSubscription::OrientationSensorSubscription()
+ {
+     connect(m_sensorProperties.get(), &OrgFreedesktopDBusPropertiesInterface::PropertiesChanged, this, &OrientationSensorSubscription::onPropertiesChanged);
+ 
+-    intoFuture<void>(m_sensorInterface->ClaimAccelerometer()).then([](const std::expected<void, QDBusError> &result) {
++    intoFuture<void>(m_sensorInterface->ClaimAccelerometer()).then(this, [this](const std::expected<void, QDBusError> &result) {
+         if (!result) {
+             qCWarning(KWIN_CORE) << "net.hadess.SensorProxy.ClaimAccelerometer() failed:" << result.error();
+         }
+-    });
+ 
+-    intoFuture<QVariant>(m_sensorProperties->Get(m_sensorInterface->interface(), QStringLiteral("AccelerometerOrientation"))).then(this, [this](const std::expected<QVariant, QDBusError> &result) {
+-        if (result.has_value()) {
+-            setReading(result->toString());
+-        } else {
+-            qCWarning(KWIN_CORE) << "Failed to fetch net.hadess.SensorProxy.AccelerometerOrientation property:" << result.error();
+-        }
++        // iio-sensor-proxy answers ClaimAccelerometer() once it has a new reading, until
++        // then the property can still hold the orientation from the last time it was claimed.
++        intoFuture<QVariant>(m_sensorProperties->Get(m_sensorInterface->interface(), QStringLiteral("AccelerometerOrientation"))).then(this, [this](const std::expected<QVariant, QDBusError> &result) {
++            if (result.has_value()) {
++                setReading(result->toString());
++            } else {
++                qCWarning(KWIN_CORE) << "Failed to fetch net.hadess.SensorProxy.AccelerometerOrientation property:" << result.error();
++            }
++        });
+     });
+ }
+ 
+@@ -154,9 +156,6 @@ void OrientationSensor::onServiceRegistered()
+ void OrientationSensor::onServiceUnregistered()
+ {
+     unsubscribe();
+-
+-    m_orientation = AccelerometerOrientation::Undefined;
+-
+     updateAvailable(false);
+ }
+ 
+@@ -211,13 +210,14 @@ void OrientationSensor::subscribe()
+     connect(m_subscription.get(), &OrientationSensorSubscription::readingChanged, this, [this]() {
+         updateOrientation(m_subscription->reading());
+     });
+-
+-    updateOrientation(m_subscription->reading());
+ }
+ 
+ void OrientationSensor::unsubscribe()
+ {
+     m_subscription.reset();
++
++    // Forget the reading without notifying, the next subscription reports a fresh one.
++    m_orientation = AccelerometerOrientation::Undefined;
+ }
+ 
+ void OrientationSensor::updateAvailable(bool available)

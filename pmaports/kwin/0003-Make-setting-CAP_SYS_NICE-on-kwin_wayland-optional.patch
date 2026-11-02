@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <kwin@jayd.ml>
+Date: Sun, 1 Nov 2026 15:02:16 -0700
+Subject: [PATCH] Make setting CAP_SYS_NICE on kwin_wayland optional
+
+Since e643a37327 the install step always gives kwin_wayland the
+CAP_SYS_NICE file capability, and libcap is required on Linux, so
+distributions can no longer opt out.
+
+Executing a binary with file capabilities makes the process AT_SECURE.
+libdbus ignores DBUS_SESSION_BUS_ADDRESS in processes it considers
+privileged. With musl it asks issetugid(), which reports AT_SECURE, so
+kwin_wayland refuses to connect to the session bus ("Unable to
+autolaunch when setuid"), org.kde.KWin never shows up and the session
+does not start. With glibc, libdbus compares the real and effective ids
+instead, which is why this does not show up there.
+
+Add a KWIN_SETCAP_SYS_NICE option, on by default, and only look for
+libcap when it is on.
+---
+ CMakeLists.txt     | 5 ++++-
+ src/CMakeLists.txt | 2 +-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9d2362ff16..f1637e323d 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -58,6 +58,9 @@ option(KWIN_BUILD_X11 "Enable building X11 common code and Xwayland support" ON)
+ option(KWIN_BUILD_GLOBALSHORTCUTS "Enable building of KWin with global shortcuts support" ON)
+ option(KWIN_BUILD_RUNNERS "Enable building of KWin with krunner support" ON)
+ option(KWIN_BUILD_OVERVIEW "Enable building of KWin overview that integrates into KRunner" ON)
++# Turn this off where libdbus treats file capabilities like setuid (e.g. with musl),
++# otherwise kwin_wayland ignores DBUS_SESSION_BUS_ADDRESS and gets no session bus.
++cmake_dependent_option(KWIN_SETCAP_SYS_NICE "Give kwin_wayland the CAP_SYS_NICE file capability on install" ON "CMAKE_SYSTEM_NAME MATCHES Linux" OFF)
+ 
+ find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
+     Concurrent
+@@ -146,7 +149,7 @@ set_package_properties(KWayland PROPERTIES
+     TYPE REQUIRED
+ )
+ 
+-if(CMAKE_SYSTEM_NAME MATCHES "Linux")
++if(KWIN_SETCAP_SYS_NICE)
+     find_package(Libcap)
+     set_package_properties(Libcap PROPERTIES
+         PURPOSE "Needed for setting CAP_SYS_NICE on kwin_wayland."
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index e9f768311a..a223e7e8f9 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -698,7 +698,7 @@ install(FILES
+     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/kwin/vulkan COMPONENT Devel
+ )
+ 
+-if(CMAKE_SYSTEM_NAME MATCHES "Linux")
++if(KWIN_SETCAP_SYS_NICE)
+     install(
+         CODE "execute_process(
+         COMMAND ${SETCAP_EXECUTABLE}
