@@ -31,6 +31,13 @@ on and the hardware puts it in retention. Kernel patch 0037 does the same
 for msm8996. It is in the built-in clock driver, so it needs the full r6
 kernel to test.
 
+## Suspending more than once
+
+Without patch 0148, the second suspend after a boot fails at `prepare` with -EINVAL
+from `mdp5_pipe_release`. After resume the plane runs on a pipe the MDP5 global state
+calls free, so disabling it again fails. With the patch, four 20 s cycles in a row
+all sleep and resume, and Wi-Fi and Bluetooth still work (SM-T820, 2026-11-02).
+
 ## Not yet looked at
 
 - During the 20 s suspends without Wi-Fi, the RPM sleep counters
