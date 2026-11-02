@@ -59,9 +59,10 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Video decode / encode (Venus) | Partial | H.264, VP8, VP9 decode; H.264 and HEVC encode, 4K30 HEVC from the camera; HEVC decode fails ([venus](docs/venus.md)) |
 | Cameras (front, rear) | Works | rear 13 MP with autofocus, front 5 MP, through libcamera (`pmaports/libcamera` for AF) ([camera](docs/camera.md)) |
 | **Sensors** | | |
-| Accelerometer, gyroscope, magnetometer | Works | auto-rotate with iio-sensor-proxy; KWin rotation fixes in `pmaports/kwin` ([sensors](docs/sensors.md)) |
-| Light sensor | Works | lux through iio-sensor-proxy, for auto-brightness (patch 0077, [sensors](docs/sensors.md)) |
-| Cover (hall) sensor | Not yet | waits for reliable suspend |
+| Accelerometer, gyroscope, magnetometer | Works | auto-rotate with iio-sensor-proxy; KWin rotation fixes in `pmaports/kwin`; no compass heading yet ([sensors](docs/sensors.md)) |
+| Light sensor | Works | lux through iio-sensor-proxy; KWin auto-brightness is off by default and needs training (patch 0077, [sensors](docs/sensors.md)) |
+| Cover (hall) sensor | Not yet | test DT `dts/test/test-hall.dts`; waits for reliable suspend |
+| Grip sensor (SM-T825) | Not yet | test DT `dts/test/test-sar.dts`; nothing reads it without the modem |
 | Fingerprint (Home key) | Blocked | its pins are owned by Samsung's TrustZone |
 | **Software** | | |
 | postmarketOS with Plasma (Wayland) | Works | installed on the eMMC behind lk2nd ([pmos-install](docs/pmos-install.md)) |
