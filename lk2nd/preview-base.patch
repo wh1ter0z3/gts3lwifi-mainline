@@ -1,0 +1,290 @@
+diff --git a/Documentation/dt-bindings.md b/Documentation/dt-bindings.md
+index a677ea49..fa4ae556 100644
+--- a/Documentation/dt-bindings.md
++++ b/Documentation/dt-bindings.md
+@@ -182,6 +182,18 @@ used to switch the navigation scheme to short/long press of a single key.
+ 	lk2nd,single-key-navigation;
+ ```
+ 
++### USB at high speed only
++
++If the SuperSpeed lanes of the USB port go through a redriver or a Type-C
++orientation switch that lk2nd does not set up, the USB 3 controller keeps
++retrying SuperSpeed and never connects at high speed, so the host does not
++see the device at all. `lk2nd,usb-high-speed-only` skips the SuperSpeed PHY
++and runs the controller at high speed only.
++
++```
++	lk2nd,usb-high-speed-only;
++```
++
+ ### Custom menu navigation key hint
+ 
+ If your device uses re-mapped keys you can customize the hint that is shown in
+diff --git a/lk2nd/device/2nd/rules.mk b/lk2nd/device/2nd/rules.mk
+index 06d2dd52..e2ab465f 100644
+--- a/lk2nd/device/2nd/rules.mk
++++ b/lk2nd/device/2nd/rules.mk
+@@ -13,6 +13,7 @@ OBJS += \
+ 	$(LOCAL_DIR)/parse-tags.o \
+ 	$(LOCAL_DIR)/partition.o \
+ 	$(LOCAL_DIR)/samsung-muic-reset.o \
++	$(LOCAL_DIR)/samsung-muic-usb.o \
+ 	$(if $(filter %/mdss_spi.o, $(OBJS)), $(LOCAL_DIR)/spi-display.o) \
+ 
+ ifneq ($(LK2ND_PARTITION_SIZE),)
+diff --git a/lk2nd/device/2nd/samsung-muic-usb.c b/lk2nd/device/2nd/samsung-muic-usb.c
+new file mode 100644
+index 00000000..bd29c17c
+--- /dev/null
++++ b/lk2nd/device/2nd/samsung-muic-usb.c
+@@ -0,0 +1,54 @@
++// SPDX-License-Identifier: BSD-3-Clause
++
++#include <bits.h>
++#include <debug.h>
++
++#include <libfdt.h>
++#include <lk2nd/hw/gpio_i2c.h>
++
++#include "device.h"
++
++/*
++ * Samsung MUICs such as the SM5703 and SM5705 only connect D+/D- to the USB
++ * PHY on their own when they recognize the cable from the resistance on the
++ * ID pin. Behind a USB Type-C port the ID pin may read as some accessory
++ * instead, and the downstream kernel switches D+/D- to USB manually. Without
++ * that, the USB controller runs but the host never sees the device.
++ */
++#define MUIC_REG_CONTROL		0x02
++#define MUIC_CONTROL_AUTO_SWITCH	BIT(2)
++#define MUIC_REG_MANUAL_SW1		0x13
++#define MUIC_MANUAL_SW1_DM_DP_MASK	0xfc
++#define MUIC_MANUAL_SW1_DM_DP_USB	(1 << 5 | 1 << 2)
++
++static int samsung_muic_usb_switch(const void *dtb, int node)
++{
++	uint8_t addr, val;
++	gpio_i2c_info_t i2c;
++	status_t status;
++
++	status = gpio_i2c_get(dtb, node, &i2c, &addr);
++	if (status)
++		return status;
++
++	/* Set the switch first, then stop the MUIC from changing it */
++	status = gpio_i2c_read_reg_bytes(&i2c, addr, MUIC_REG_MANUAL_SW1, &val, 1);
++	if (!status) {
++		val = (val & ~MUIC_MANUAL_SW1_DM_DP_MASK) | MUIC_MANUAL_SW1_DM_DP_USB;
++		status = gpio_i2c_write_reg_bytes(&i2c, addr, MUIC_REG_MANUAL_SW1, &val, 1);
++	}
++	if (!status)
++		status = gpio_i2c_read_reg_bytes(&i2c, addr, MUIC_REG_CONTROL, &val, 1);
++	if (!status) {
++		val &= ~MUIC_CONTROL_AUTO_SWITCH;
++		status = gpio_i2c_write_reg_bytes(&i2c, addr, MUIC_REG_CONTROL, &val, 1);
++	}
++	if (status) {
++		dprintf(CRITICAL, "muic-usb-switch: I2C error: %d\n", status);
++		return status;
++	}
++
++	dprintf(INFO, "muic-usb-switch: D+/D- connected to USB\n");
++	return 0;
++}
++LK2ND_DEVICE_INIT("samsung,muic-usb-switch", samsung_muic_usb_switch);
+diff --git a/lk2nd/device/device.c b/lk2nd/device/device.c
+index 9e309481..b5611b0d 100644
+--- a/lk2nd/device/device.c
++++ b/lk2nd/device/device.c
+@@ -28,6 +28,11 @@ const char *const *lk2nd_device_get_dtb_hints(void)
+ /**
+  * lk2nd_device_get_sd_mmc_slot_num() - Get an uint32_t indicating the SDHC slot number for the SD card.
+  */
++bool lk2nd_device_usb_high_speed_only(void)
++{
++	return lk2nd_dev.usb_high_speed_only;
++}
++
+ uint32_t lk2nd_device_get_sd_mmc_slot_num(void)
+ {
+ 	return lk2nd_dev.sd_mmc_slot_number;
+@@ -136,6 +141,10 @@ static void parse_dtb(const void *dtb)
+ 	if (len >= 0)
+ 		lk2nd_dev.single_key = true;
+ 
++	val = fdt_getprop(dtb, node, "lk2nd,usb-high-speed-only", &len);
++	if (len >= 0)
++		lk2nd_dev.usb_high_speed_only = true;
++
+ 	val = fdt_stringlist_get(dtb, node, "lk2nd,menu-key-strings", 0, &len);
+ 	if (val && len > 0)
+ 		lk2nd_dev.menu_keys.navigate = strndup(val, len);
+diff --git a/lk2nd/device/device.h b/lk2nd/device/device.h
+index de8d5d7a..1991890b 100644
+--- a/lk2nd/device/device.h
++++ b/lk2nd/device/device.h
+@@ -32,6 +32,7 @@ struct lk2nd_device {
+ 
+ 	const char *const *dtbfiles;
+ 	bool single_key;
++	bool usb_high_speed_only;
+ 	struct lk2nd_menu_keys menu_keys;
+ 	uint32_t sd_mmc_slot_number;
+ 
+diff --git a/lk2nd/device/dts/msm8996/msm8996-samsung-gts3lwifi.dts b/lk2nd/device/dts/msm8996/msm8996-samsung-gts3lwifi.dts
+new file mode 100644
+index 00000000..b4325006
+--- /dev/null
++++ b/lk2nd/device/dts/msm8996/msm8996-samsung-gts3lwifi.dts
+@@ -0,0 +1,45 @@
++// SPDX-License-Identifier: BSD-3-Clause
++
++#include <skeleton64.dtsi>
++#include <lk2nd.dtsi>
++
++#define I2C_GPIO_FLAGS	(GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN | GPIO_BIAS_DISABLE)
++
++/ {
++	/* Values from the stock SM-T820 rev05 DTB: APQ8096 (291), PM8994 + PM8004 */
++	qcom,msm-id = <291 0x30001>;
++	qcom,board-id = <8 0>, <8 2>, <8 4>, <8 5>;
++	qcom,pmic-id = <0x20009 0x1000c 0x0 0x0>;
++};
++
++&lk2nd {
++	model = "Samsung Galaxy Tab S3 (WiFi)";
++	compatible = "samsung,gts3lwifi";
++
++	/* SuperSpeed needs the s2mm005 Type-C controller and a redriver */
++	lk2nd,usb-high-speed-only;
++
++	/* SM5705 MUIC: the port's ID pin reads 0x11, so D+/D- stay open */
++	muic-usb-switch {
++		compatible = "samsung,muic-usb-switch";
++		i2c-reg = <0x25>;
++		i2c-sda-gpios = <&tlmm 33 I2C_GPIO_FLAGS>;
++		i2c-scl-gpios = <&tlmm 32 I2C_GPIO_FLAGS>;
++	};
++
++	gpio-keys {
++		compatible = "gpio-keys";
++
++		/* PM8994 GPIO 2 is the Home key; Volume Up is GPIO 3 */
++		volume-up {
++			lk2nd,code = <KEY_VOLUMEUP>;
++			gpios = <&pmic 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
++		};
++
++		/* Volume Down is the PM8994 PON RESIN input, not a GPIO */
++		volume-down {
++			lk2nd,code = <KEY_VOLUMEDOWN>;
++			gpios = <&pmic_pon GPIO_PMIC_RESIN 0>;
++		};
++	};
++};
+diff --git a/lk2nd/device/dts/msm8996/rules.mk b/lk2nd/device/dts/msm8996/rules.mk
+index f6410b9f..5841eb8c 100644
+--- a/lk2nd/device/dts/msm8996/rules.mk
++++ b/lk2nd/device/dts/msm8996/rules.mk
+@@ -10,3 +10,4 @@ ADTBS += \
+ 	$(LOCAL_DIR)/msm8996-xiaomi-mi5s.dtb \
+ 	$(LOCAL_DIR)/msm8996-xiaomi-mi5s-plus.dtb \
+ 	$(LOCAL_DIR)/msm8996-zte-axon7.dtb \
++	$(LOCAL_DIR)/msm8996-samsung-gts3lwifi.dtb \
+diff --git a/lk2nd/include/lk2nd/device.h b/lk2nd/include/lk2nd/device.h
+index 4c339862..4ca062b6 100644
+--- a/lk2nd/include/lk2nd/device.h
++++ b/lk2nd/include/lk2nd/device.h
+@@ -13,9 +13,11 @@ void lk2nd_device2nd_copy_atags(void *tags, const char *cmdline,
+ #if WITH_LK2ND_DEVICE
+ const char *const *lk2nd_device_get_dtb_hints(void);
+ uint32_t lk2nd_device_get_sd_mmc_slot_num(void);
++bool lk2nd_device_usb_high_speed_only(void);
+ #else
+ static inline const char *const *lk2nd_device_get_dtb_hints(void) { return NULL; };
+ static inline uint32_t lk2nd_device_get_sd_mmc_slot_num(void) { return 0; };
++static inline bool lk2nd_device_usb_high_speed_only(void) { return false; };
+ #endif
+ 
+ #endif /* LK2ND_DEVICE_H */
+diff --git a/platform/msm_shared/qmp_usb30_phy.c b/platform/msm_shared/qmp_usb30_phy.c
+index c2904c0a..2a537edd 100644
+--- a/platform/msm_shared/qmp_usb30_phy.c
++++ b/platform/msm_shared/qmp_usb30_phy.c
+@@ -38,6 +38,7 @@
+ #include <qtimer.h>
+ #include <platform.h>
+ #include <target.h>
++#include <lk2nd/device.h>
+ 
+ #define HS_PHY_COMMON_CTRL             0xEC
+ #define USE_CORECLK                    BIT(14)
+@@ -261,6 +262,19 @@ void usb30_qmp_phy_init(void)
+ 	uint32_t qmp_reg_size;
+ 	uint32_t i;
+ 
++	/*
++	 * Some devices route the SuperSpeed lanes through a redriver or a
++	 * Type-C orientation switch that lk2nd does not set up. The
++	 * controller then retries SuperSpeed forever instead of falling back
++	 * to high speed, and the host never sees it. Take the same path as
++	 * a QMP PHY that fails to initialize.
++	 */
++	if (lk2nd_device_usb_high_speed_only()) {
++		dprintf(INFO, "USB: high speed only, QMP PHY left alone\n");
++		hsonly_mode = true;
++		return;
++	}
++
+ 
+ #if USE_TARGET_QMP_SETTINGS
+ 	struct qmp_reg *target_qmp_settings = NULL;
+diff --git a/platform/msm_shared/usb30_dwc.c b/platform/msm_shared/usb30_dwc.c
+index 8d58aa9b..8b73849c 100644
+--- a/platform/msm_shared/usb30_dwc.c
++++ b/platform/msm_shared/usb30_dwc.c
+@@ -1577,6 +1577,9 @@ void dwc_device_init(dwc_dev_t *dev)
+ 	/* 16. initialize global control reg for device mode operation */
+ 	dwc_gctl_init(dev);
+ 
++	/* SuperSpeed, or high speed when the QMP PHY is not used */
++	dwc_device_set_max_speed(dev);
++
+ 	/* 17. AXI master config */
+ 	dwc_axi_master_config(dev);
+ 
+diff --git a/platform/msm_shared/usb30_dwc_hw.c b/platform/msm_shared/usb30_dwc_hw.c
+index baa7be2c..95444bbb 100644
+--- a/platform/msm_shared/usb30_dwc_hw.c
++++ b/platform/msm_shared/usb30_dwc_hw.c
+@@ -361,6 +361,17 @@ void dwc_device_set_addr(dwc_dev_t *dev, uint16_t addr)
+ 	REG_WRITE_FIELD(dev, DCFG, DEVADDR, addr);
+ }
+ 
++/* set the fastest speed the device may connect at */
++void dwc_device_set_max_speed(dwc_dev_t *dev)
++{
++	/* In high-speed only mode the SuperSpeed PHY is not set up. Left at
++	 * SuperSpeed (the reset value), the core keeps trying to detect a
++	 * SuperSpeed receiver and never connects at high speed.
++	 */
++	REG_WRITE_FIELD(dev, DCFG, DEVSPD,
++			use_hsonly_mode() ? DSTS_CONNECTSPD_HS : DSTS_CONNECTSPD_SS);
++}
++
+ /* reset device */
+ void dwc_device_reset(dwc_dev_t *dev)
+ {
+diff --git a/platform/msm_shared/usb30_dwc_hw.h b/platform/msm_shared/usb30_dwc_hw.h
+index 119bf20e..cb9d9605 100644
+--- a/platform/msm_shared/usb30_dwc_hw.h
++++ b/platform/msm_shared/usb30_dwc_hw.h
+@@ -50,6 +50,7 @@ uint32_t dwc_coreid(dwc_dev_t *dev);
+ uint8_t dwc_connectspeed(dwc_dev_t *dev);
+ uint8_t dwc_device_run_status(dwc_dev_t *dev);
+ void dwc_gctl_init(dwc_dev_t *dev);
++void dwc_device_set_max_speed(dwc_dev_t *dev);
+ void dwc_axi_master_config(dwc_dev_t *dev);
+ void dwc_device_enter_test_mode(dwc_dev_t *dev);
+ void dwc_device_enable_u1(dwc_dev_t *dev, uint8_t val);
