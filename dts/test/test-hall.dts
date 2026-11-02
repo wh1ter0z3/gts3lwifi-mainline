@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "../apq8096-samsung-gts3lwifi.dts"
+#include <dt-bindings/input/gpio-keys.h>
+
+/*
+ * Test: the cover's hall sensor as SW_LID (set = cover closed).
+ *
+ * Stock (msm8996-sec-gts3lwifi-r05.dtsi and msm8996-sec-gts3llte-r05.dtsi,
+ * gpio_keys/hall_flip): PM8994 GPIO 7, 15 ms debounce, a wakeup source;
+ * the pin (gpio@c600) is a digital input with no pull at 1.8 V (vin-sel 2).
+ * Samsung's gpio_keys.c (flip_cover_work()) reads the raw level and reports
+ * SW_LID = !level, so low means closed.  The SM-T825 uses the same pin;
+ * build an LTE test by including ../msm8996-samsung-gts3llte.dts instead.
+ *
+ * Its own gpio-keys device, as other Samsung boards upstream do
+ * (msm8916-samsung-a2015-common.dtsi), so that userspace can tell it from
+ * the keys.  linux,can-disable lets userspace turn the switch off without a
+ * reboot: echo 0 > /sys/devices/platform/gpio-hall-sensor/disabled_switches
+ *
+ * Only opening the cover wakes the system (EV_ACT_DEASSERTED); closing it
+ * while suspended would wake the tablet only for logind or PowerDevil to
+ * suspend it again.
+ *
+ * Not in the main DT until suspend works: logind (HandleLidSwitch) and
+ * PowerDevil (lid action) suspend when the cover closes.
+ */
+
+/ {
+	gpio-hall-sensor {
+		compatible = "gpio-keys";
+		label = "GPIO Hall Effect Sensor";
+		pinctrl-0 = <&hall_sensor_default>;
+		pinctrl-names = "default";
+
+		event-hall-sensor {
+			label = "Hall Effect Sensor";
+			gpios = <&pm8994_gpios 7 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_SW>;
+			linux,code = <SW_LID>;
+			linux,can-disable;
+			debounce-interval = <15>;
+			wakeup-source;
+			wakeup-event-action = <EV_ACT_DEASSERTED>;
+		};
+	};
+};
+
+&pm8994_gpios {
+	/* Cover hall sensor: digital input, no pull, 1.8 V */
+	hall_sensor_default: hall-sensor-default-state {
+		pins = "gpio7";
+		function = PMIC_GPIO_FUNC_NORMAL;
+		input-enable;
+		bias-disable;
+		power-source = <PM8994_GPIO_S4>;
+	};
+};
