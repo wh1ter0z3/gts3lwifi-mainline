@@ -63,7 +63,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Light sensor | Works | lux through iio-sensor-proxy; KWin auto-brightness is off by default and needs training (patch 0077, [sensors](docs/sensors.md)) |
 | Cover (hall) sensor | Not yet | test DT `dts/test/test-hall.dts`; waits for reliable suspend |
 | Grip sensor (SM-T825) | Not yet | test DT `dts/test/test-sar.dts`; nothing reads it without the modem |
-| Fingerprint (Home key) | Blocked | its pins are owned by Samsung's TrustZone |
+| Fingerprint (Home key) | Blocked (hardware-tested) | Egis ET510 on a TrustZone-owned SPI bus, run by a Samsung-signed trustlet; TrustZone accepts the BLSP ownership call but keeps the bus locked ([fingerprint](docs/fingerprint.md)) |
 | **Software** | | |
 | postmarketOS with Plasma (Wayland) | Works | installed on the eMMC behind lk2nd ([pmos-install](docs/pmos-install.md)) |
 | Widevine DRM | Partial | L3 plays in Waydroid and Flatpak Firefox; L1 not on mainline ([widevine](docs/widevine.md)) |
