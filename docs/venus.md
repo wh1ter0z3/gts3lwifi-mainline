@@ -41,6 +41,9 @@ Open:
   Seen with libx265 Main profile streams at 720p and 1080p.
   Works on Linux 7.3.1 (a 1080p clip matches a software decode), commit not
   identified: see [kernel-7.3](kernel-7.3.md).
+  A wider check is ready but hasn't run: `tests/venus-hevc-clips.py` makes the
+  clips with the md5 of a software decode, `tests/venus-hevc.sh` runs them on the
+  tablet. 10-bit (Main 10) is untested and stays out of the default run.
 - ~~**Encoding through GStreamer (`v4l2h264enc`):** the firmware stops with
   `Err_Fatal ... venus\utils\src\vbuffer.c:1219` after about 5 frames.~~
   Fixed by patch 0099 (above).
