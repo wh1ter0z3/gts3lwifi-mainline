@@ -1,0 +1,11 @@
+#!/bin/sh
+# Preview image: at each login, until the default password is gone, say so and
+# offer the page that changes it. See docs/release-notes-preview.md.
+[ -e /run/gts3-default-password ] || exit 0
+
+kdialog --title "Set your own password" --yes-label "Change it now" --no-label "Later" \
+	--yesno "This tablet still has the default password from the install guide.
+
+Tap the password field on the next page to get the on-screen keyboard." || exit 0
+
+exec systemsettings kcm_users

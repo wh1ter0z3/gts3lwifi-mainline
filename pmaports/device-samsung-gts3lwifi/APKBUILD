@@ -3,7 +3,7 @@ maintainer="psigod <psigod@example.com>"
 pkgname=device-samsung-gts3lwifi
 pkgdesc="Samsung Galaxy Tab S3 (SM-T820, SM-T825)"
 pkgver=1
-pkgrel=11
+pkgrel=12
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -21,7 +21,7 @@ depends="
 	soc-qcom-msm8996
 	"
 makedepends="devicepkg-dev"
-subpackages="$pkgname-openrc $pkgname-waydroid:_waydroid $pkgname-gnss:_gnss"
+subpackages="$pkgname-openrc $pkgname-waydroid:_waydroid $pkgname-gnss:_gnss $pkgname-preview:_preview"
 source="
 	deviceinfo
 	modules-load.conf
@@ -48,6 +48,12 @@ source="
 	gts3-gnss-rmtfs.conf
 	gts3-gnss-tqftpserv.conf
 	90-gts3-gnss.rules
+	gts3-preview-password
+	gts3-preview-password.service
+	gts3-preview-password.path
+	gts3-first-login
+	gts3-first-login.desktop
+	gts3-preview-kwinrc
 	"
 
 build() {
@@ -137,6 +143,31 @@ _gnss() {
 		"$subpkgdir"/usr/lib/systemd/system/multi-user.target.wants/gnss-share.service
 }
 
+_preview() {
+	pkgdesc="Preview image only: on-screen keyboard in the session, prompt to replace the default password"
+	# Never a dependency and no install_if: only the preview image adds it, with
+	# pmbootstrap install --add. docs/release-notes-preview.md says why.
+	depends="kdialog plasma-keyboard systemsettings"
+
+	install -Dm755 "$srcdir"/gts3-preview-password \
+		"$subpkgdir"/usr/libexec/gts3-preview-password
+	install -Dm644 "$srcdir"/gts3-preview-password.service \
+		"$subpkgdir"/usr/lib/systemd/system/gts3-preview-password.service
+	install -Dm644 "$srcdir"/gts3-preview-password.path \
+		"$subpkgdir"/usr/lib/systemd/system/gts3-preview-password.path
+	mkdir -p "$subpkgdir"/usr/lib/systemd/system/multi-user.target.wants
+	ln -s ../gts3-preview-password.service \
+		"$subpkgdir"/usr/lib/systemd/system/multi-user.target.wants/gts3-preview-password.service
+	ln -s ../gts3-preview-password.path \
+		"$subpkgdir"/usr/lib/systemd/system/multi-user.target.wants/gts3-preview-password.path
+	install -Dm755 "$srcdir"/gts3-first-login \
+		"$subpkgdir"/usr/bin/gts3-first-login
+	install -Dm644 "$srcdir"/gts3-first-login.desktop \
+		"$subpkgdir"/etc/xdg/autostart/gts3-first-login.desktop
+	# KWin starts no on-screen keyboard in a session unless told to
+	install -Dm644 "$srcdir"/gts3-preview-kwinrc "$subpkgdir"/etc/xdg/kwinrc
+}
+
 openrc() {
 	install_if="$pkgname=$pkgver-r$pkgrel openrc"
 	install="$subpkgname.post-install"
@@ -170,4 +201,10 @@ be4208211112f3e4b0950b490819de2bcf9760d45a1d5b390de5b7fd60e2a6ea8cee3cb6202ef52b
 19c7375d3d249960c1cefdf88399d4c58751cf451bb3c1daf82d4382e48e0849d7accca2afbce94d73e455bb1cec86e9dad881d7f1c9a391430821b46074600e  gts3-gnss-rmtfs.conf
 890ad6c4e69004e5ab7a36238fc63f7b737dde5fb1243417c2aad0f43d128005bdb16bfa437db0c7842cce159de0fba66e54cedb6941f06bab6d392f7802c3dd  gts3-gnss-tqftpserv.conf
 17121aa9e94150b45002c245654dbc35174e118c26ced70d986d878b33b00b187ae9d5f723035e29f8ec9f3dcee10b95077413c45e9ed2ed7b2f4f62cd0c311d  90-gts3-gnss.rules
+f1abcacdf0f574747435d06658411d740b917a52f24a63ce2088a2655ff21dec419023d0f2f4b542736b02d7cb278017364394b65a925eff2dd26627fc31b5ca  gts3-preview-password
+c80e85624b64f764137130d035c1bb70d5c73bd00aed0e7ec0734e87ecd1c9e71a15a9a223b90af40bec344a10f51a0b96cd149b495a3c5da29b932f79174201  gts3-preview-password.service
+c70f048c84838a21d5e2f967520cc8f823c86992c8f979a1b27359ce2fbd705a08f1e0df590f74b9fe5ee02dae611c219fe4dd7368ad72f89d47fd53f51eb363  gts3-preview-password.path
+e129f043392a9e1093aca541421baca2fccb203a840b9f5c234c6d3432b9d370ef57c8b3815863439667ebb5c97217861b7d38f3b1cff3c41fa8861e05bf6534  gts3-first-login
+2ce70e6d9c7a3ac3e57bd1dd19cd18d46ffca0be9a937310dc18baf2b6470579dcbb6c8fb5888e26988cec7b7842a55e257ead2e7bcc74750f33fff9f637201b  gts3-first-login.desktop
+ad005503449114dd8a487e1495d43b66c467ed4f0109535386bd8a7ace0c83ac7d4fa3209961a0f79dc222f8e2ca60cfa059f18fa0273d35e0674f5d5b14b485  gts3-preview-kwinrc
 "
