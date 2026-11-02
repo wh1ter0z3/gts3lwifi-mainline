@@ -1,0 +1,25 @@
+# Rootless pmbootstrap for the preview build. No loop devices, no real mounts of
+# block devices: see scripts/build-preview.py for how the image gets written.
+FROM docker.io/library/alpine@sha256:dc92f017beea8e7f43263073d717f7bc011228c95d5312e440deb4d035bb4eec
+RUN apk add --no-cache \
+	android-tools \
+	coreutils \
+	e2fsprogs \
+	e2fsprogs-extra \
+	findutils \
+	git \
+	multipath-tools \
+	openssl \
+	python3 \
+	sfdisk \
+	sudo \
+	tar \
+	util-linux \
+	util-linux-misc \
+	zstd
+COPY mknod chmod /usr/local/sbin/
+RUN /bin/busybox chmod 755 /usr/local/sbin/mknod /usr/local/sbin/chmod && \
+	adduser -D -u 1000 pmos && \
+	echo 'pmos ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/pmos
+USER pmos
+WORKDIR /home/pmos
