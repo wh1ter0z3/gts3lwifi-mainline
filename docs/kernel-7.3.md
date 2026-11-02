@@ -113,13 +113,16 @@ it on an SM-T825: only its device tree is compile-tested.
 | GNSS | session starts and stops; no fix indoors, same as 6.19 |
 | Venus decode | H.264 and HEVC both match a software decode |
 | Cameras | both capture |
-| Audio | capture and muted playback through the DSP, no errors. **Not heard yet** |
+| Audio, by ear | speakers and headphones sound clean. The mic works but is quiet (peaks near 5 %): gain was never tuned, see `docs/audio.md` |
+| Panel, by eye | picture correct, brightness works, on a boot with the `pclk` warning below |
+| Rotation, touch, pen | all good by hand |
+| Power button, by hand | sleeps and wakes twice in a row, picture and touch correct after |
 | KWin, modem, ADSP, SLPI, USB gadget | running |
 
 Sensors, GNSS and cameras ran on the build before 0147 and 0148, which don't touch them.
 
-**Needs a person:** the picture on the panel, rotation, touch, pen, and speakers by
-ear. Nobody has checked these on 7.3.1 by looking at the tablet.
+**Not checked by hand:** the keyboard cover, the camera preview by eye, and a GPS fix
+at a window.
 
 ### Worse than 6.19, or maybe
 
@@ -130,14 +133,18 @@ From the journal, 33 boots of 6.19.5 and 17 of 7.3.1:
 | `pclk0_clk_src: rcg didn't update its configuration` | 12 | 12 | 0.036 |
 | Bluetooth `Opcode 0x0c03 failed: -110` | 2 | 4 | 0.16 |
 
-The clock warning looks like a real increase. The DSI clocks still end up at the
-right rates, but nobody has looked at the panel on such a boot. The cause is unknown.
+The clock warning looks like a real increase, cause unknown. It looks harmless: the
+DSI clocks end up at the right rates, and the picture was correct on a boot with it.
 
 The Bluetooth timeout comes at the end of the second setup during boot, with the same
 timeline on both kernels, so it isn't new. These numbers can't say whether it got more
 frequent. That boot has no controller, and rfkill or restarting `bluetooth` doesn't
 help. `rmmod hci_uart; modprobe hci_uart` brings it back. 15 of those re-probes in a
 row never hit the timeout, so it seems to take the load of a boot to trigger it.
+
+`wcd9335: overflow error on TX port 1` appeared once at the start of a capture, on 2
+boots of 7.3.1 and on none of 6.19.5. We don't know how many of the 6.19.5 boots
+recorded anything. The recording played back fine.
 
 ### Better than 6.19
 
