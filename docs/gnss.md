@@ -1,6 +1,6 @@
 # GNSS (GPS)
 
-## Status (2026-11-01): GPS is on for the SM-T820: the modem DSP is in the main DT and `device-samsung-gts3lwifi-gnss` comes with the device package; regression pass pending
+## Status (2026-11-02): GPS is on for the SM-T820: the modem DSP is in the main DT and `device-samsung-gts3lwifi-gnss` comes with the device package
 
 | Model | Where the GNSS engine is | Stock | Mainline |
 |---|---|---|---|
@@ -118,14 +118,31 @@ installed with `apk add -u` from a local repository, then booted normally
 - **GNSS session at a desk:** starts with the client and stops with it. No
   satellites indoors, as before.
 
-Open: audio by ear, a fix at a window on this build, and any boot on an
-SM-T825.
+Audio by ear and a fix at a window ran on Linux 7.3.1, below. Open: any boot
+on an SM-T825.
 
 **Bluetooth timed out once in 6 boots:** `hci0: Opcode 0x0c03 failed: -110`
 after its second setup, on the first boot of this install, and the adapter
 was missing until a reboot. The other 5 boots were fine, with the same
 timing, and it was not seen in earlier boots without the modem. Cause
 unknown.
+
+### Audio, a fix at a window, and sleep (steps 9 and 10, 2026-11-02)
+
+On Linux 7.3.1 (fork branch `linux-7.3`), which carries this branch, installed:
+
+- **Audio, by ear:** speakers and headphones sound clean. The mic works but is
+  quiet: its gain was never tuned.
+- **Fix at a window:** first fix after 80 s, probably with orbit data kept from
+  earlier fixes. 12 GPS and 10 GLONASS in view, HDOP about 0.8.
+- **Idle modem across s2idle:** 30 s by RTC, twice. Both slept the full time, so
+  the modem and gnss-share didn't wake it.
+- **Session across s2idle:** 30 s in the middle of a 120 s session. It carried on:
+  123 GGA in 123 s, 117 with a fix, modem running, nothing in dmesg, and
+  gnss-share stopped the session at the end. No sentence seems to be lost, so a
+  client left connected probably keeps the engine on through a suspend.
+
+Not measured: what the modem costs in battery, idle or in suspend.
 
 ## Evidence
 
@@ -581,7 +598,8 @@ DT; with the override the subpackage does nothing there.
 ## Open items
 
 - **Idle cost of the modem.** It boots at startup and stays up idle, as on
-  stock. Its screen-off and suspend cost on mainline is unmeasured (step 9).
+  stock. It doesn't wake a suspend, but its battery cost on mainline is
+  unmeasured (step 9).
 - **Time injection** depends on systemd-timesyncd having synchronized the
   clock (network at boot). Without it no time is injected and the first
   fix takes longer; a wrong RTC with no network is not injected either,
