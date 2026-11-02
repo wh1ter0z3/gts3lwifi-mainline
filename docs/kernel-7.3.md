@@ -110,19 +110,18 @@ it on an SM-T825: only its device tree is compile-tested.
 | Boots with 0146 | 13 of 13 clean: no announce failures or modem crashes. Without it, a crash on 2 of 4 |
 | Suspend, 20 s by RTC | 4 of 4 in a row, as RAM boot and as installed. Wi-Fi passes traffic after, Bluetooth stays powered |
 | Sensors | accelerometer, gyroscope, magnetometer, light, ADC; orientation reads normal |
-| GNSS | session starts and stops; no fix indoors, same as 6.19 |
+| GNSS | at a window, first fix after 80 s, probably with orbit data kept from earlier fixes; 12 GPS and 10 GLONASS in view, HDOP about 0.8 |
 | Venus decode | H.264 and HEVC both match a software decode |
-| Cameras | both capture |
+| Cameras | both capture; "seems good" by hand in Ocellus |
 | Audio, by ear | speakers and headphones sound clean. The mic works but is quiet (peaks near 5 %): gain was never tuned, see `docs/audio.md` |
 | Panel, by eye | picture correct, brightness works, on a boot with the `pclk` warning below |
 | Rotation, touch, pen | all good by hand |
 | Power button, by hand | sleeps and wakes twice in a row, picture and touch correct after |
 | KWin, modem, ADSP, SLPI, USB gadget | running |
 
-Sensors, GNSS and cameras ran on the build before 0147 and 0148, which don't touch them.
+Sensors and H.264/HEVC decode ran on the build before 0147 and 0148, which don't touch them.
 
-**Not checked by hand:** the keyboard cover, the camera preview by eye, and a GPS fix
-at a window.
+**Not checked by hand:** the keyboard cover.
 
 ### Worse than 6.19, or maybe
 
