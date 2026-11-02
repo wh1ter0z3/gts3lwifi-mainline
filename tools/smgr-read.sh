@@ -14,8 +14,8 @@
 # radii that differ much mean no soft-iron one.
 #
 # The buffer can have one reader only: stop iio-sensor-proxy first
-# (systemctl stop iio-sensor-proxy; start it again afterwards, and with
-# KWin running reboot instead: see docs/sensors.md). Needs od and
+# (systemctl stop iio-sensor-proxy; start it again afterwards, or on Alpine's
+# package with KWin running reboot instead: see docs/sensors.md). Needs od and
 # awk (busybox has both). Root.
 name=${1:?usage: smgr-read.sh NAME [COUNT] [RATE]}
 count=${2:-20}

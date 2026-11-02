@@ -72,7 +72,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 ## Layout
 
 - `dts/` - device trees for both models (the SM-T825 one includes the SM-T820 one), plus test variants; the panel temperature channel is still test-only
-- `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage), the kernel patches, libcamera with autofocus, and KWin with rotation fixes
+- `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage), the kernel patches, libcamera with autofocus, KWin with rotation fixes, and iio-sensor-proxy with a restart fix
 - `lk2nd/` - lk2nd device entries for the Wi-Fi and LTE models
 - `scripts/` - regenerate the kernel patch, build tester packages
 - `tools/` - on-device debugging aids: MMIO and PMIC (SPMI) register access, manual PCIe link retrain, TLMM pin sampling, RT5508 amplifier probe

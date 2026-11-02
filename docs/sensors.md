@@ -290,8 +290,7 @@ so it only matters once the modem works.
 ## Tests on the tablet
 
 Done on the SM-T820 (2026-11-01, kernel r8 with patches 0140-0145 as a
-module, iio-sensor-proxy 3.9 with the local restart patch from
-[Known issues](#known-issues), KWin 6.8):
+module, iio-sensor-proxy 3.9 from `pmaports/iio-sensor-proxy`, KWin 6.8):
 
 1. **Kernel patches.** `monitor-sensor` shows the orientation (normal,
    tilted-up) and the light level. `smgr-read.sh qcom-smgr-accel 5` gives
@@ -343,9 +342,9 @@ Still to do:
    `dts/test/test-sar.dts`, read `in_proximity*_raw` with a hand on and off
    the antenna area.
 
-`smgr-read.sh` needs iio-sensor-proxy stopped. With KWin running, starting
-it again leaves auto-rotate dead (see [Known issues](#known-issues)), so
-reboot after such a test.
+`smgr-read.sh` needs iio-sensor-proxy stopped. On Alpine's package, starting
+it again with KWin running leaves auto-rotate dead (see
+[Known issues](#known-issues)), so reboot after such a test.
 
 ## Known issues
 
@@ -402,14 +401,14 @@ reboot after such a test.
 - There is no `*_sampling_frequency_available` attribute. The driver has a
   `read_avail` callback, but no channel sets `info_mask_*_available`, so the
   core never calls it. Nothing needs it yet.
-- Restarting iio-sensor-proxy while KWin runs leaves the orientation at
-  "undefined" for every client. iio-sensor-proxy 3.9 takes its D-Bus
+- On Alpine's iio-sensor-proxy 3.9, restarting it while KWin runs leaves the
+  orientation at "undefined" for every client. It takes its D-Bus
   name before it has probed the IIO devices, so KWin's immediate
   `ClaimAccelerometer` fails (`driver_set_polling: assertion
   'sensor_device' failed`); the claim is counted, but polling never
   starts. At boot iio-sensor-proxy starts before KWin, so this does not
-  happen. A reboot recovers. A local patch to iio-sensor-proxy fixes it
-  (10 of 10 restarts on the SM-T820); it is not packaged.
+  happen. A reboot recovers. `pmaports/iio-sensor-proxy` fixes it (10 of 10
+  restarts on the SM-T820); the fix is not upstream yet.
 
 - `qcom_smgr` registered `qmi_handle_release` through a function-pointer
   cast; with kCFI every unbind (stopping the SLPI, unloading the module)
