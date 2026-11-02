@@ -1,0 +1,94 @@
+{
+ "release": {
+  "name": "pmos-gts3-preview1"
+ },
+ "jobs": 16,
+ "fork": {
+  "url": "https://github.com/jaydens-tasty-slop/gts3lwifi-mainline.git",
+  "commit": "d8b79e35ce4bc5d5dc994f4b1d01d66071968cfc",
+  "pmaports_tree": "a2c99719d44d5dbaab68411bfe92b1413cc160b6",
+  "build": [
+   "linux-postmarketos-qcom-msm8996",
+   "device-samsung-gts3lwifi",
+   "kwin",
+   "libcamera",
+   "iio-sensor-proxy",
+   "gnss-share"
+  ],
+  "overlay": {
+   "linux-postmarketos-qcom-msm8996": "device/testing/linux-postmarketos-qcom-msm8996",
+   "device-samsung-gts3lwifi": "device/testing/device-samsung-gts3lwifi",
+   "kwin": "extra-repos/systemd/kwin",
+   "libcamera": "temp/libcamera",
+   "iio-sensor-proxy": "temp/iio-sensor-proxy",
+   "gnss-share": "temp/gnss-share"
+  }
+ },
+ "kernel": {
+  "version": "7.3.1",
+  "url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.3.1.tar.xz",
+  "sha512": "eac8912be329999150a71257adc513e6a52891d122641943c3a440f775267705eff0b275b4d90d5298518ca638ab48fc2b7c3ee109d82f0bb34a1ac081e9c3a2"
+ },
+ "pmbootstrap": {
+  "url": "https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git",
+  "commit": "46ee403e4680002ce42dc2645adf9b08557270e9"
+ },
+ "pmaports": {
+  "url": "https://gitlab.postmarketos.org/postmarketOS/pmaports.git",
+  "commit": "c33fd8ac3a8f05bc36c633c2233023e3ca70b847"
+ },
+ "image": {
+  "device": "samsung-gts3lwifi",
+  "ui": "plasma-desktop",
+  "user": "user",
+  "default_password": "147147",
+  "hostname": "gts3-preview",
+  "timezone": "GMT",
+  "locale": "en_US.UTF-8",
+  "boot_size_mb": 512,
+  "add": [
+   "device-samsung-gts3lwifi-preview"
+  ],
+  "providers": {
+   "postmarketos-base-ui-audio-backend": "postmarketos-base-ui-audio-backend-pipewire"
+  },
+  "epoch": 1793491200,
+  "uuid_boot": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1a01",
+  "uuid_root": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1a02",
+  "uuid_disk": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1a03",
+  "uuid_part_boot": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1a04",
+  "uuid_part_root": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1a05",
+  "sdtest": {
+   "uuid_boot": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1b01",
+   "uuid_root": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1b02",
+   "uuid_disk": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1b03",
+   "uuid_part_boot": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1b04",
+   "uuid_part_root": "b2c1f0e4-7a31-4c5e-9d10-3f6a5e0c1b05"
+  },
+  "zstd_level": 15
+ },
+ "lk2nd": {
+  "url": "https://github.com/msm8916-mainline/lk2nd.git",
+  "base": "15a344236199e2fe4b631ade41d9388ea2099259",
+  "t820": {
+   "dtb": "msm8996-samsung-gts3lwifi",
+   "patches": [
+    "lk2nd/preview-base.patch"
+   ],
+   "donor_sha256": "711de03562e395e0f5777f56624656481867ffb492494aff2273ea8f0a9684a2",
+   "image_sha256": "008ae3e979f06d09f275906f12830e2967de27875c2e6710833644f225444fe5",
+   "version": "22.0-next-b9600bfa-20261028",
+   "build_sha256": "0cbe2a0d49f1d3cb7333e2787e687bfa42f4222af5f9b544e58da30f2eaa7b2f"
+  },
+  "t825": {
+   "dtb": "msm8996-samsung-gts3llte",
+   "patches": [
+    "lk2nd/preview-base.patch",
+    "lk2nd/preview-t825.patch"
+   ],
+   "donor_sha256": "e69832c020b50f5b4b7d2a54998c07ba7f472bb3d0eeb8d4b31b8274b39c91e1",
+   "version": "22.0-next-b9600bfa-t825-preview1",
+   "build_sha256": "fd879ab97c44b64c340ecfa7c2aa26ff4096c457e6487525fb0ab0359a0f3e22"
+  }
+ }
+}
