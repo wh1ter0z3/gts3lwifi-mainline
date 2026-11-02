@@ -135,17 +135,9 @@ in `msm8996-sec-gts3lwifi-r05.dtsi` (digital inputs at 1.8 V).
 test.
 
 Home keeps the stock code, KEY_HOMEPAGE, as the other Samsung DTs upstream
-do. Plasma desktop does nothing with KEY_HOMEPAGE, so on our install a
-udev hwdb entry turns Home into Meta, and a lone Meta tap opens the Plasma
-launcher:
-
-    # /etc/udev/hwdb.d/61-gts3-home-key.hwdb
-    evdev:name:gpio-keys:*
-     KEYBOARD_KEY_1=leftmeta
-
-then `systemd-hwdb update` (or `udevadm hwdb --update`) and a reboot.
-`gpio-keys` uses each button's index as its scan code, so 1 is Home, the
-second button in `test-keys.dts`.
+do. Plasma desktop does nothing with KEY_HOMEPAGE, so the device package's
+`61-gts3-keys.hwdb` turns Home into Meta, and a lone Meta tap opens the Plasma
+launcher. `gpio-keys` uses each button's index as its scan code, so 1 is Home.
 
 Tested on an SM-T820 (2026-10-29), kernel built with `test-keys.dts`:
 Volume Up and Volume Down change the volume in Plasma (the owner pressed
@@ -158,12 +150,75 @@ Not done:
 - the hall sensor of the cover (stock `hall_flip`, PM8994 GPIO 7), which
   would be SW_LID: left out until suspend works, since logind suspends on
   SW_LID;
-- the capacitive Back and Recent keys: a Coreriver TC305K at 0x20 on a
-  GPIO I2C bus (TLMM 21 SDA, 22 SCL), interrupt TLMM 64, supply PM8994
-  L19, key LEDs on TLMM 118 (stock `tc305k@20` in
-  `msm8996-sec-gts3lwifi-r05.dtsi`, driver
-  `drivers/input/keyboard/tc3xxk.c`). Upstream `tm2-touchkey` drives a
-  Coreriver TC360; its protocol needs comparing with `tc3xxk.c` first.
+
+## Back and Recent keys (TC305K)
+
+Works on an SM-T820, tested 2026-11-02 on Linux 7.3.1. A T825 has the same stock node,
+but hasn't run this.
+
+| Check | Result |
+|---|---|
+| Start-up | firmware 0x18, mode 0x2 (run). First ACK after about 135 ms, ready after about 670 ms |
+| Keys, by hand | Back and Recent work. Recent is the left key. The event bytes match the table below |
+| Ghost presses | none: 24 min on USB, most of it with Venus decoding, and 5 min on battery |
+| Suspend | 3 timed, 1 by the power button: starts again each time, with keys and lights back |
+| Waking | a tap doesn't wake it from suspend, Home does. With only the screen off, a tap turns it on, like any input |
+
+A touch can send the same byte twice, 1 ms apart. The input core drops the repeat.
+
+L19 and the LED supply have no other consumers, so they should be off in suspend.
+Sleep current with this driver loaded hasn't been measured.
+
+A Coreriver TC305K at 0x20 on a GPIO I2C bus (TLMM 21 SDA, 22 SCL), interrupt TLMM 64,
+level low, L19 at 2.2 V for the controller, TLMM 118 for the LED supply (stock
+`tc305k@20` in `msm8996-sec-gts3lwifi-r05.dtsi`, `tc3xxk.c`).
+
+`tm2-touchkey` doesn't work on it as it stands. The registers and LED commands match
+the TC360, but the event byte doesn't:
+
+| | TC360 in `tm2-touchkey` | TC305K in stock `tc3xxk.c` |
+|---|---|---|
+| Recent pressed, released | 0x01, 0x09 | 0x01, 0x10 |
+| Back pressed, released | 0x02, 0x0a | 0x02, 0x20 |
+
+The driver would call 0x10 and 0x20 invalid, so a key would never come back up. Patch
+0160 adds a `coreriver,tc305k-touchkey` variant:
+
+- reads the bits above. A short tap can set a key's press and release bits together;
+- turns grip sensing off after each start, as stock does on this tablet
+  (`CONFIG_TOUCHKEY_GRIP_SENSOR_OFF`), so grip changes cause no interrupts;
+- cuts the power in suspend, where stock keeps it on in a stop mode. Coming back takes
+  half a second by stock's delays, so resume does it from a work item;
+
+Firmware is left as it is on the chip: nothing here flashes it. Stock also has modes
+for glove, charger noise and a closed flip cover, not used here.
+
+Keys: `KEY_APPSELECT` and `KEY_BACK`, as other Samsung boards upstream. Back reaches
+apps as `XF86Back`, which browsers and Dolphin act on. Plasma ignores `KEY_APPSELECT`,
+so the device package maps two keys:
+
+- **Home becomes Meta**, which opens the launcher.
+- **Recent becomes `KEY_SCALE`, then Present Windows.** KWin binds Present Windows to
+  `Launch (C)`, which no key on this keymap produces. `KEY_SCALE` gives `Launch (A)`,
+  so the package adds that to the shortcut in `/etc/skel`.
+
+`/etc/skel` only reaches users created after the package is installed. On an existing
+install, run this as your own user:
+
+    dbus-send --session --print-reply --dest=org.kde.kglobalaccel /kglobalaccel \
+      org.kde.KGlobalAccel.setForeignShortcut \
+      array:string:kwin,ExposeAll,KWin,"Toggle Present Windows (All desktops)" \
+      array:int32:16777388,16777390,83886137,285212729
+
+A changed hwdb doesn't reach a running KWin, which keeps a key list from when it opened
+the device. Reload the driver (`rmmod tm2-touchkey; modprobe tm2-touchkey`) or reboot.
+
+The lights use the kernel's `input-events` trigger: on at any input, off 5 s after the
+last, set by a udev rule in the device package. Input includes the touchscreen.
+
+The LED keeps the driver's name, `tm2-touchkey`, on purpose. With `kbd_backlight` in
+the name, `systemd-backlight` restores a saved 0 at boot, and writing 0 removes the
+trigger, so the lights stay off.
 
 ## Keyboard cover (Book Cover Keyboard, STMPE1801)
 

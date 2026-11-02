@@ -317,6 +317,40 @@
 		};
 	};
 
+	/*
+	 * Recent and Back keys (downstream i2c@22, tc305k@20): the controller
+	 * runs from L19, and TLMM 118 switches the supply of the key LEDs.
+	 */
+	vreg_tkey_led: regulator-tkey-led {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_tkey_led";
+		gpio = <&tlmm 118 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		pinctrl-0 = <&tkey_led_en_default>;
+		pinctrl-names = "default";
+	};
+
+	i2c-touchkey {
+		compatible = "i2c-gpio";
+		sda-gpios = <&tlmm 21 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&tlmm 22 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		pinctrl-0 = <&tkey_i2c_default>;
+		pinctrl-names = "default";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		touchkey@20 {
+			compatible = "coreriver,tc305k-touchkey";
+			reg = <0x20>;
+			interrupts-extended = <&tlmm 64 IRQ_TYPE_LEVEL_LOW>;
+			vcc-supply = <&vreg_l19a_2p2>;
+			vdd-supply = <&vreg_tkey_led>;
+			linux,keycodes = <KEY_APPSELECT KEY_BACK>;
+			pinctrl-0 = <&tkey_int_default>;
+			pinctrl-names = "default";
+		};
+	};
+
 	/* Book Cover Keyboard (EJ-FT820) on the pogo pins */
 	pogo_i2c: i2c-pogo {
 		compatible = "i2c-gpio";
@@ -866,6 +900,13 @@
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
 			regulator-always-on;
+		};
+
+		/* Touch key controller */
+		vreg_l19a_2p2: l19 {
+			regulator-name = "vreg_l19a_2p2";
+			regulator-min-microvolt = <2200000>;
+			regulator-max-microvolt = <2200000>;
 		};
 
 		/* eMMC flash rail; downstream marks it qcom,vdd-always-on */
@@ -1890,6 +1931,27 @@
 	 * carry the quaternary TDM bus to the top speakers.
 	 */
 	gpio-reserved-ranges = <25 4>;
+
+	tkey_i2c_default: tkey-i2c-default-state {
+		pins = "gpio21", "gpio22";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	tkey_int_default: tkey-int-default-state {
+		pins = "gpio64";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	tkey_led_en_default: tkey-led-en-default-state {
+		pins = "gpio118";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
 
 	sm5705_i2c_default: sm5705-i2c-default-state {
 		pins = "gpio32", "gpio33";

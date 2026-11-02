@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 14:35:47 -0700
+Subject: [PATCH] dt-bindings: input: tm2-touchkey: Add Coreriver TC305K
+
+The TC305K is the touch key controller of the Samsung Galaxy Tab S3. Its
+event byte differs from the other controllers here, so it needs its own
+compatible.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ .../devicetree/bindings/input/cypress,tm2-touchkey.yaml          | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/input/cypress,tm2-touchkey.yaml b/Documentation/devicetree/bindings/input/cypress,tm2-touchkey.yaml
+index 52dca8b640..55cbfd4340 100644
+--- a/Documentation/devicetree/bindings/input/cypress,tm2-touchkey.yaml
++++ b/Documentation/devicetree/bindings/input/cypress,tm2-touchkey.yaml
+@@ -24,6 +24,7 @@ properties:
+       - cypress,midas-touchkey
+       - cypress,aries-touchkey
+       - coreriver,tc360-touchkey
++      - coreriver,tc305k-touchkey
+ 
+   reg:
+     maxItems: 1

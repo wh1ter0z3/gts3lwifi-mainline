@@ -1,0 +1,256 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 14:35:47 -0700
+Subject: [PATCH] Input: tm2-touchkey - add Coreriver TC305K
+
+Samsung's tc3xxk driver gives the TC305K's protocol: the LED commands and
+the key code register are the same as on the TC360, but the event byte has
+a press bit per key from bit 0 and a release bit per key from bit 4.
+
+Samsung's driver waits 450 ms after power-up and 50 ms after each command,
+and turns grip sensing off after every start on the Tab S3. Nothing here
+reads grip events, and they would only cause interrupts.
+
+Half a second is too long to hold up system resume, so power up from a work
+item there. The controller loses its LED state with its power, so restore
+it, and report a key that was held at suspend as released.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/input/keyboard/tm2-touchkey.c | 123 ++++++++++++++++++++++++++
+ 1 file changed, 123 insertions(+)
+
+diff --git a/drivers/input/keyboard/tm2-touchkey.c b/drivers/input/keyboard/tm2-touchkey.c
+index 967bbe553c..322f5e83c1 100644
+--- a/drivers/input/keyboard/tm2-touchkey.c
++++ b/drivers/input/keyboard/tm2-touchkey.c
+@@ -11,6 +11,7 @@
+ 
+ #include <linux/bitops.h>
+ #include <linux/delay.h>
++#include <linux/devm-helpers.h>
+ #include <linux/device.h>
+ #include <linux/i2c.h>
+ #include <linux/input.h>
+@@ -21,6 +22,7 @@
+ #include <linux/of.h>
+ #include <linux/pm.h>
+ #include <linux/regulator/consumer.h>
++#include <linux/workqueue.h>
+ 
+ #define TM2_TOUCHKEY_DEV_NAME		"tm2-touchkey"
+ 
+@@ -32,6 +34,10 @@
+ #define TM2_TOUCHKEY_BIT_KEYCODE	GENMASK(2, 0)
+ #define TM2_TOUCHKEY_LED_VOLTAGE_MIN	2500000
+ #define TM2_TOUCHKEY_LED_VOLTAGE_MAX	3300000
++#define TC305K_TOUCHKEY_CMD_GRIP_OFF	0xa2
++#define TC305K_TOUCHKEY_CMD_DELAY_MS	50
++#define TC305K_TOUCHKEY_POWER_ON_MS	450
++#define TC305K_TOUCHKEY_RELEASE_SHIFT	4
+ 
+ struct touchkey_variant {
+ 	u8 keycode_reg;
+@@ -40,6 +46,13 @@ struct touchkey_variant {
+ 	u8 cmd_led_off;
+ 	bool no_reg;
+ 	bool fixed_regulator;
++	/*
++	 * The event byte has a press bit per key from bit 0 and a release bit
++	 * per key from bit 4, instead of a key index and a release flag. The
++	 * controller takes half a second to start, so resume powers it up from
++	 * a work item, and grip sensing has to be turned off after each start.
++	 */
++	bool tc305k;
+ };
+ 
+ struct tm2_touchkey_data {
+@@ -51,6 +64,8 @@ struct tm2_touchkey_data {
+ 	const struct touchkey_variant *variant;
+ 	u32 keycodes[4];
+ 	int num_keycodes;
++	struct work_struct resume_work;
++	bool powered;
+ };
+ 
+ static const struct touchkey_variant tm2_touchkey_variant = {
+@@ -82,6 +97,15 @@ static const struct touchkey_variant tc360_touchkey_variant = {
+ 	.cmd_led_off = TM2_TOUCHKEY_CMD_LED_OFF,
+ };
+ 
++static const struct touchkey_variant tc305k_touchkey_variant = {
++	.keycode_reg = 0x00,
++	.base_reg = 0x00,
++	.fixed_regulator = true,
++	.cmd_led_on = TM2_TOUCHKEY_CMD_LED_ON,
++	.cmd_led_off = TM2_TOUCHKEY_CMD_LED_OFF,
++	.tc305k = true,
++};
++
+ static int tm2_touchkey_led_brightness_set(struct led_classdev *led_dev,
+ 					    enum led_brightness brightness)
+ {
+@@ -116,6 +140,23 @@ static int tm2_touchkey_power_enable(struct tm2_touchkey_data *touchkey)
+ 	if (error)
+ 		return error;
+ 
++	touchkey->powered = true;
++
++	if (touchkey->variant->tc305k) {
++		msleep(TC305K_TOUCHKEY_POWER_ON_MS);
++
++		/* Off by default in the tablet's stock configuration */
++		error = i2c_smbus_write_byte_data(touchkey->client,
++						  touchkey->variant->base_reg,
++						  TC305K_TOUCHKEY_CMD_GRIP_OFF);
++		if (error)
++			dev_warn(&touchkey->client->dev,
++				 "failed to turn grip sensing off: %d\n", error);
++		msleep(TC305K_TOUCHKEY_CMD_DELAY_MS);
++
++		return 0;
++	}
++
+ 	/* waiting for device initialization, at least 150ms */
+ 	msleep(150);
+ 
+@@ -126,10 +167,39 @@ static void tm2_touchkey_power_disable(void *data)
+ {
+ 	struct tm2_touchkey_data *touchkey = data;
+ 
++	if (!touchkey->powered)
++		return;
++
++	touchkey->powered = false;
+ 	regulator_bulk_disable(ARRAY_SIZE(touchkey->regulators),
+ 			       touchkey->regulators);
+ }
+ 
++static void tm2_touchkey_report_bitmap(struct tm2_touchkey_data *touchkey,
++				       int data)
++{
++	int i;
++
++	/* A short tap can set both bits of a key: press comes first */
++	for (i = 0; i < touchkey->num_keycodes; i++) {
++		if (data & BIT(i)) {
++			input_event(touchkey->input_dev, EV_MSC, MSC_SCAN, i);
++			input_report_key(touchkey->input_dev,
++					 touchkey->keycodes[i], 1);
++			input_sync(touchkey->input_dev);
++		}
++	}
++
++	for (i = 0; i < touchkey->num_keycodes; i++) {
++		if (data & BIT(i + TC305K_TOUCHKEY_RELEASE_SHIFT)) {
++			input_event(touchkey->input_dev, EV_MSC, MSC_SCAN, i);
++			input_report_key(touchkey->input_dev,
++					 touchkey->keycodes[i], 0);
++			input_sync(touchkey->input_dev);
++		}
++	}
++}
++
+ static irqreturn_t tm2_touchkey_irq_handler(int irq, void *devid)
+ {
+ 	struct tm2_touchkey_data *touchkey = devid;
+@@ -148,6 +218,11 @@ static irqreturn_t tm2_touchkey_irq_handler(int irq, void *devid)
+ 		goto out;
+ 	}
+ 
++	if (touchkey->variant->tc305k) {
++		tm2_touchkey_report_bitmap(touchkey, data);
++		return IRQ_HANDLED;
++	}
++
+ 	index = (data & TM2_TOUCHKEY_BIT_KEYCODE) - 1;
+ 	if (index < 0 || index >= touchkey->num_keycodes) {
+ 		dev_warn(&touchkey->client->dev,
+@@ -180,6 +255,25 @@ static irqreturn_t tm2_touchkey_irq_handler(int irq, void *devid)
+ 	return IRQ_HANDLED;
+ }
+ 
++static void tm2_touchkey_resume_work(struct work_struct *work)
++{
++	struct tm2_touchkey_data *touchkey =
++		container_of(work, struct tm2_touchkey_data, resume_work);
++	int error;
++
++	error = tm2_touchkey_power_enable(touchkey);
++	if (error) {
++		dev_err(&touchkey->client->dev,
++			"failed to enable power: %d\n", error);
++		return;
++	}
++
++	/* Losing power turned the LEDs off */
++	tm2_touchkey_led_brightness_set(&touchkey->led_dev,
++					touchkey->led_dev.brightness);
++	enable_irq(touchkey->client->irq);
++}
++
+ static int tm2_touchkey_probe(struct i2c_client *client)
+ {
+ 	struct device_node *np = client->dev.of_node;
+@@ -240,6 +334,11 @@ static int tm2_touchkey_probe(struct i2c_client *client)
+ 		return error;
+ 	}
+ 
++	error = devm_work_autocancel(&client->dev, &touchkey->resume_work,
++				     tm2_touchkey_resume_work);
++	if (error)
++		return error;
++
+ 	/* input device */
+ 	touchkey->input_dev = devm_input_allocate_device(&client->dev);
+ 	if (!touchkey->input_dev) {
+@@ -300,10 +399,26 @@ static int tm2_touchkey_suspend(struct device *dev)
+ {
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct tm2_touchkey_data *touchkey = i2c_get_clientdata(client);
++	int i;
++
++	if (touchkey->variant->tc305k) {
++		/* A pending work item never enabled the interrupt or power */
++		if (cancel_work_sync(&touchkey->resume_work) ||
++		    !touchkey->powered)
++			return 0;
++	}
+ 
+ 	disable_irq(client->irq);
+ 	tm2_touchkey_power_disable(touchkey);
+ 
++	/* A key held now gets no release event after the power cut */
++	if (touchkey->variant->tc305k) {
++		for (i = 0; i < touchkey->num_keycodes; i++)
++			input_report_key(touchkey->input_dev,
++					 touchkey->keycodes[i], 0);
++		input_sync(touchkey->input_dev);
++	}
++
+ 	return 0;
+ }
+ 
+@@ -313,6 +428,11 @@ static int tm2_touchkey_resume(struct device *dev)
+ 	struct tm2_touchkey_data *touchkey = i2c_get_clientdata(client);
+ 	int ret;
+ 
++	if (touchkey->variant->tc305k) {
++		schedule_work(&touchkey->resume_work);
++		return 0;
++	}
++
+ 	enable_irq(client->irq);
+ 
+ 	ret = tm2_touchkey_power_enable(touchkey);
+@@ -344,6 +464,9 @@ static const struct of_device_id tm2_touchkey_of_match[] = {
+ 	}, {
+ 		.compatible = "coreriver,tc360-touchkey",
+ 		.data = &tc360_touchkey_variant,
++	}, {
++		.compatible = "coreriver,tc305k-touchkey",
++		.data = &tc305k_touchkey_variant,
+ 	},
+ 	{ },
+ };
