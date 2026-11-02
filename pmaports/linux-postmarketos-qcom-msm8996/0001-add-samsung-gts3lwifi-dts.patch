@@ -1,4 +1,4 @@
-From 21c5c3f22452aa0dc2fcbe7b04edf69913456543 Mon Sep 17 00:00:00 2001
+From 13d74375fcef6e8975bb7f511cf9a95124901dbf Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Sat, 31 Oct 2026 18:50:02 +0000
 Subject: [PATCH] arm64: dts: qcom: Add Samsung Galaxy Tab S3 (gts3lwifi,
@@ -29,9 +29,9 @@ Signed-off-by: psigod <psigod@example.com>
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  arch/arm64/boot/dts/qcom/Makefile             |    2 +
- .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 2039 +++++++++++++++++
+ .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 2054 +++++++++++++++++
  .../dts/qcom/msm8996-samsung-gts3llte.dts     |   46 +
- 3 files changed, 2087 insertions(+)
+ 3 files changed, 2102 insertions(+)
  create mode 100644 arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
  create mode 100644 arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts
 
@@ -57,10 +57,10 @@ index 821146b..39b7195 100644
  dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-keyaki.dtb
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 new file mode 100644
-index 0000000..e17e7c7
+index 0000000..610ac6c
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
-@@ -0,0 +1,2039 @@
+@@ -0,0 +1,2054 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Samsung Galaxy Tab S3 Wi-Fi (SM-T820), codename gts3lwifi, board rev 05
@@ -77,7 +77,7 @@ index 0000000..e17e7c7
 + * amplifiers), SM5705 fuel gauge, charger, MUIC and flash LED (torch),
 + * S2MM005 USB Type-C/PD (sink up to 9 V, source), accelerometer, gyroscope
 + * and magnetometer (through the SLPI sensor core), CPU/cluster/system idle,
-+ * both cameras, the Book Cover Keyboard (attached at boot; no hotplug yet).
++ * both cameras, the Book Cover Keyboard (hot-plugged through the MUIC).
 + * The panel's temperature input has a test DT; the cover's hall sensor is
 + * not here yet.
 + *
@@ -336,13 +336,26 @@ index 0000000..e17e7c7
 +	};
 +
 +	/* Book Cover Keyboard (EJ-FT820) on the pogo pins */
-+	i2c-pogo {
++	pogo_i2c: i2c-pogo {
 +		compatible = "i2c-gpio";
 +		sda-gpios = <&tlmm 2 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 +		scl-gpios = <&tlmm 3 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 +		i2c-gpio,delay-us = <2>;
 +		pinctrl-0 = <&pogo_i2c_default>;
 +		pinctrl-names = "default";
++		#address-cells = <1>;
++		#size-cells = <0>;
++	};
++
++	/*
++	 * The keyboard's controller is only there while the cover is
++	 * attached, which the MUIC reports as a dock (49.9 kOhm on the ID
++	 * pin, ADC_KEYBOARDDOCK in Samsung's muic.h).
++	 */
++	i2c-cover {
++		compatible = "i2c-hotplug-extcon";
++		extcon = <&muic>;
++		i2c-parent = <&pogo_i2c>;
 +		#address-cells = <1>;
 +		#size-cells = <0>;
 +
@@ -355,6 +368,8 @@ index 0000000..e17e7c7
 +			pinctrl-0 = <&pogo_kbd_int_default>;
 +			pinctrl-names = "default";
 +			vcc-supply = <&vreg_l6a_1p8>;
++			/* a key press wakes the tablet, while the cover is on */
++			wakeup-source;
 +
 +			keyboard-controller {
 +				compatible = "st,stmpe-keypad";

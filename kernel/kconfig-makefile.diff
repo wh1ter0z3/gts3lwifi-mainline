@@ -209,3 +209,23 @@ index ab9abd151078..9c020678632c 100644
 +++ b/drivers/media/i2c/Makefile
 @@ (after VIDEO_S5K5BAF) @@
 +obj-$(CONFIG_VIDEO_S5K5E3) += s5k5e3.o
+--- a/drivers/i2c/muxes/Kconfig
++++ b/drivers/i2c/muxes/Kconfig
+@@ (after I2C_ARB_GPIO_CHALLENGE) @@
++config I2C_HOTPLUG_GPIO
++	tristate "Hot-plugged I2C bus detected by GPIO or extcon"
++	depends on GPIOLIB
++	depends on OF
++	depends on EXTCON || !EXTCON
++	help
++	  Say Y here if you want support for hot-plugging I2C devices
++	  with presence detected by GPIO pin value, or reported as a dock
++	  by an extcon device.
++
++	  This driver can also be built as a module. If so, the module
++	  will be called i2c-hotplug-gpio.
++
+--- a/drivers/i2c/muxes/Makefile
++++ b/drivers/i2c/muxes/Makefile
+@@ (before i2c-mux-gpio.o) @@
++obj-$(CONFIG_I2C_HOTPLUG_GPIO)	+= i2c-hotplug-gpio.o

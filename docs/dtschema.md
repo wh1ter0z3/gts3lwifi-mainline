@@ -49,6 +49,12 @@ with 11 columns or a 5 ms debounce is rejected. `dt_binding_check` on
 into the main DT on 2026-10-31 (`test-keyboard.dts` is gone) and still add
 none, against the tree with patches 0001-0104.
 
+The hotplug bus around the keyboard (2026-11-01) adds none either: against
+the schemas of the tree with patches 0001-0120 the DT has the same 9
+findings as before it. `i2c-hotplug-extcon` needs patch 0117;
+`dt_binding_check` on `i2c/i2c-hotplug-gpio.yaml` and
+`i2c/i2c-hotplug-extcon.yaml` is clean.
+
 The USB-C nodes merged into the main DT on 2026-10-31 add none either,
 against the schemas of the tree with patches 0001-0087. The charger's
 `usb-otg-vbus` regulator needs patch 0078; the connector's roles,

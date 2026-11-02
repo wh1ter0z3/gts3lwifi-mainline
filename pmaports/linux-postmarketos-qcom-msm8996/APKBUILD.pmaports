@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=6.19.5
-pkgrel=8
+pkgrel=9
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -139,6 +139,14 @@ source="
 	0111-slimbus-qcom-ngd-pm-runtime-balance.patch
 	0112-slimbus-qcom-ngd-tx-lock-abba.patch
 	0113-asoc-q6asm-drop-closed-stream-responses.patch
+	0114-dt-bindings-i2c-hotplug-gpio.patch
+	0115-i2c-muxes-add-i2c-hotplug-gpio.patch
+	0116-i2c-hotplug-gpio-parent-adapter-lookup.patch
+	0117-dt-bindings-i2c-hotplug-extcon.patch
+	0118-i2c-hotplug-gpio-extcon-presence.patch
+	0119-extcon-sm5705-cover-with-vbus.patch
+	0120-mfd-stmpe-irq-domain-after-children.patch
+	0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -169,8 +177,8 @@ package() {
 }
 sha512sums="
 dd30dd113ad9f0b4ab3771ea655de2becce7ddaf5066d2f860b7bb1eb78573137313191d9da740b152348f9f89894ace2bb94fb195e340f7b6dabedeebbc929f  linux-v6.19.5-msm8996.tar.gz
-ed3b44941c7798e786093a088b8c6639f450f91368a89942ed7684a9154e45a2dd0172f7eebcaa6e6661a9ad67e83073ac528005eeea6e3532850c365cc434e8  config-postmarketos-qcom-msm8996.aarch64
-30858f93ae460989670c537a445476b81ec068dbcc73855d1eb06e833b4b1a0f8bd75022e6664f2eb3ef01d21636247aaba1f448f5cfb513d5777e4b56c95c4d  0001-add-samsung-gts3lwifi-dts.patch
+e6d57aa02b41b8f361890d9df74a5c8fa2865d618ec8b0c145d199e1e15010e2d24ed742b2ffba5be1c9978a71f9e08db138164264f92118e4d5011f1ed30993  config-postmarketos-qcom-msm8996.aarch64
+44578e7bca9ad240c61dae66a26221f3113dcaa74db193249495989506c4b1342402667d39a999cd37938e7feb291919bdc027ece4695cc3dba893a5a3ed999b  0001-add-samsung-gts3lwifi-dts.patch
 feede8e07c71e0b9faaac14a97baebcd9ff347f9e6288ca3690bfcf4331b12788167dd69079fedf7856fa3b28494d19b397f8a69c01d00008544aa20785d0064  0002-drm-panel-add-samsung-ams968hh01.patch
 71cef6df692ccaeb8575bce830b32bbf4c11debdda209b7ac3f7a19dee9395f88d0981f46b72534d1d9a2f3cd742e721167afaff91ed7b0ce92c5b481ce05787  0003-drm-msm-mdp5-split-display-bonded-dsi.patch
 81ef96ef5e975c6c7b1249ea37b02f8a69154a399cd1426f234a0e44a8f5e4e9357da99dcd64629da0c7922678c0bb3e42dc8b05e53a72449dc8328c7c3655cb  0004-drm-msm-dpu-msm8996-split-display-ctls.patch
@@ -277,4 +285,12 @@ bbd5ea368244dc4a207d17be244beb75a48bd3c427de660136a0091314db6cc3f9b0afd84bed08a8
 9d5fd9c8f3981e01279b1b9a5bda278649a81936cb60e153a8d33eed90d1c40a096aa617c7931ce3cd28c25d733aa0952c5ed87ff56e018be2ef539380bc94bb  0111-slimbus-qcom-ngd-pm-runtime-balance.patch
 3b1326eb6e2f64da5ff537ae6796410f178374a7bb3ade198d2c272698d8e2250135538a3d3a8f8629d348dd16f2cd01d5493204424ee2db48b57fcbc567023e  0112-slimbus-qcom-ngd-tx-lock-abba.patch
 93af951ae3679707f697ac89df28172a081329dbb4e5f7fe57b288c79ebc18adb33cd20f8f81d4eb8f20b8e292dc838e9e01486b38fae91d861b7b9302d9c02a  0113-asoc-q6asm-drop-closed-stream-responses.patch
+54f6e4a3959527586afb457fc5c994a3b09609a602d40476a1974a00fc95faf9433b8cb675253363f0db3c65620a9e5f298611bd7147f3b58e69a57c8aab630d  0114-dt-bindings-i2c-hotplug-gpio.patch
+63f055d7a27e1f37a11b3a18dee40615218e4db34ca67b393418ac3e8fd1ae3697fb7c51c8578ba13433813181b1da9e3c4e90c5b40d8242079a1c6298d68802  0115-i2c-muxes-add-i2c-hotplug-gpio.patch
+292b1d2afb11a12418dc33b0d8b1cd38ac5109cd9e4d824188061d7d5530b4329bdcff0b14c6809eadf9d985dd17f9c654135da31eaf468cfa2648131744775f  0116-i2c-hotplug-gpio-parent-adapter-lookup.patch
+80867ae2427cbac41339f48dfbd06edd96600e5925b828c7d5776cd4b55ddebbd1bb5fe2d91522fe8c8570bfcbdb6bf367905b3a931c67b73510c4033b5162f6  0117-dt-bindings-i2c-hotplug-extcon.patch
+f0e4c91db4c2395adff8e2e4c4f9c2c7e10b3eade605754863f939957a683dbb559d829a15c422f99187039c8d91b351cadec661a27cd88ea431a903ea2b5a99  0118-i2c-hotplug-gpio-extcon-presence.patch
+3d648bf9253bd6bb7a6819b965a3d4ee7d5dc676170a79c670624eaf310a00ebb13cf27ba265b14285bc2cc2b0f1c759058cf93f19125c233e787412184085e0  0119-extcon-sm5705-cover-with-vbus.patch
+bbecdbf485ef8d9b4148ee1645319347916a8be06b0ee7596f695c6098ab424191ce782c494dd6c1c2574d5ebd735954757b5880738ee5c79ec96bb6ddee8f72  0120-mfd-stmpe-irq-domain-after-children.patch
+23596e25a689a7e0a4b261ffb79475f8175b6a8b5348cadbdd489ffad47235879ea0c6c9d225269a435cf8280756f206d9faa458bf557c1d47e189550cc25b77  0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
 "
