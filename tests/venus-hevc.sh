@@ -78,7 +78,7 @@ check() { # name file demux frames size md5
 }
 
 while read -r name file demux w h frames size md5; do
-	cap=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || echo 100)
+	cap=$(cat /sys/class/power_supply/sm5705-battery/capacity 2>/dev/null || echo 100)
 	if [ "$cap" -lt 15 ]; then
 		echo "battery at $cap %, stopping"
 		exit 3
