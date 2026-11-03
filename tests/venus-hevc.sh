@@ -29,12 +29,12 @@ src() { # file demux
 
 check() { # name file demux frames size md5
 	mark=$(($(dmesg | wc -l) + 1))
-	t0=$(date +%s.%N)
+	t0=$(cut -d' ' -f1 /proc/uptime)
 	# shellcheck disable=SC2046
 	timeout -s KILL 300 gst-launch-1.0 -q $(src "$2" "$3") ! v4l2h265dec ! fakesink sync=false \
 		>"$tmp/gst.log" 2>&1
 	rc1=$?
-	t1=$(date +%s.%N)
+	t1=$(cut -d' ' -f1 /proc/uptime)
 	if [ "$rc1" -ne 0 ]; then
 		echo "$1: decode rc=$rc1"
 		tail -3 "$tmp/gst.log"
