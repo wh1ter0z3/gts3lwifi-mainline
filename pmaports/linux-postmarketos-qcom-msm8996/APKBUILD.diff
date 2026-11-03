@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..ba69c3ff06 100644
+index 601fa9f44e..f081238148 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -7,8 +7,9 @@ index 601fa9f44e..ba69c3ff06 100644
  _flavor="postmarketos-qcom-msm8996"
  pkgname=linux-$_flavor
 -pkgver=6.19.5
+-pkgrel=0
 +pkgver=7.3.1
- pkgrel=0
++pkgrel=1
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -17,7 +18,7 @@ index 601fa9f44e..ba69c3ff06 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,12 +28,193 @@ makedepends="
+@@ -28,12 +28,194 @@ makedepends="
  "
  
  # Source
@@ -208,13 +209,14 @@ index 601fa9f44e..ba69c3ff06 100644
 +	0146-net-qrtr-send-pending-hello-first.patch
 +	0147-pci-qcom-keep-link-up-across-suspend-msm8996.patch
 +	0148-drm-msm-mdp5-assign-pipes-on-resume.patch
++	0170-arm64-dts-msm8996-gpu-opp-ddr.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
  
  prepare() {
  	default_prepare
-@@ -61,6 +242,188 @@ package() {
+@@ -61,6 +243,189 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -404,4 +406,5 @@ index 601fa9f44e..ba69c3ff06 100644
 +218b7f1427a252c56544ca238e4a5eb32138f8074f149f10dd05c729700cdacb2b791b72873ca09140c627f493764d6f5c9b204b4e6e979fe61802a7910b77fe  0146-net-qrtr-send-pending-hello-first.patch
 +d3f63e62acf02212316637b61c4387562a7d34cc7b00e7622c46798cb768399d47e5635d39ec6d160b65cd966c7a23ca15d6353d0dc478e936cd254b4fd06d9c  0147-pci-qcom-keep-link-up-across-suspend-msm8996.patch
 +cb711e5336e88d23c37a440c233a148f48eda00fb88f6076c3514d2b15bd577ecf266df050d5a4cacb958324fc6dff1ca638447b4c2e7967b4812e51a13d9fbd  0148-drm-msm-mdp5-assign-pipes-on-resume.patch
++50dc1d7a57d223322fa8771f9b6a01a26c357e6d9a8b15a33e304b2f6a6dca823192db2f76082fb5ee9a028f63916756c88e0e8f22cc685633ed02a5430aafb8  0170-arm64-dts-msm8996-gpu-opp-ddr.patch
  "
