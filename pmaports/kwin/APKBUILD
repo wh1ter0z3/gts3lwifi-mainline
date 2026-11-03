@@ -1,17 +1,18 @@
 # Forked from Alpine to add systemd!
-# gts3: postmarketOS extra-repos/systemd/kwin 99996.8.1-r0 plus three
-# patches for upstream KWin (not merged yet):
+# gts3: postmarketOS extra-repos/systemd/kwin 99996.8.2-r0 plus three
+# patches for upstream KWin:
 # the rotation animation paints the whole snapshot at scale > 1 (no
-# snow), 0001; the output keeps its orientation when the screen wakes
-# instead of turning to the manual transform and back, 0002; an option to
-# build without the CAP_SYS_NICE file capability, 0003, OFF here: on musl
+# snow), 0001, merged after 6.8.2, drop it at 6.8.3; the output keeps its
+# orientation when the screen wakes instead of turning to the manual
+# transform and back, 0002, not merged yet; an option to build without the
+# CAP_SYS_NICE file capability, 0003, not merged yet, OFF here: on musl
 # the capability makes libdbus ignore the session bus address
 # (docs/sensors.md).
 maintainer="team/kde <bribbers@disroot.org>"
 pkgname=kwin
-_pkgver=6.8.1
+_pkgver=6.8.2
 pkgver=9999$_pkgver
-pkgrel=101
+pkgrel=100
 pkgdesc="An easy to use, but flexible, composited Window Manager"
 # armhf blocked by qt6-qtdeclarative
 # riscv64: slow Alpine builders
@@ -137,7 +138,7 @@ package() {
 	DESTDIR="$pkgdir" cmake --install build
 }
 sha512sums="
-658a4a94fc7ee2c4f30d4edd1b4926319bf36fe816bf8cf764dc999f9868add67188f6a1736aef099016ed387f947023d3c1ab4cb65b6c0f2aa32de077ebc886  kwin-6.8.1.tar.xz
+878bc0970e6f6288c510ce2cce777ebba601fc9b22be09ddd6c344a9c623ac013a2d4590adb56c7f3ad09507ec5a76095751f5e274dfbcfc3afa9e5ea0399ec1  kwin-6.8.2.tar.xz
 2a004e656f60a71a4c1b6af6719908661f5d3660144caa806715aeaaf468d9cc297dea682245fe190e9b85c51db4b482d923e9f8616f66fc2d4700aa5a4a8680  0001-plugins-screentransform-Paint-the-entire-snapshot-no.patch
 8edd253d59c5d703a131f41c42ee7a5b762cea476d1205ae9d7c8911f174538ed139e41e9cc79c8fd26a65c5ff7f66afd99c85f954798c4598140c4a03ec3364  0002-utils-orientationsensor-Don-t-report-Undefined-rotat.patch
 e169352c11b5c5e0bc5dd6d6d6180a1530e15676565ec5f9de542d086ff010b39b570185eaa7b4af3ad5436f9f01207490f115ca32ebdefedea21d7bcd228cf1  0003-Make-setting-CAP_SYS_NICE-on-kwin_wayland-optional.patch
