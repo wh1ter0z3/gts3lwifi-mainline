@@ -1,0 +1,378 @@
+From 2e68f618ae467bd058d0872f7dd770f13b130bf3 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 14:15:35 +0530
+Subject: [PATCH 1/2] firmware: qcom: scm: QSEE app loading from firmware
+ images (Galaxy Tab S3)
+
+Mainline's qseecom interface only looks up and talks to apps the firmware
+has already started (the UEFI secure app on recent laptops). Samsung's
+MSM8996 tablets ship their QSEE apps as firmware images in the apnhlos
+partition, loaded by the downstream qseecom driver: cmnlib (the services
+library) through TZ_OS_LOAD_SERVICES_IMAGE_ID (app manager command 7),
+then each app through TZ_OS_APP_START_ID (command 1), from a physically
+contiguous buffer holding the .mdt followed by the segment files.
+
+Add qcom_scm_qseecom_app_start() and
+qcom_scm_qseecom_load_services_image() with those calls, and allowlist the
+Galaxy Tab S3 (samsung,gts3lwifi, samsung,gts3llte).
+
+qcom_qseecom_tabs3_test is a development module that loads cmnlib and one
+app (default skeymast, Samsung's keymaster) from
+qcom/msm8996/samsung/gts3/tz/ and logs the app ID. On an SM-T820 with
+QSEE 0x1001000: cmnlib loads, skeymast starts as app 6 and is found by
+the lookup afterwards.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ drivers/firmware/qcom/Kconfig                 |   8 +
+ drivers/firmware/qcom/Makefile                |   1 +
+ .../firmware/qcom/qcom_qseecom_tabs3_test.c   | 173 ++++++++++++++++++
+ drivers/firmware/qcom/qcom_scm.c              |  95 ++++++++++
+ include/linux/firmware/qcom/qcom_scm.h        |   4 +
+ 5 files changed, 281 insertions(+)
+ create mode 100644 drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+
+diff --git a/drivers/firmware/qcom/Kconfig b/drivers/firmware/qcom/Kconfig
+index b477d54b4..a2f311c3d 100644
+--- a/drivers/firmware/qcom/Kconfig
++++ b/drivers/firmware/qcom/Kconfig
+@@ -75,3 +75,11 @@ config QCOM_QSEECOM_UEFISECAPP
+ 	  platforms.
+ 
+ endmenu
++
++config QCOM_QSEECOM_TABS3_TEST
++	tristate "QSEE app loading test (Samsung Galaxy Tab S3)"
++	depends on QCOM_QSEECOM
++	help
++	  Loads the QSEE services library and one app from firmware files
++	  through the SCM app manager, the downstream qseecom way, and logs
++	  the result. A development test, not for production.
+diff --git a/drivers/firmware/qcom/Makefile b/drivers/firmware/qcom/Makefile
+index 0be40a1ab..1746376bf 100644
+--- a/drivers/firmware/qcom/Makefile
++++ b/drivers/firmware/qcom/Makefile
+@@ -8,3 +8,4 @@ qcom-scm-objs += qcom_scm.o qcom_scm-smc.o qcom_scm-legacy.o
+ obj-$(CONFIG_QCOM_TZMEM)	+= qcom_tzmem.o
+ obj-$(CONFIG_QCOM_QSEECOM)	+= qcom_qseecom.o
+ obj-$(CONFIG_QCOM_QSEECOM_UEFISECAPP) += qcom_qseecom_uefisecapp.o
++obj-$(CONFIG_QCOM_QSEECOM_TABS3_TEST) += qcom_qseecom_tabs3_test.o
+diff --git a/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c b/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+new file mode 100644
+index 000000000..573c0c742
+--- /dev/null
++++ b/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+@@ -0,0 +1,173 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Test: load QSEE apps on the Samsung Galaxy Tab S3 the downstream qseecom
++ * way, from firmware files (.mdt + .bNN), through the SCM app manager.
++ * Loads the services library (cmnlib) and then one app (module parameter
++ * "app", default skeymast = Samsung's keymaster), and logs the app ID.
++ */
++
++#include <linux/dma-mapping.h>
++#include <linux/elf.h>
++#include <linux/firmware.h>
++#include <linux/firmware/qcom/qcom_scm.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++
++static char *fw_dir = "qcom/msm8996/samsung/gts3/tz";
++module_param(fw_dir, charp, 0444);
++static char *app = "skeymast";
++module_param(app, charp, 0444);
++static bool load_cmnlib = true;
++module_param(load_cmnlib, bool, 0444);
++
++/* The mdt and every segment file, back to back, in one DMA buffer. */
++static int tabs3_load_image(struct device *dev, const char *name,
++			    void **buf, dma_addr_t *dma, u32 *mdt_len,
++			    u32 *img_len)
++{
++	const struct firmware *fw;
++	char path[96];
++	unsigned int i, nseg;
++	size_t total;
++	int ret;
++
++	snprintf(path, sizeof(path), "%s/%s.mdt", fw_dir, name);
++	ret = request_firmware(&fw, path, dev);
++	if (ret) {
++		dev_err(dev, "%s: no %s (%d)\n", name, path, ret);
++		return ret;
++	}
++	if (fw->size < sizeof(struct elf32_hdr)) {
++		release_firmware(fw);
++		return -EINVAL;
++	}
++	if (((struct elf32_hdr *)fw->data)->e_ident[EI_CLASS] == ELFCLASS64)
++		nseg = ((struct elf64_hdr *)fw->data)->e_phnum;
++	else
++		nseg = ((struct elf32_hdr *)fw->data)->e_phnum;
++	*mdt_len = fw->size;
++	total = fw->size;
++	release_firmware(fw);
++
++	/* First pass: sizes */
++	for (i = 0; i < nseg; i++) {
++		snprintf(path, sizeof(path), "%s/%s.b%02u", fw_dir, name, i);
++		ret = request_firmware(&fw, path, dev);
++		if (ret)
++			continue;	/* empty segments have no file */
++		total += fw->size;
++		release_firmware(fw);
++	}
++
++	*buf = dma_alloc_coherent(dev, total, dma, GFP_KERNEL);
++	if (!*buf)
++		return -ENOMEM;
++
++	/* Second pass: copy */
++	snprintf(path, sizeof(path), "%s/%s.mdt", fw_dir, name);
++	ret = request_firmware(&fw, path, dev);
++	if (ret)
++		goto err;
++	memcpy(*buf, fw->data, fw->size);
++	*img_len = fw->size;
++	release_firmware(fw);
++	for (i = 0; i < nseg; i++) {
++		snprintf(path, sizeof(path), "%s/%s.b%02u", fw_dir, name, i);
++		ret = request_firmware(&fw, path, dev);
++		if (ret)
++			continue;
++		memcpy(*buf + *img_len, fw->data, fw->size);
++		*img_len += fw->size;
++		release_firmware(fw);
++	}
++	dev_info(dev, "%s: image %u bytes (mdt %u, %u segments) at %pad\n",
++		 name, *img_len, *mdt_len, nseg, dma);
++	return 0;
++err:
++	dma_free_coherent(dev, total, *buf, *dma);
++	return ret;
++}
++
++static int tabs3_test_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	void *buf;
++	dma_addr_t dma;
++	u32 mdt_len, img_len, app_id = 0;
++	int ret;
++
++	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
++	if (ret)
++		return ret;
++
++	ret = qcom_scm_qseecom_app_get_id(app, &app_id);
++	if (!ret) {
++		dev_info(dev, "%s already loaded, app id %u\n", app, app_id);
++		return 0;
++	}
++	dev_info(dev, "%s lookup before load: %d\n", app, ret);
++
++	if (load_cmnlib) {
++		ret = tabs3_load_image(dev, "cmnlib", &buf, &dma, &mdt_len,
++				       &img_len);
++		if (ret)
++			return ret;
++		ret = qcom_scm_qseecom_load_services_image(dma, mdt_len,
++							   img_len);
++		dev_info(dev, "cmnlib load: %d\n", ret);
++		dma_free_coherent(dev, img_len, buf, dma);
++		if (ret)
++			return ret;
++	}
++
++	ret = tabs3_load_image(dev, app, &buf, &dma, &mdt_len, &img_len);
++	if (ret)
++		return ret;
++	ret = qcom_scm_qseecom_app_start(dma, mdt_len, img_len, &app_id);
++	dev_info(dev, "%s start: %d, app id %u\n", app, ret, app_id);
++	dma_free_coherent(dev, img_len, buf, dma);
++	if (ret)
++		return ret;
++
++	ret = qcom_scm_qseecom_app_get_id(app, &app_id);
++	dev_info(dev, "%s lookup after load: %d, app id %u\n", app, ret,
++		 app_id);
++	return 0;
++}
++
++static struct platform_driver tabs3_test_driver = {
++	.probe = tabs3_test_probe,
++	.driver = {
++		.name = "qseecom_tabs3_test",
++	},
++};
++
++static struct platform_device *tabs3_test_dev;
++
++static int __init tabs3_test_init(void)
++{
++	int ret;
++
++	ret = platform_driver_register(&tabs3_test_driver);
++	if (ret)
++		return ret;
++	tabs3_test_dev = platform_device_register_simple("qseecom_tabs3_test",
++							 -1, NULL, 0);
++	if (IS_ERR(tabs3_test_dev)) {
++		platform_driver_unregister(&tabs3_test_driver);
++		return PTR_ERR(tabs3_test_dev);
++	}
++	return 0;
++}
++
++static void __exit tabs3_test_exit(void)
++{
++	platform_device_unregister(tabs3_test_dev);
++	platform_driver_unregister(&tabs3_test_driver);
++}
++
++module_init(tabs3_test_init);
++module_exit(tabs3_test_exit);
++
++MODULE_DESCRIPTION("QSEE app loading test for the Samsung Galaxy Tab S3");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/firmware/qcom/qcom_scm.c b/drivers/firmware/qcom/qcom_scm.c
+index 1a6f85e46..48438dd35 100644
+--- a/drivers/firmware/qcom/qcom_scm.c
++++ b/drivers/firmware/qcom/qcom_scm.c
+@@ -104,7 +104,9 @@ enum qcom_scm_qseecom_tz_svc {
+ 
+ enum qcom_scm_qseecom_tz_cmd_app {
+ 	QSEECOM_TZ_CMD_APP_SEND			= 1,
++	QSEECOM_TZ_CMD_APP_START		= 1,
+ 	QSEECOM_TZ_CMD_APP_LOOKUP		= 3,
++	QSEECOM_TZ_CMD_LOAD_SERVICES_IMAGE	= 7,
+ };
+ 
+ enum qcom_scm_qseecom_tz_cmd_info {
+@@ -1934,6 +1936,96 @@ int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id)
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_get_id);
+ 
++/**
++ * qcom_scm_qseecom_app_start() - Load and start a QSEE app from an image.
++ * @image:   Physical address of a buffer holding the app's .mdt followed by
++ *           its segment files (.b00, .b01, ...), as the downstream qseecom
++ *           driver lays them out.
++ * @mdt_len: Length of the .mdt part.
++ * @img_len: Length of the whole buffer.
++ * @app_id:  App ID of the started app (output).
++ *
++ * Downstream TZ_OS_APP_START_ID: owner QSEE_OS, service APP_MGR, command 1,
++ * three value arguments. The image is loaded by the secure world from the
++ * buffer, which must therefore be physically contiguous and not cached by
++ * the kernel at that point.
++ *
++ * Return: Zero on success, nonzero on failure.
++ */
++int qcom_scm_qseecom_app_start(phys_addr_t image, u32 mdt_len, u32 img_len,
++			       u32 *app_id)
++{
++	struct qcom_scm_desc desc = {};
++	struct qcom_scm_qseecom_resp res = {};
++	int status;
++
++	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
++	desc.svc = QSEECOM_TZ_SVC_APP_MGR;
++	desc.cmd = QSEECOM_TZ_CMD_APP_START;
++	desc.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_VAL, QCOM_SCM_VAL);
++	desc.args[0] = mdt_len;
++	desc.args[1] = img_len;
++	desc.args[2] = image;
++
++	status = __qcom_scm_qseecom_call(&desc, &res);
++	if (status)
++		return status;
++
++	if (res.result == QSEECOM_RESULT_FAILURE)
++		return -EIO;
++	if (res.result != QSEECOM_RESULT_SUCCESS) {
++		pr_err("qseecom: app start: unexpected result %llu type %llx data %llx\n",
++		       res.result, res.resp_type, res.data);
++		return -EINVAL;
++	}
++	if (res.resp_type != QSEECOM_SCM_RES_APP_ID)
++		return -EINVAL;
++
++	*app_id = res.data;
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_start);
++
++/**
++ * qcom_scm_qseecom_load_services_image() - Load the QSEE services library.
++ * @image:   Physical address of the library image (cmnlib), laid out as for
++ *           qcom_scm_qseecom_app_start().
++ * @mdt_len: Length of the .mdt part.
++ * @img_len: Length of the whole buffer.
++ *
++ * Downstream TZ_OS_LOAD_SERVICES_IMAGE_ID (command 7). Apps built against
++ * the common library need it loaded once before they are started.
++ *
++ * Return: Zero on success, nonzero on failure.
++ */
++int qcom_scm_qseecom_load_services_image(phys_addr_t image, u32 mdt_len,
++					 u32 img_len)
++{
++	struct qcom_scm_desc desc = {};
++	struct qcom_scm_qseecom_resp res = {};
++	int status;
++
++	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
++	desc.svc = QSEECOM_TZ_SVC_APP_MGR;
++	desc.cmd = QSEECOM_TZ_CMD_LOAD_SERVICES_IMAGE;
++	desc.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_VAL, QCOM_SCM_VAL);
++	desc.args[0] = mdt_len;
++	desc.args[1] = img_len;
++	desc.args[2] = image;
++
++	status = __qcom_scm_qseecom_call(&desc, &res);
++	if (status)
++		return status;
++
++	if (res.result != QSEECOM_RESULT_SUCCESS) {
++		pr_err("qseecom: load services image: result %llu type %llx data %llx\n",
++		       res.result, res.resp_type, res.data);
++		return res.result == QSEECOM_RESULT_FAILURE ? -EIO : -EINVAL;
++	}
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_load_services_image);
++
+ /**
+  * qcom_scm_qseecom_app_send() - Send to and receive data from a given QSEE app.
+  * @app_id:   The ID of the target app.
+@@ -2015,6 +2107,9 @@ static const struct of_device_id qcom_scm_qseecom_allowlist[] __maybe_unused = {
+ 	{ .compatible = "qcom,x1e80100-crd" },
+ 	{ .compatible = "qcom,x1e80100-qcp" },
+ 	{ .compatible = "qcom,x1p42100-crd" },
++	/* Samsung Galaxy Tab S3: downstream-style app loading from firmware */
++	{ .compatible = "samsung,gts3lwifi" },
++	{ .compatible = "samsung,gts3llte" },
+ 	{ }
+ };
+ 
+diff --git a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+index a55ca7712..13b889665 100644
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -156,6 +156,10 @@ int qcom_scm_shm_bridge_delete(u64 handle);
+ #ifdef CONFIG_QCOM_QSEECOM
+ 
+ int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
++int qcom_scm_qseecom_app_start(phys_addr_t image, u32 mdt_len, u32 img_len,
++			       u32 *app_id);
++int qcom_scm_qseecom_load_services_image(phys_addr_t image, u32 mdt_len,
++					 u32 img_len);
+ int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
+ 			      void *rsp, size_t rsp_size);
+ 
+-- 
+2.53.0
+
