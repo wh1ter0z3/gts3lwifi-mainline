@@ -83,10 +83,15 @@ image is loaded by the secure world from that buffer.
 2. Real listener handlers: time (trivial), fs (files under a directory,
    downstream `libdrmfs` protocol), rpmb (the eMMC RPMB partition through
    the block layer), ssd (secure storage).
-3. An open `libQSEEComAPI.so` (the API is public, 20 functions): the vendor
-   one allocates its buffers through ION, which mainline does not have, so it
-   cannot run unchanged; a replacement that allocates from the DMA-BUF heap
-   lets the stock HALs and qseecomd run as they are.
+3. DONE: `tools/libQSEEComAPI/`, an open `libQSEEComAPI.so` (BSD-3-Clause):
+   the vendor API (handle with `ion_sbuffer` first, same call order:
+   open, version, set_mem_param, load_app) on `/dev/qseecom`, buffers from
+   the DMA-BUF heap (`QSEECOM_HEAP` to override, `QSEECOM_DEBUG=1` to log).
+   `qseecom-km` uses it like the stock keymaster HAL (start_app skeymast,
+   64 KB request + 64 KB response): keymaster answers as before. The
+   fd-carrying variants (send_modified_cmd with ION fds), external ELFs,
+   service commands and FDE keys are not implemented. Next: run the stock
+   HALs / qseecomd against it (Android, or libhybris on Linux).
 4. Then: hardware-backed KeyMint/Gatekeeper for Android-on-mainline, the
    fingerprint HAL (own buffer for the 20 MiB app), and the Widevine L1
    chain (secure DMA-BUF heap via `qcom_scm_assign_mem`, Venus secure
