@@ -50,9 +50,9 @@ typedef struct {
 		fingerprint_acquired_t acquired; fingerprint_authenticated_t authenticated; fingerprint_iterator_t enumerated; } data;
 } fingerprint_msg_t;
 typedef void (*fingerprint_notify_t)(const fingerprint_msg_t *msg);
+/* AOSP order: notify comes after set_notify, not before pre_enroll */
 typedef struct fingerprint_device {
 	hw_device_t common;
-	fingerprint_notify_t notify;
 	uint64_t (*pre_enroll)(struct fingerprint_device *dev);
 	int (*enroll)(struct fingerprint_device *dev, const uint8_t *hat, uint32_t gid, uint32_t timeout_sec);
 	int (*post_enroll)(struct fingerprint_device *dev);
@@ -63,6 +63,7 @@ typedef struct fingerprint_device {
 	int (*set_active_group)(struct fingerprint_device *dev, uint32_t gid, const char *store_path);
 	int (*authenticate)(struct fingerprint_device *dev, uint64_t operation_id, uint32_t gid);
 	int (*set_notify)(struct fingerprint_device *dev, fingerprint_notify_t notify);
+	fingerprint_notify_t notify;
 	void *reserved[4];
 } fingerprint_device_t;
 

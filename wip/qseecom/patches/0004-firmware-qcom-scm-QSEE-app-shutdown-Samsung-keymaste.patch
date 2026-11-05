@@ -1,7 +1,7 @@
 From dc0f1e36b87903e80a712374af8586720b74eed4 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 15:10:56 +0530
-Subject: [PATCH 4/7] firmware: qcom: scm: QSEE app shutdown; Samsung keymaster
+Subject: [PATCH 4/8] firmware: qcom: scm: QSEE app shutdown; Samsung keymaster
  answers (Galaxy Tab S3)
 
 Add qcom_scm_qseecom_app_shutdown() (app manager command 2), and in the

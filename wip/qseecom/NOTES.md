@@ -89,7 +89,10 @@ no interrupt and TLMM 131 stays low with a finger on it, as expected: on
 stock the trustlet puts the sensor into finger-detect mode over SPI, a merely
 powered sensor never asserts DRDY. So the interrupt path is provable only
 with the trustlet running (`esfp0-test wait 10`). Patch 7 fixes a reload bug
-(the sysfs class is created with the module now). The full flow is now user space: the vendor
+(the sysfs class is created with the module now). Patch 8 reports
+"egis" in `type_check` from probe, as the stock kernel does (it is built
+without `CONFIG_SENSORS_FPRINT_SECURE` and checks the sensor at boot);
+the vendor HAL reads that before anything else. The full flow is now user space: the vendor
 `fingerprint.default.so` + `libbauthserver.so` (CTD5) on the open
 QSEEComAPI and this driver, with the `fingerpr`/`dualfp` app from the
 firmware directory.

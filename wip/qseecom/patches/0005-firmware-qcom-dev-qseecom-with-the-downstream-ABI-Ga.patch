@@ -1,7 +1,7 @@
 From e991297877a5a2995cf68892be1c1748d6e74589 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 15:26:26 +0530
-Subject: [PATCH 5/7] firmware: qcom: /dev/qseecom with the downstream ABI
+Subject: [PATCH 5/8] firmware: qcom: /dev/qseecom with the downstream ABI
  (Galaxy Tab S3)
 
 The downstream qseecom character device on mainline's QSEE SCM calls, so

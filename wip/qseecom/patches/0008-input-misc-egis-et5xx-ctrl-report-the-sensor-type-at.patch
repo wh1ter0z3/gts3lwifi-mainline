@@ -1,0 +1,47 @@
+From bbf41a65f9f73cdc98751e96b05877b2a5e4d922 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 19:37:52 +0530
+Subject: [PATCH 8/8] input: misc: egis-et5xx-ctrl: report the sensor type at
+ probe like stock
+
+Samsung's stock kernel is built without CONFIG_SENSORS_FPRINT_SECURE, so
+its et5xx-spi driver checks the sensor over SPI at boot and reports
+"egis" (3) in type_check, which the vendor HAL reads before it issues any
+ioctl. The bus is the secure world's here; trust the device tree instead:
+a named Egis chip reports "egis" from probe. Without a chipid the type
+stays unknown, and the HAL can still override it with FP_SET_SENSOR_TYPE.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/input/misc/egis-et5xx-ctrl.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/misc/egis-et5xx-ctrl.c b/drivers/input/misc/egis-et5xx-ctrl.c
+index 18c98eb7e..151c96608 100644
+--- a/drivers/input/misc/egis-et5xx-ctrl.c
++++ b/drivers/input/misc/egis-et5xx-ctrl.c
+@@ -360,9 +360,18 @@ static int et5xx_probe(struct platform_device *pdev)
+ 	fp->dev = dev;
+ 	mutex_init(&fp->lock);
+ 	init_waitqueue_head(&fp->waitq);
+-	fp->sensortype = SENSOR_UNKNOWN;
+-	if (of_property_read_string(dev->of_node, "egistec,chipid", &fp->chipid))
++	/*
++	 * Samsung's stock kernel probes the sensor over SPI at boot and reports
++	 * "egis" in type_check, which the vendor HAL reads before anything
++	 * else. The bus is the secure world's here, so trust the device tree:
++	 * a named Egis chip reports "egis"; the HAL can still override it.
++	 */
++	if (of_property_read_string(dev->of_node, "egistec,chipid", &fp->chipid)) {
+ 		fp->chipid = "ET5XX";
++		fp->sensortype = SENSOR_UNKNOWN;
++	} else {
++		fp->sensortype = SENSOR_EGIS;
++	}
+ 
+ 	fp->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+ 	if (IS_ERR(fp->reset))
+-- 
+2.53.0
+

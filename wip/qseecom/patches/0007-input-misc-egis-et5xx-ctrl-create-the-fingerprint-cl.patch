@@ -1,7 +1,7 @@
 From 42dce35321f21fd71bd45a86fb064b1fbde197b2 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 15:56:32 +0530
-Subject: [PATCH 7/7] input: misc: egis-et5xx-ctrl: create the fingerprint
+Subject: [PATCH 7/8] input: misc: egis-et5xx-ctrl: create the fingerprint
  class with the module
 
 The class was created in probe and never destroyed, so a module reload failed with -EEXIST. Create it in module init and destroy it in exit.

@@ -15,12 +15,32 @@ libraries run natively.
 - Every Android 9 library of the fingerprint stack loads through it
   (`hybris-probe.c`: liblog … libbinder, libbauthtzcommon, libbauthserver,
   fingerprint.default.so).
-- The HAL module opens (`HMI`: "Demo Fingerprint HAL", API 2.1), powers
-  the sensor and its SPI clocks through `/dev/esfp0`, reads the `dualfp`
-  images and opens `/dev/qseecom`, then kills itself. Cause found but not
-  re-tested: the open libQSEEComAPI looked for the DMA-BUF heap with a bad
-  `open()` of `/dev/dma_heap` (fixed since in `../libQSEEComAPI`), fell
-  back to the old pool address and could not allocate.
+- The HAL module opens (`HMI`: "Demo Fingerprint HAL", API 2.1); see
+  "Second try" for how far it gets.
+
+## Second try (2026-11-05 evening)
+
+With the heap lookup fixed, the test program's `fingerprint_device_t`
+order corrected (`notify` comes after `set_notify`), hybris given the
+stock properties through `/system/build.prop` on the host
+(`ro.build.type=user`, `ro.hardware.chipname=MSM8996`,
+`ro.hardware.keystore=mdfpp`) and CTD5's `authhat` app installed:
+
+- The HAL loads three TrustZone apps through `/dev/qseecom`: `dualfp`
+  (2 MB buffer), `authhat` and `keymaster`, and drives the sensor's power
+  and clocks through `/dev/esfp0`. No listener requests occur.
+- The kernel hands the HAL what the stock kernel does: `name` "ET510",
+  `adm` "1", `type_check` "3" (the stock kernel is built without
+  `CONFIG_SENSORS_FPRINT_SECURE`, so it reports a detected sensor, not
+  "unknown"; the control driver's `type_check` must be set to 3, see
+  `../esfp0-test.c`).
+- Still, the HAL's sensor-type logic caches "ET320" (the first entry of its
+  name table: ET320 ET510 ET516 …) and opens the type-check session with TA
+  index 0 ("unknown ta name: 0"); `BAuth_Prepare` builds every command for
+  that index, and all three apps answer 42. The fault is in Samsung's
+  user-space logic under hybris, not in the kernel interface.
+- Android log capture: bionic liblog writes to `/dev/socket/logdw`; a small
+  datagram listener there (see `logdw.py`) shows the HAL's own messages.
 
 ## What it took (for whoever resumes)
 
