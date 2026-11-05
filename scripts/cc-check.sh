@@ -1,6 +1,6 @@
 #!/bin/sh
 # Replay the chroot's recorded clang command for kernel objects with the host clang (compile check only).
-cd ~/samsung/linux/.output || exit 1
+cd ~/Projects/samsung-tab-s3/linux/.output || exit 1
 T=$(mktemp -d); rc=0
 for o in "$@"; do
 	d=$(dirname "$o"); b=$(basename "$o")

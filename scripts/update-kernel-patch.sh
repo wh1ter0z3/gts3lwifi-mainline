@@ -3,7 +3,7 @@
 # the linux-postmarketos-qcom-msm8996 package in pmaports (source list,
 # checksum and pkgrel are updated too).
 #
-# Usage:  ~/samsung/pmos/update-kernel-patch.sh
+# Usage:  ~/Projects/samsung-tab-s3/pmos/update-kernel-patch.sh
 # Then:   pmbootstrap build --force linux-postmarketos-qcom-msm8996
 #         pmbootstrap install --zap     (a same-version rebuild is not
 #                                        picked up by an existing rootfs)
@@ -11,12 +11,12 @@
 set -eu
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-DTS=${DTS:-$HOME/samsung/mainline/apq8096-samsung-gts3lwifi.dts}
+DTS=${DTS:-$HOME/Projects/samsung-tab-s3/mainline/apq8096-samsung-gts3lwifi.dts}
 PMAPORTS=${PMAPORTS:-$HOME/.local/var/pmbootstrap/cache_git/pmaports}
 KDIR=$PMAPORTS/device/testing/linux-postmarketos-qcom-msm8996
 BASE_PKGVER=6.19.5
 BASE_MAKEFILE=$HERE/base/qcom-Makefile.v$BASE_PKGVER-msm8996
-UPSTREAM_DTS=${UPSTREAM_DTS:-$HOME/mocha/u-boot/dts/upstream}
+UPSTREAM_DTS=${UPSTREAM_DTS:-$HOME/Projects/mipad-mocha/mocha/u-boot/dts/upstream}
 PATCH=0001-add-samsung-gts3lwifi-dts.patch
 NAME=psigod
 EMAIL=psigod@example.com

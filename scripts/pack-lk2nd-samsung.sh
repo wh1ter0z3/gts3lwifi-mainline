@@ -8,12 +8,12 @@
 #                   device trees appended (stock, LineageOS, ...). Its cmdline
 #                   and os_version are reused. Only the device trees are taken.
 #   ramdisk         optional; default is an empty gzip'd cpio archive
-# Env: LK2ND=~/samsung/lk2nd  LK2ND_DTB=msm8996-samsung-gts3lwifi
+# Env: LK2ND=~/Projects/samsung-tab-s3/lk2nd  LK2ND_DTB=msm8996-samsung-gts3lwifi
 #      LK2ND_PARTITION_SIZE="4*1024*1024"
 set -eu
 [ $# -ge 2 ] || { sed -n '2,13p' "$0"; exit 1; }
 DONOR=$(readlink -f "$1"); OUT=$2; RD=${3:-}
-LK2ND=${LK2ND:-$HOME/samsung/lk2nd}; NAME=${LK2ND_DTB:-msm8996-samsung-gts3lwifi}
+LK2ND=${LK2ND:-$HOME/Projects/samsung-tab-s3/lk2nd}; NAME=${LK2ND_DTB:-msm8996-samsung-gts3lwifi}
 PSIZE=${LK2ND_PARTITION_SIZE:-4*1024*1024}
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 make -C "$LK2ND" BOOTLOADER_OUT="$W/out" TOOLCHAIN_PREFIX=arm-none-eabi- \
