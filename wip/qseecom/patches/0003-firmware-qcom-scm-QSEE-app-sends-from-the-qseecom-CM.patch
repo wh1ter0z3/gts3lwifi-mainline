@@ -1,7 +1,7 @@
 From 20159bf94e0aa769ec3de04141ba3ce2a2e2f91a Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 14:38:25 +0530
-Subject: [PATCH 3/6] firmware: qcom: scm: QSEE app sends from the qseecom CMA
+Subject: [PATCH 3/7] firmware: qcom: scm: QSEE app sends from the qseecom CMA
  pool (Galaxy Tab S3)
 
 An app send with a full-size request (Samsung's keymaster uses an 82 KB

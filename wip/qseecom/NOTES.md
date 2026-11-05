@@ -84,8 +84,12 @@ TrustZone.
 `/sys/class/fingerprint/fingerprint`, for a sensor whose SPI bus is
 TrustZone's. Verified on the SM-T820 with `tools/esfp0-test.c`: power on,
 QUP6 clocks on (12.5 MHz asked, 15 MHz granted), reset, clocks off, power
-off, no reaction from TrustZone. DRDY needs a Home key (the dev board has
-none): `esfp0-test wait 10`. The full flow is now user space: the vendor
+off, no reaction from TrustZone. DRDY tested on a tablet with the Home key:
+no interrupt and TLMM 131 stays low with a finger on it, as expected: on
+stock the trustlet puts the sensor into finger-detect mode over SPI, a merely
+powered sensor never asserts DRDY. So the interrupt path is provable only
+with the trustlet running (`esfp0-test wait 10`). Patch 7 fixes a reload bug
+(the sysfs class is created with the module now). The full flow is now user space: the vendor
 `fingerprint.default.so` + `libbauthserver.so` (CTD5) on the open
 QSEEComAPI and this driver, with the `fingerpr`/`dualfp` app from the
 firmware directory.

@@ -1,7 +1,7 @@
 From f5b81a8c2f4d1b38144cc1094dc3aa97bdfeff74 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 14:22:59 +0530
-Subject: [PATCH 2/6] firmware: qcom: scm: QSEE listeners and raw app sends
+Subject: [PATCH 2/7] firmware: qcom: scm: QSEE listeners and raw app sends
  (Galaxy Tab S3)
 
 QSEE apps call back into the non-secure world through listener services:
