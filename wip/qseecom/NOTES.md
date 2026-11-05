@@ -14,19 +14,13 @@ branch adds the downstream-style path on top of mainline's own SCM code.
   name find them afterwards.
 - The four standard listener services register (rpmb 0x2000, ssd 0x3000,
   fs 0x4000, time 0x5000, with the buffer sizes of the public qseecom trees).
-- Keymaster answers a command (result 0), without a listener callback. The
-  response is all zero: Samsung's keymaster has its own command numbering,
-  to be taken from its HAL library (`vendor/lib64/libkeymaster*` on stock).
+- Samsung's keymaster answers get_supported_algorithms (1) and SelfTest
+  (0x12) with status 0: the status is word 3 of the response (the stock
+  libkeymaster_helper reads [rsp + 0xc]), the body a packed structure (the
+  HAL's packing library, format tag 0xa000). Both app builds (the tablet's
+  and T820XXU1AQB6's) behave the same; app shutdown and reload work.
 
 ## Patches (`patches/`, on top of `wip/suspend/patches`)
-
-3. Full-size app sends: `qseecom_mem` as a reusable CMA pool and the SCM
-   node's `memory-region` (`dts/test/test-qseecom.dts`), a physical-address
-   app send, the test module's buffers from `dma_alloc_coherent()` on the SCM
-   device. QSEE then accepts an 82 KB request. Samsung's keymaster protocol
-   (header `{cmd, 0xa000, 0xa000}`, command IDs) from the LineageOS vendor
-   `libkeymaster_helper.so`; the app answers every command with -1000
-   (rejected): to be compared with the stock HAL or a traced exchange on 3.18.
 
 
 1. `qcom_scm_qseecom_app_start()` (app manager command 1, args mdt_len,
@@ -42,6 +36,17 @@ branch adds the downstream-style path on top of mainline's own SCM code.
    codes in the public header. The test module registers the four listeners
    with stub handlers (log the request, answer with a failure) and sends
    keymaster a command (parameters `listeners`, `km_version`).
+
+3. Full-size app sends: `qseecom_mem` as a reusable CMA pool and the SCM
+   node's `memory-region` (`dts/test/test-qseecom.dts`), a physical-address
+   app send, the test module's buffers from `dma_alloc_coherent()` on the SCM
+   device. QSEE then accepts an 82 KB request. Samsung's keymaster protocol
+   (header `{cmd, 0xa000, 0xa000}`, command IDs) from the LineageOS vendor
+   `libkeymaster_helper.so`; the app answers every command with -1000
+   (rejected): to be compared with the stock HAL or a traced exchange on 3.18.
+4. App shutdown (command 2); test module parameters `shutdown_first`,
+   `skm_req_len`/`skm_rsp_len` (64 KB + 64 KB for the 2017 HAL, 0x14080 +
+   0x40 for the later one), hex dumps, the status from the response.
 
 Config: `CONFIG_QCOM_QSEECOM=y` (bool, depends on `QCOM_SCM=y`).
 
