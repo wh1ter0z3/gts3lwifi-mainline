@@ -60,6 +60,23 @@ branch adds the downstream-style path on top of mainline's own SCM code.
 
 Config: `CONFIG_QCOM_QSEECOM=y` (bool, depends on `QCOM_SCM=y`).
 
+## Reference firmware
+
+The tablet runs T820XXU3CTD5's TrustZone build (its `keymaster.mbn` matches
+the tablet's partition byte for byte), and LineageOS 21 ships CTD5's vendor
+libraries unchanged (`libkeymaster_helper.so`, `libskeymaster3device.so`,
+`libQSEEComAPI.so`, `fingerprint.default.so`: identical hashes). So the
+CTD5 HAL is the reference: keymaster request 0x14080 bytes, response 0x40,
+header `{cmd, 0xa000, 0xa000}`; the 2017 combination ROM's 64 KB + 64 KB
+layout is an older protocol that happens to be accepted.
+
+Fingerprint stack: `fingerprint.default.so` is a shim over
+`libbauthserver.so` (Samsung biometric auth), which drives the `fingerpr`
+app through QSEEComAPI and needs a kernel sysfs node
+`/sys/class/fingerprint/fingerprint/{name,adm,type_check}`: the sensor's
+own driver (SPI, power, reset) is the missing piece on mainline, not
+TrustZone.
+
 ## Firmware (never in the repo)
 
 The apps are in the `apnhlos` partition, `image/`: `cmnlib`, `cmnlib64`,
