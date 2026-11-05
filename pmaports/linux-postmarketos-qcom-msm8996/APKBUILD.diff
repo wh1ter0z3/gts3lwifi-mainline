@@ -17,7 +17,7 @@ index 601fa9f44e..ba69c3ff06 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,12 +28,203 @@ makedepends="
+@@ -28,12 +28,204 @@ makedepends="
  "
  
  # Source
@@ -218,13 +218,14 @@ index 601fa9f44e..ba69c3ff06 100644
 +	0156-input-misc-egis-et5xx-ctrl-report-the-sensor-type-at.patch
 +	0157-arm64-dts-qcom-gts3lwifi-TrustZone-buffer-pool-as-CM.patch
 +	0158-kernel-configs-gts3-android.config-what-Android-need.patch
++	0159-arm64-dts-qcom-gts3lwifi-Egis-ET510-fingerprint-sens.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
  
  prepare() {
  	default_prepare
-@@ -61,6 +252,198 @@ package() {
+@@ -61,6 +253,199 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -424,4 +425,5 @@ index 601fa9f44e..ba69c3ff06 100644
 +8e9f4b5b56df2128182479a0516b4441bd019e6247aa375afd9965bb1706b62d9ff3deb9ade0288adf143c1e267e565c68886e524f52d57d7f6eb1ae81585793  0156-input-misc-egis-et5xx-ctrl-report-the-sensor-type-at.patch
 +2856e3a78f5623a6d53c82b95a33b80042670918ec89e7bf0e9909713bc51976cd56f3caf7ef3f25d418939160710f3bbcd1f28a5dfa68f7402ee6cd16ea84be  0157-arm64-dts-qcom-gts3lwifi-TrustZone-buffer-pool-as-CM.patch
 +d3eb512fc9345ccbcfa8a68a7f3446b0c62df06350429180d1eda0c6f083eef50b02abad834c251cfc202db35141df497e4ff30a533e152bd3f4c2067a2e4e6f  0158-kernel-configs-gts3-android.config-what-Android-need.patch
++91552ee4e855907a34e0330825ff3ade633edbc57dd17237c871f85935e1dd40dd738910ba1e7c25208f864627d59cf6b4e5781a2dd1d309395daba8a2fc341e  0159-arm64-dts-qcom-gts3lwifi-Egis-ET510-fingerprint-sens.patch
  "

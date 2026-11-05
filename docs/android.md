@@ -15,6 +15,7 @@ plus:
 | `0154`–`0156` | Fingerprint sensor control (`CONFIG_INPUT_EGIS_ET5XX_CTRL`): Samsung's `/dev/esfp0` ABI and `/sys/class/fingerprint/fingerprint`, sensor type reported at probe as the stock kernel does |
 | `0157` | TrustZone buffer pool as a 44 MiB CMA pool for the SCM device, exported as the DMA-BUF heap `qseecom@fd400000` |
 | `0158` | `kernel/configs/gts3-android.config` |
+| `0159` | Device tree node for the fingerprint control driver: reset and LDO enable on PM8994 MPP 2/8, data-ready on TLMM 131, the QUP6 SPI and AHB clocks |
 
 Details and test results of `0149`–`0156`: `wip/qseecom/` on branch
 `qseecom-wip` (the same work on 6.19.5).
@@ -67,14 +68,12 @@ On the running kernel:
 | userfaultfd, sw_sync, `/proc/config.gz` | present |
 | TrustZone pool | 44 MiB CMA, SCM's memory-region, heap `qseecom@fd400000` |
 | `/dev/qseecom` | loads cmnlib and keymaster (app 6); commands answered, through the open libQSEEComAPI |
+| Fingerprint control | driver loads by itself from the DT node; `/dev/esfp0` and `/sys/class/fingerprint/fingerprint` (`ET510`, type 3); power, clock and reset sequence runs |
 
 No Android build has run on it yet.
 
 Notes:
 
-- The fingerprint control driver needs a device tree node (the wiring is
-  in `dts/test/test-fp-ctrl.dts` on `qseecom-wip`); it is not in the
-  board DTS yet.
 - Test boots: the APSS watchdog's maximum timeout is about 30 s, so use
   `systemd.watchdog_sec=30` (60 is rejected).
 - Building on a host without `lld`: `HOSTLDFLAGS=-fuse-ld=bfd` (7.3 links
