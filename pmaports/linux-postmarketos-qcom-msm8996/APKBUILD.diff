@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..ba69c3ff06 100644
+index 601fa9f44e..0b797f4c2f 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -7,8 +7,9 @@ index 601fa9f44e..ba69c3ff06 100644
  _flavor="postmarketos-qcom-msm8996"
  pkgname=linux-$_flavor
 -pkgver=6.19.5
+-pkgrel=0
 +pkgver=7.3.1
- pkgrel=0
++pkgrel=1
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -17,7 +18,7 @@ index 601fa9f44e..ba69c3ff06 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,12 +28,204 @@ makedepends="
+@@ -28,16 +28,212 @@ makedepends="
  "
  
  # Source
@@ -225,7 +226,15 @@ index 601fa9f44e..ba69c3ff06 100644
  
  prepare() {
  	default_prepare
-@@ -61,6 +253,199 @@ package() {
+ 	cp "$srcdir/config-$_flavor.$CARCH" .config
++	# Android on top of the postmarketOS config: binderfs, SELinux,
++	# encryption, verity, the TrustZone stack (kernel/configs/gts3-android.config)
++	scripts/kconfig/merge_config.sh -m .config kernel/configs/gts3-android.config
++	make ARCH="$_carch" LLVM=1 olddefconfig
+ }
+ 
+ build() {
+@@ -61,6 +257,199 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="

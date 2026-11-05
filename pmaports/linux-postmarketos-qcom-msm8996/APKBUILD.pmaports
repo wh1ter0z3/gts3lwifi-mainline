@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=0
+pkgrel=1
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -230,6 +230,10 @@ builddir="$srcdir/linux-$pkgver"
 prepare() {
 	default_prepare
 	cp "$srcdir/config-$_flavor.$CARCH" .config
+	# Android on top of the postmarketOS config: binderfs, SELinux,
+	# encryption, verity, the TrustZone stack (kernel/configs/gts3-android.config)
+	scripts/kconfig/merge_config.sh -m .config kernel/configs/gts3-android.config
+	make ARCH="$_carch" LLVM=1 olddefconfig
 }
 
 build() {
