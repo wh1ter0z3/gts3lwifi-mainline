@@ -6,6 +6,13 @@
  * call order follow the vendor library, so that the HALs and qseecomd
  * work unchanged.
  */
+#ifdef QSEECOM_BIONIC
+#include "bionic-compat.h"
+/* bionic build: log straight to stderr (the Android log device does not exist
+ * on a Linux host, and the HAL may not pass the environment through) */
+static void qlog(const char *fmt, ...);
+#define LOG(fmt, ...)	qlog(fmt "\n", ##__VA_ARGS__)
+#else
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
@@ -15,14 +22,57 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 #include <linux/dma-heap.h>
+#define getdents64(fd, buf, n)	syscall(SYS_getdents64, (fd), (buf), (n))
+#define LOG(fmt, ...)	do { if (getenv("QSEECOM_DEBUG")) fprintf(stderr, "QSEEComAPI: " fmt "\n", ##__VA_ARGS__); } while (0)
+#endif
 
 #include "QSEEComAPI.h"
 
-#define QSEECOM_DEV	"/dev/qseecom"
-#define HEAP_DEV	(getenv("QSEECOM_HEAP") ? getenv("QSEECOM_HEAP") : "/dev/dma_heap/qseecom@fec00000")
-#define LOG(fmt, ...)	do { if (getenv("QSEECOM_DEBUG")) fprintf(stderr, "QSEEComAPI: " fmt "\n", ##__VA_ARGS__); } while (0)
+#ifdef QSEECOM_BIONIC
+int vsnprintf(char *, size_t, const char *, __builtin_va_list);
+long write(int, const void *, size_t);
+static void qlog(const char *fmt, ...)
+{
+	char b[256]; __builtin_va_list ap; int n;
+	__builtin_va_start(ap, fmt); n = vsnprintf(b, sizeof(b), fmt, ap); __builtin_va_end(ap);
+	if (n > 0) write(2, "QSEEComAPI: ", 12), write(2, b, n < (int)sizeof(b) ? n : (int)sizeof(b) - 1);
+}
+#endif
 
+#define QSEECOM_DEV	"/dev/qseecom"
+/* the qseecom CMA pool's heap: /dev/dma_heap/qseecom@<address>, whatever the
+ * device tree put it at; QSEECOM_HEAP overrides */
+static const char *heap_dev(void)
+{
+	static char path[64];
+	const char *env = getenv("QSEECOM_HEAP");
+	int fd, n;
+	char names[1024], *p;
+
+	if (env)
+		return env;
+	if (path[0])
+		return path;
+	/* no opendir in the freestanding build: read the directory the raw way */
+	fd = open("/dev/dma_heap", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (fd >= 0) {
+		n = getdents64(fd, names, sizeof(names));
+		close(fd);
+		for (p = names; n > 0 && p < names + n; ) {
+			struct { uint64_t ino, off; uint16_t reclen; uint8_t type; char name[]; } *d = (void *)p;
+			if (!strncmp(d->name, "qseecom@", 8)) {
+				strncpy(path, "/dev/dma_heap/", sizeof(path) - 1);
+				strncpy(path + 14, d->name, sizeof(path) - 15);
+				return path;
+			}
+			p += d->reclen;
+		}
+	}
+	return "/dev/dma_heap/qseecom@fec00000";
+}
+#define HEAP_DEV	heap_dev()
 /* downstream ioctl ABI (include/uapi/linux/qseecom.h) */
 #define QSEECOM_IOC_MAGIC 0x97
 struct qseecom_register_listener_req { uint32_t listener_id; int32_t ifd_data_fd; void *virt_sb_base; uint32_t sb_size; };

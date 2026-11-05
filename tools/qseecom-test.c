@@ -10,6 +10,7 @@
  *
  * Build: cc -O2 -o qseecom-test qseecom-test.c
  */
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -38,10 +39,29 @@ struct qseecom_qseos_app_load_query { char app_name[64]; uint32_t app_id; uint32
 #define QSEECOM_IOCTL_GET_QSEOS_VERSION_REQ _IOWR(QSEECOM_IOC_MAGIC, 10, struct qseecom_qseos_version_req)
 #define QSEECOM_IOCTL_APP_LOADED_QUERY_REQ _IOWR(QSEECOM_IOC_MAGIC, 15, struct qseecom_qseos_app_load_query)
 
-static const char *heap = "/dev/dma_heap/qseecom@fec00000";
+/* the qseecom CMA pool's heap, /dev/dma_heap/qseecom@<address> */
+static const char *heap_path(void)
+{
+	static char path[64];
+	struct dirent *e;
+	DIR *d;
+
+	if (getenv("QSEECOM_HEAP"))
+		return getenv("QSEECOM_HEAP");
+	d = opendir("/dev/dma_heap");
+	while (d && (e = readdir(d)))
+		if (!strncmp(e->d_name, "qseecom@", 8)) {
+			snprintf(path, sizeof(path), "/dev/dma_heap/%s", e->d_name);
+			break;
+		}
+	if (d)
+		closedir(d);
+	return path[0] ? path : "/dev/dma_heap/qseecom@fec00000";
+}
 
 static int heap_alloc(size_t len, void **map)
 {
+	const char *heap = heap_path();
 	int hfd = open(heap, O_RDWR);
 	struct dma_heap_allocation_data d = { .len = len, .fd_flags = O_RDWR | O_CLOEXEC };
 

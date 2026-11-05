@@ -13,9 +13,14 @@
 
 / {
 	reserved-memory {
-		qseecom_mem: qseecom@fec00000 {
+		/*
+		 * 40 MiB, not downstream's 20: the fingerprint app alone is
+		 * 20 MiB and is loaded through this pool next to the other
+		 * clients' buffers. Grows downwards from the same end.
+		 */
+		qseecom_mem: qseecom@fd400000 {
 			compatible = "shared-dma-pool";
-			reg = <0x0 0xfec00000 0x0 0x1400000>;
+			reg = <0x0 0xfd400000 0x0 0x2c00000>;
 			reusable;
 			/* the default CMA area: exported as /dev/dma_heap/reserved */
 			linux,cma-default;

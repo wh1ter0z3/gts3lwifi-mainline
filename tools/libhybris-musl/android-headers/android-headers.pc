@@ -1,0 +1,6 @@
+prefix=/home/test/android-headers
+includedir=/home/test/android-headers
+Name: android-headers
+Description: Android headers for libhybris
+Version: 9.0.0
+Cflags: -I/home/test/android-headers

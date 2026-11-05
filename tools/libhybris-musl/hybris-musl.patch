@@ -1,0 +1,134 @@
+diff --git a/hybris/common/Makefile.am b/hybris/common/Makefile.am
+index 9bfc1db..537a25b 100644
+--- a/hybris/common/Makefile.am
++++ b/hybris/common/Makefile.am
+@@ -25,7 +25,7 @@ if HAS_ANDROID_10_0_0
+ SUBDIRS += q
+ endif
+ 
+-libhybris_common_la_SOURCES = \
++libhybris_common_la_SOURCES = musl_compat.c \
+ 	hooks.c \
+ 	hooks_shm.c \
+ 	strlcpy.c \
+diff --git a/hybris/common/hooks.c b/hybris/common/hooks.c
+index 67bbf31..ab88c32 100644
+--- a/hybris/common/hooks.c
++++ b/hybris/common/hooks.c
+@@ -923,7 +923,6 @@ static int _hybris_hook_pthread_cond_destroy(pthread_cond_t *cond)
+          * when it is destroyed and bionic code does not always follow this
+          * requirement. To prevent deadlocks reset the reference count of the
+          * condition variable. */
+-        realcond->__data.__wrefs = 0;
+         ret = pthread_cond_destroy(realcond);
+         free(realcond);
+     }
+@@ -1582,26 +1581,12 @@ static int _hybris_hook_fgetc(FILE *fp)
+ 
+ static int _hybris_hook_fgetpos(FILE *fp, bionic_fpos_t *pos)
+ {
+-    TRACE_HOOK("fp %p pos %p", fp, pos);
+-
+-    fpos_t my_fpos;
+-    int ret = fgetpos(_get_actual_fp(fp), &my_fpos);
+-
+-    *pos = my_fpos.__pos;
+-
+-    return ret;
++	return fgetpos(fp, (fpos_t *)pos);
+ }
+ 
+ static int _hybris_hook_fgetpos64(FILE *fp, bionic_fpos64_t *pos)
+ {
+-    TRACE_HOOK("fp %p pos %p", fp, pos);
+-
+-    fpos64_t my_fpos;
+-    int ret = fgetpos64(_get_actual_fp(fp), &my_fpos);
+-
+-    *pos = my_fpos.__pos;
+-
+-    return ret;
++	return fgetpos(fp, (fpos_t *)pos);
+ }
+ 
+ static char* _hybris_hook_fgets(char *s, int n, FILE *fp)
+@@ -1697,24 +1682,12 @@ static int _hybris_hook_fseeko64(FILE *fp, off64_t offset, int whence)
+ 
+ static int _hybris_hook_fsetpos(FILE *fp, const bionic_fpos_t *pos)
+ {
+-    TRACE_HOOK("fp %p pos %p", fp, pos);
+-
+-    fpos_t my_fpos;
+-    my_fpos.__pos = *pos;
+-    memset(&my_fpos.__state, 0, sizeof(mbstate_t));
+-
+-    return fsetpos(_get_actual_fp(fp), &my_fpos);
++	return fsetpos(fp, (const fpos_t *)pos);
+ }
+ 
+ static int _hybris_hook_fsetpos64(FILE *fp, const bionic_fpos64_t *pos)
+ {
+-    TRACE_HOOK("fp %p pos %p", fp, pos);
+-
+-    fpos64_t my_fpos;
+-    my_fpos.__pos = *pos;
+-    memset(&my_fpos.__state, 0, sizeof(mbstate_t));
+-
+-    return fsetpos64(_get_actual_fp(fp), &my_fpos);
++	return fsetpos(fp, (const fpos_t *)pos);
+ }
+ 
+ static long _hybris_hook_ftell(FILE *fp)
+@@ -2544,7 +2517,8 @@ static char* _hybris_hook__gnu_strerror_r(int errnum, char *buf, size_t buf_len)
+ {
+     TRACE_HOOK("errnum %d buf '%s' buf len %zu", errnum, buf, buf_len);
+ 
+-    return strerror_r(errnum, buf, buf_len);
++    if (strerror_r(errnum, buf, buf_len) != 0) buf[0] = 0;
++    return buf;
+ }
+ 
+ static int _hybris_hook_mprotect(void *addr, size_t len, int prot)
+@@ -2956,6 +2930,7 @@ int _hybris_hook_android_fdsan_close_with_tag(int fd, uint64_t tag)
+ }
+ 
+ // old property hooks for pre-android 8 approach
++#include "hooks_musl_extra.inc"
+ static struct _hook hooks_properties[] = {
+     HOOK_INDIRECT(property_get),
+     HOOK_INDIRECT(property_set),
+@@ -3538,6 +3513,7 @@ static void* __hybris_get_hooked_symbol(const char *sym, const char *requester)
+     if (!sorted)
+     {
+         qsort(hooks_properties, HOOKS_SIZE(hooks_properties), sizeof(hooks_properties[0]), hook_cmp);
++        qsort(hooks_musl_extra, HOOKS_SIZE(hooks_musl_extra), sizeof(hooks_musl_extra[0]), hook_cmp);
+         qsort(hooks_common, HOOKS_SIZE(hooks_common), sizeof(hooks_common[0]), hook_cmp);
+         qsort(hooks_mm, HOOKS_SIZE(hooks_mm), sizeof(hooks_mm[0]), hook_cmp);
+         qsort(hooks_n, HOOKS_SIZE(hooks_n), sizeof(hooks_n[0]), hook_cmp);
+@@ -3566,6 +3542,7 @@ static void* __hybris_get_hooked_symbol(const char *sym, const char *requester)
+     // The o linker is loaded when sdk_version >= 27 and exists.
+     if (!found && sdk_version < 27)
+         found = bsearch(&key, hooks_properties, HOOKS_SIZE(hooks_properties), sizeof(hooks_properties[0]), hook_cmp);
++        if (!found) found = bsearch(&key, hooks_musl_extra, HOOKS_SIZE(hooks_musl_extra), sizeof(hooks_musl_extra[0]), hook_cmp);
+ 
+     if (!found)
+         found = bsearch(&key, hooks_common, HOOKS_SIZE(hooks_common), sizeof(hooks_common[0]), hook_cmp);
+diff --git a/hybris/common/o/linker_soinfo.cpp b/hybris/common/o/linker_soinfo.cpp
+index 84e2e94..f43fa20 100644
+--- a/hybris/common/o/linker_soinfo.cpp
++++ b/hybris/common/o/linker_soinfo.cpp
+@@ -439,7 +439,13 @@ void soinfo::call_constructors() {
+         fprintf(stderr, "Could not initialize android system properties!\n");
+         abort();
+     }
+-    bionic___system_properties_init();
++    /* hybris: bionic's property area (/dev/__properties__) only exists on an
++     * Android host; all __system_property_* calls are hooked anyway, so skip
++     * the bionic init when the area is absent instead of faulting in it. */
++    if (access("/dev/__properties__", F_OK) == 0)
++      bionic___system_properties_init();
++    else
++      DEBUG("HYBRIS: no /dev/__properties__, skipping bionic property init\n");
+     constructors_called = true;
+     return;
+   }

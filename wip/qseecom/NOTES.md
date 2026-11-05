@@ -94,6 +94,16 @@ with the trustlet running (`esfp0-test wait 10`). Patch 7 fixes a reload bug
 QSEEComAPI and this driver, with the `fingerpr`/`dualfp` app from the
 firmware directory.
 
+## Fingerprint user space: parked until Android-on-mainline
+
+The trustlet needs ~20 MiB, so `test-qseecom.dts` now makes the pool 44 MiB
+at 0xfd400000 (`/dev/dma_heap/qseecom@fd400000`; the open library and
+`qseecom-test` find the heap by name). A libhybris route on Nura got as far
+as loading the whole Android fingerprint stack and opening the HAL; it is
+parked in `tools/libhybris-musl/` (README there). The kernel side is
+complete; the end-to-end finger test waits for Android on this kernel, where
+the vendor libraries run natively.
+
 ## Firmware (never in the repo)
 
 The apps are in the `apnhlos` partition, `image/`: `cmnlib`, `cmnlib64`,
