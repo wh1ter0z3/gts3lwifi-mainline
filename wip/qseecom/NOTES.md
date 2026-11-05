@@ -20,6 +20,15 @@ branch adds the downstream-style path on top of mainline's own SCM code.
 
 ## Patches (`patches/`, on top of `wip/suspend/patches`)
 
+3. Full-size app sends: `qseecom_mem` as a reusable CMA pool and the SCM
+   node's `memory-region` (`dts/test/test-qseecom.dts`), a physical-address
+   app send, the test module's buffers from `dma_alloc_coherent()` on the SCM
+   device. QSEE then accepts an 82 KB request. Samsung's keymaster protocol
+   (header `{cmd, 0xa000, 0xa000}`, command IDs) from the LineageOS vendor
+   `libkeymaster_helper.so`; the app answers every command with -1000
+   (rejected): to be compared with the stock HAL or a traced exchange on 3.18.
+
+
 1. `qcom_scm_qseecom_app_start()` (app manager command 1, args mdt_len,
    img_len, phys) and `qcom_scm_qseecom_load_services_image()` (command 7);
    the Tab S3 added to `qcom_scm_qseecom_allowlist`;

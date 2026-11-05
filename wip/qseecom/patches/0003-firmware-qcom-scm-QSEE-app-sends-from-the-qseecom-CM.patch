@@ -1,0 +1,194 @@
+From 20159bf94e0aa769ec3de04141ba3ce2a2e2f91a Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 14:38:25 +0530
+Subject: [PATCH 3/3] firmware: qcom: scm: QSEE app sends from the qseecom CMA
+ pool (Galaxy Tab S3)
+
+An app send with a full-size request (Samsung's keymaster uses an 82 KB
+request + 64 byte response) from the generic tzmem pool fails with
+SCM_ENOMEM (-5): QSEE cannot map it. Downstream's qseecom_mem is a reusable
+CMA pool (shared-dma-pool, below 4 GB) the ION DMA heap allocates app
+buffers from; our DT reserved it no-map. dts/test/test-qseecom.dts makes it
+the SCM device's memory-region; qcom_scm_qseecom_app_send_phys() sends
+physical buffer addresses, and the test module allocates the request and
+response in one dma_alloc_coherent() buffer on the SCM device (the test
+platform device is its child). With that, QSEE accepts the sends.
+
+Samsung keymaster protocol, from the stock libkeymaster_helper
+(KM_TZRunCommand): request header { u32 cmd; u32 0xa000; u32 0xa000 },
+command IDs 1 get_supported_algorithms ... 0x12 SelfTest, 0x100-0x102
+attestation, 0x4011/0x4022 SAK/GAK. The app answers both test commands with
+-1000 in the response: it rejects the command, probably a protocol version
+mismatch (the HAL is from a LineageOS build, not Samsung's stock). To be
+resolved against the stock HAL or a trace on the 3.18 kernel.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ .../firmware/qcom/qcom_qseecom_tabs3_test.c   | 72 ++++++++++++++-----
+ drivers/firmware/qcom/qcom_scm.c              | 23 ++++++
+ include/linux/firmware/qcom/qcom_scm.h        |  4 ++
+ 3 files changed, 82 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c b/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+index 6d1b54c58..db9c604da 100644
+--- a/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
++++ b/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+@@ -11,6 +11,8 @@
+ #include <linux/firmware.h>
+ #include <linux/firmware/qcom/qcom_scm.h>
+ #include <linux/module.h>
++#include <linux/of.h>
++#include <linux/of_platform.h>
+ #include <linux/platform_device.h>
+ #include <linux/firmware/qcom/qcom_tzmem.h>
+ 
+@@ -101,29 +103,58 @@ static int tabs3_run_to_completion(struct device *dev,
+ 	return 0;
+ }
+ 
+-/* Keymaster: GET_VERSION_INFO (cmd 0): rsp = status, major, minor */
+-static int tabs3_keymaster_version(struct device *dev, u32 app_id)
++/*
++ * Samsung keymaster (skeymast) commands, from the stock libkeymaster_helper
++ * (KM_TZRunCommand): request = { u32 cmd; u32 0xa000; u32 0xa000; ... } in a
++ * 0x14080-byte buffer, response 64 bytes with the result first (the HAL
++ * initialises it to -1000). Command IDs: 1 get_supported_algorithms ...
++ * 0x12 SelfTest (see wip/qseecom/NOTES.md).
++ */
++#define SKM_REQ_LEN	0x14080
++#define SKM_RSP_LEN	0x40
++static int tabs3_keymaster_cmd(struct device *dev, u32 app_id, u32 cmd)
+ {
+ 	struct qcom_scm_qseecom_resp res = {};
+-	u32 *req __free(qcom_tzmem) = qcom_tzmem_alloc(qcom_scm_get_tzmem_pool(), 64, GFP_KERNEL);
+-	u32 *rsp __free(qcom_tzmem) = qcom_tzmem_alloc(qcom_scm_get_tzmem_pool(), 64, GFP_KERNEL);
++	struct device *scm_dev = dev->parent ? dev->parent : dev;
++	dma_addr_t dma;
++	u32 *req, *rsp;
+ 	int ret;
+ 
+-	if (!req || !rsp)
++	/* one buffer, response right after the request, as the stock HAL */
++	req = dma_alloc_coherent(scm_dev, SKM_REQ_LEN + SKM_RSP_LEN, &dma,
++				 GFP_KERNEL);
++	if (!req)
+ 		return -ENOMEM;
+-	req[0] = 0;	/* KEYMASTER_GET_VERSION */
+-	memset(rsp, 0, 64);
+-	ret = qcom_scm_qseecom_app_send_raw(app_id, req, 4, rsp, 64, &res);
+-	dev_info(dev, "keymaster GET_VERSION: scm %d result %llu type %llx data %llx\n",
+-		 ret, res.result, res.resp_type, res.data);
+-	if (ret)
+-		return ret;
+-	ret = tabs3_run_to_completion(dev, &res);
+-	dev_info(dev, "keymaster GET_VERSION: done %d result %llu; rsp status %u major %u minor %u\n",
+-		 ret, res.result, rsp[0], rsp[1], rsp[2]);
++	rsp = req + SKM_REQ_LEN / 4;
++	memset(req, 0, SKM_REQ_LEN);
++	req[0] = cmd;
++	req[1] = 0xa000;
++	req[2] = 0xa000;
++	memset(rsp, 0, SKM_RSP_LEN);
++	rsp[0] = (u32)-1000;
++	ret = qcom_scm_qseecom_app_send_phys(app_id, dma, SKM_REQ_LEN,
++					     dma + SKM_REQ_LEN, SKM_RSP_LEN, &res);
++	if (!ret)
++		ret = tabs3_run_to_completion(dev, &res);
++	/*
++	 * Samsung's keymaster writes its status into the request buffer at
++	 * offset 0xc (the HAL reads [buf + 0xc] after QSEECom_send_cmd), not
++	 * into the response.
++	 */
++	dev_info(dev, "keymaster cmd %#x: ret %d result %llu; status %d (req %08x %08x %08x %08x %08x %08x %08x %08x) rsp %08x %08x\n",
++		 cmd, ret, res.result, (int)req[3], req[0], req[1], req[2],
++		 req[3], req[4], req[5], req[6], req[7], rsp[0], rsp[1]);
++	dma_free_coherent(scm_dev, SKM_REQ_LEN + SKM_RSP_LEN, req, dma);
+ 	return ret;
+ }
+ 
++static int tabs3_keymaster_version(struct device *dev, u32 app_id)
++{
++	tabs3_keymaster_cmd(dev, app_id, 0x1);	/* get_supported_algorithms */
++	tabs3_keymaster_cmd(dev, app_id, 0x12);	/* SelfTest */
++	return 0;
++}
++
+ /* The mdt and every segment file, back to back, in one DMA buffer. */
+ static int tabs3_load_image(struct device *dev, const char *name,
+ 			    void **buf, dma_addr_t *dma, u32 *mdt_len,
+@@ -265,13 +296,20 @@ static struct platform_device *tabs3_test_dev;
+ 
+ static int __init tabs3_test_init(void)
+ {
++	struct device_node *scm_np;
++	struct platform_device *scm_pdev;
+ 	int ret;
+ 
+ 	ret = platform_driver_register(&tabs3_test_driver);
+ 	if (ret)
+ 		return ret;
+-	tabs3_test_dev = platform_device_register_simple("qseecom_tabs3_test",
+-							 -1, NULL, 0);
++	/* child of the SCM device, so that DMA buffers come from its pool */
++	scm_np = of_find_compatible_node(NULL, NULL, "qcom,scm");
++	scm_pdev = scm_np ? of_find_device_by_node(scm_np) : NULL;
++	of_node_put(scm_np);
++	tabs3_test_dev = platform_device_register_resndata(
++			scm_pdev ? &scm_pdev->dev : NULL, "qseecom_tabs3_test",
++			-1, NULL, 0, NULL, 0);
+ 	if (IS_ERR(tabs3_test_dev)) {
+ 		platform_driver_unregister(&tabs3_test_driver);
+ 		return PTR_ERR(tabs3_test_dev);
+diff --git a/drivers/firmware/qcom/qcom_scm.c b/drivers/firmware/qcom/qcom_scm.c
+index b660e536c..12249b8e2 100644
+--- a/drivers/firmware/qcom/qcom_scm.c
++++ b/drivers/firmware/qcom/qcom_scm.c
+@@ -2107,6 +2107,29 @@ int qcom_scm_qseecom_app_send_raw(u32 app_id, void *req, size_t req_size,
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_send_raw);
+ 
++/* As qcom_scm_qseecom_app_send_raw(), with physical buffer addresses. */
++int qcom_scm_qseecom_app_send_phys(u32 app_id, phys_addr_t req,
++				   size_t req_size, phys_addr_t rsp,
++				   size_t rsp_size,
++				   struct qcom_scm_qseecom_resp *res)
++{
++	struct qcom_scm_desc desc = {};
++
++	desc.owner = QSEECOM_TZ_OWNER_TZ_APPS;
++	desc.svc = QSEECOM_TZ_SVC_APP_ID_PLACEHOLDER;
++	desc.cmd = QSEECOM_TZ_CMD_APP_SEND;
++	desc.arginfo = QCOM_SCM_ARGS(5, QCOM_SCM_VAL, QCOM_SCM_RW, QCOM_SCM_VAL,
++				     QCOM_SCM_RW, QCOM_SCM_VAL);
++	desc.args[0] = app_id;
++	desc.args[1] = req;
++	desc.args[2] = req_size;
++	desc.args[3] = rsp;
++	desc.args[4] = rsp_size;
++
++	return __qcom_scm_qseecom_call(&desc, res);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_send_phys);
++
+ /**
+  * qcom_scm_qseecom_listener_response() - Resume an app after a listener
+  * served its request (TZ_OS_LISTENER_RESPONSE_HANDLER_ID, command 3).
+diff --git a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+index 04130704c..3e07ccdd4 100644
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -179,6 +179,10 @@ int qcom_scm_qseecom_listener_deregister(u32 listener_id);
+ int qcom_scm_qseecom_app_send_raw(u32 app_id, void *req, size_t req_size,
+ 				  void *rsp, size_t rsp_size,
+ 				  struct qcom_scm_qseecom_resp *res);
++int qcom_scm_qseecom_app_send_phys(u32 app_id, phys_addr_t req,
++				   size_t req_size, phys_addr_t rsp,
++				   size_t rsp_size,
++				   struct qcom_scm_qseecom_resp *res);
+ int qcom_scm_qseecom_listener_response(u32 listener_id, u32 status,
+ 				       struct qcom_scm_qseecom_resp *res);
+ int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
+-- 
+2.53.0
+

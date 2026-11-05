@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "test-wdt.dts"
+
+/*
+ * Test: QSEE app buffers. Downstream's qseecom_mem is a reusable CMA pool
+ * (shared-dma-pool, below 4 GB, 4 MiB aligned, 20 MiB), the ION "DMA" heap
+ * app buffers are allocated from; the main DTS reserves it no-map, so
+ * nothing can map it. Make it the SCM device's memory region instead, so
+ * that dma_alloc_coherent() on the SCM device gives TZ-mappable buffers.
+ */
+
+/delete-node/ &{/reserved-memory/memory@fec00000};
+
+/ {
+	reserved-memory {
+		qseecom_mem: qseecom@fec00000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0xfec00000 0x0 0x1400000>;
+			reusable;
+		};
+	};
+};
+
+&{/firmware/scm} {
+	memory-region = <&qseecom_mem>;
+};
