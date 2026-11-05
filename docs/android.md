@@ -72,6 +72,13 @@ On the running kernel:
 
 No Android build has run on it yet.
 
+The kernel package on this branch (7.3.1-r1) merges the fragment in
+`prepare()`, so a postmarketOS build from the branch is the Android
+kernel. To check one, on the tablet: `sudo sh tools/android-kernel-check.sh`
+(features, TrustZone pool, keymaster through `/dev/qseecom`, fingerprint
+control; it needs static builds of `qseecom-km` and `esfp0-test` next to
+it for the last two, see the script's header).
+
 Notes:
 
 - Test boots: the APSS watchdog's maximum timeout is about 30 s, so use
