@@ -17,6 +17,8 @@
 			compatible = "shared-dma-pool";
 			reg = <0x0 0xfec00000 0x0 0x1400000>;
 			reusable;
+			/* the default CMA area: exported as /dev/dma_heap/reserved */
+			linux,cma-default;
 		};
 	};
 };

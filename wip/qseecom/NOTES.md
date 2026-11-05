@@ -48,6 +48,16 @@ branch adds the downstream-style path on top of mainline's own SCM code.
    `skm_req_len`/`skm_rsp_len` (64 KB + 64 KB for the 2017 HAL, 0x14080 +
    0x40 for the later one), hex dumps, the status from the response.
 
+5. `/dev/qseecom` (`CONFIG_QCOM_QSEECOM_DEV=m`): the downstream ioctl ABI
+   (listener register/unregister, send_cmd, receive_req, send_resp,
+   load/unload app, set_mem_param, app_loaded_query, version, perf, bus
+   scaling) with DMA-BUF fds for the shared buffers. Needs
+   `CONFIG_DMABUF_HEAPS`, `_CMA`, `_SYSTEM`; `test-qseecom.dts` marks the
+   pool `linux,cma-default`, exported as `/dev/dma_heap/qseecom@fec00000`.
+   `tools/qseecom-test.c` (build on the tablet: `gcc -O2 -o qseecom-test
+   qseecom-test.c`) loads an app and sends it a command, or runs a stub
+   listener. Keymaster answers through the device as through the kernel test.
+
 Config: `CONFIG_QCOM_QSEECOM=y` (bool, depends on `QCOM_SCM=y`).
 
 ## Firmware (never in the repo)
@@ -73,10 +83,10 @@ image is loaded by the secure world from that buffer.
 2. Real listener handlers: time (trivial), fs (files under a directory,
    downstream `libdrmfs` protocol), rpmb (the eMMC RPMB partition through
    the block layer), ssd (secure storage).
-3. A `/dev/qseecom` character device with the downstream ioctls
-   (`QSEECOM_IOCTL_*`, `include/uapi/linux/qseecom.h` in the Samsung GPL
-   kernel), so that the vendor `libQSEEComAPI.so` works unchanged: that is
-   what the Android HALs (and libhybris on Linux) use.
+3. An open `libQSEEComAPI.so` (the API is public, 20 functions): the vendor
+   one allocates its buffers through ION, which mainline does not have, so it
+   cannot run unchanged; a replacement that allocates from the DMA-BUF heap
+   lets the stock HALs and qseecomd run as they are.
 4. Then: hardware-backed KeyMint/Gatekeeper for Android-on-mainline, the
    fingerprint HAL (own buffer for the 20 MiB app), and the Widevine L1
    chain (secure DMA-BUF heap via `qcom_scm_assign_mem`, Venus secure
