@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 20:08:33 +0530
+Subject: [PATCH 157/158] arm64: dts: qcom: gts3lwifi: TrustZone buffer pool as
+ CMA for SCM
+
+Downstream's qseecom_mem is a reusable CMA pool that TrustZone app
+buffers are allocated from, not a no-map carve-out. Make it a 44 MiB
+shared-dma-pool below 4 GB (the fingerprint app alone takes ~20 MiB),
+the SCM device's memory-region, and the default CMA area so that it is
+exported as the DMA-BUF heap qseecom@fd400000 for /dev/qseecom clients.
+The LTE model includes this DTS.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 19 +++++++++++++++----
+ 1 file changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+index f5e87f22a..6d2e14d79 100644
+--- a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
++++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+@@ -195,10 +195,17 @@ memory@9c200000 {
+ 			no-map;
+ 		};
+ 
+-		/* Pool handed to TrustZone, downstream qseecom_mem */
+-		memory@fec00000 {
+-			reg = <0x0 0xfec00000 0x0 0x1400000>;
+-			no-map;
++		/*
++		 * Buffers shared with TrustZone apps (downstream qseecom_mem):
++		 * a reusable CMA pool below 4 GB for the SCM device, exported as
++		 * the DMA-BUF heap qseecom@fd400000. 44 MiB rather than
++		 * downstream's 20, as the fingerprint app alone takes ~20 MiB.
++		 */
++		qseecom_mem: qseecom@fd400000 {
++			compatible = "shared-dma-pool";
++			reg = <0x0 0xfd400000 0x0 0x2c00000>;
++			reusable;
++			linux,cma-default;
+ 		};
+ 	};
+ 
+@@ -2109,3 +2116,7 @@ pogo_kbd_int_default: pogo-kbd-int-default-state {
+ 		bias-pull-up;
+ 	};
+ };
++
++&{/firmware/scm} {
++	memory-region = <&qseecom_mem>;
++};

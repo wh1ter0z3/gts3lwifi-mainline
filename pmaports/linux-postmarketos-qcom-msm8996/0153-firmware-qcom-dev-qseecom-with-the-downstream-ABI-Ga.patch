@@ -1,0 +1,730 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 15:26:26 +0530
+Subject: [PATCH 153/158] firmware: qcom: /dev/qseecom with the downstream ABI
+ (Galaxy Tab S3)
+
+The downstream qseecom character device on mainline's QSEE SCM calls, so
+that user space written against Qualcomm's QSEEComAPI (keymaster,
+gatekeeper and fingerprint HALs, the qseecomd listener services) works on
+mainline: the downstream ioctl numbers and structures (SET_MEM_PARAM,
+LOAD_APP, UNLOAD_APP, APP_LOADED_QUERY, SEND_CMD, REGISTER/UNREGISTER_
+LISTENER, RECEIVE_REQ, SEND_RESP, GET_QSEOS_VERSION, PERF_*, SET_BUS_
+SCALING), with DMA-BUF fds for the shared buffers instead of ION. Apps are
+loaded by name from the firmware directory (cmnlib first); a listener
+client blocks in RECEIVE_REQ, is woken when an app blocks on its listener
+ID, and resumes the app with SEND_RESP.
+
+The qseecom CMA pool (linux,cma-default in the test DT) appears as
+/dev/dma_heap/qseecom@fec00000. tools/qseecom-test.c in the repo exercises
+it: on an SM-T820, keymaster loads (app 6) and answers
+get_supported_algorithms with status 0 through the device, and
+APP_LOADED_QUERY reports -EINVAL / -EEXIST as downstream.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+(cherry picked from commit e991297877a5a2995cf68892be1c1748d6e74589)
+---
+ drivers/firmware/qcom/Kconfig            |   9 +
+ drivers/firmware/qcom/Makefile           |   1 +
+ drivers/firmware/qcom/qcom_qseecom_dev.c | 665 +++++++++++++++++++++++
+ 3 files changed, 675 insertions(+)
+ create mode 100644 drivers/firmware/qcom/qcom_qseecom_dev.c
+
+diff --git a/drivers/firmware/qcom/Kconfig b/drivers/firmware/qcom/Kconfig
+index 83d8cb35b..f0f736dfb 100644
+--- a/drivers/firmware/qcom/Kconfig
++++ b/drivers/firmware/qcom/Kconfig
+@@ -103,3 +103,12 @@ config QCOM_QSEECOM_TABS3_TEST
+ 	  Loads the QSEE services library and one app from firmware files
+ 	  through the SCM app manager, the downstream qseecom way, and logs
+ 	  the result. A development test, not for production.
++
++config QCOM_QSEECOM_DEV
++	tristate "/dev/qseecom: downstream qseecom ABI (Samsung Galaxy Tab S3)"
++	depends on QCOM_QSEECOM && DMA_SHARED_BUFFER
++	help
++	  The downstream qseecom character device on mainline's QSEE SCM calls:
++	  app loading from firmware images, commands, listener services, with
++	  DMA-BUF shared buffers instead of ION. For QSEEComAPI clients
++	  (keymaster, gatekeeper, fingerprint HALs, qseecomd).
+diff --git a/drivers/firmware/qcom/Makefile b/drivers/firmware/qcom/Makefile
+index 1a0de2f14..c7d0e934c 100644
+--- a/drivers/firmware/qcom/Makefile
++++ b/drivers/firmware/qcom/Makefile
+@@ -12,3 +12,4 @@ obj-$(CONFIG_QCOM_QSEECOM_UEFISECAPP) += qcom_qseecom_uefisecapp.o
+ obj-$(CONFIG_QCOM_PAS)		+= qcom_pas.o
+ obj-$(CONFIG_QCOM_PAS_TEE)	+= qcom_pas_tee.o
+ obj-$(CONFIG_QCOM_QSEECOM_TABS3_TEST) += qcom_qseecom_tabs3_test.o
++obj-$(CONFIG_QCOM_QSEECOM_DEV) += qcom_qseecom_dev.o
+diff --git a/drivers/firmware/qcom/qcom_qseecom_dev.c b/drivers/firmware/qcom/qcom_qseecom_dev.c
+new file mode 100644
+index 000000000..87630bf21
+--- /dev/null
++++ b/drivers/firmware/qcom/qcom_qseecom_dev.c
+@@ -0,0 +1,665 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * /dev/qseecom: the downstream qseecom character device ABI on top of
++ * mainline's QSEE SCM calls, so that user space clients written against
++ * Qualcomm's QSEEComAPI (keymaster, gatekeeper, fingerprint HALs, the
++ * qseecomd listener services) work on mainline.
++ *
++ * Differences from downstream: client buffers are DMA-BUF fds (from a
++ * DMA-BUF heap backed by the qseecom CMA pool) instead of ION fds; the
++ * ioctl numbers and structures are the downstream ones
++ * (include/uapi/linux/qseecom.h in the Samsung GPL kernel).
++ */
++
++#include <linux/dma-buf.h>
++#include <linux/dma-mapping.h>
++#include <linux/elf.h>
++#include <linux/firmware.h>
++#include <linux/firmware/qcom/qcom_scm.h>
++#include <linux/fs.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/of_platform.h>
++#include <linux/platform_device.h>
++#include <linux/sched/signal.h>
++#include <linux/slab.h>
++#include <linux/uaccess.h>
++#include <linux/wait.h>
++
++#define QSEECOM_MAX_APP_NAME_SIZE	64
++#define QSEECOM_IOC_MAGIC		0x97
++
++struct qseecom_register_listener_req {
++	u32 listener_id;
++	s32 ifd_data_fd;
++	u64 virt_sb_base;	/* void * in user space: 64-bit client */
++	u32 sb_size;
++};
++
++struct qseecom_send_cmd_req {
++	u64 cmd_req_buf;
++	u32 cmd_req_len;
++	u64 resp_buf;
++	u32 resp_len;
++};
++
++struct qseecom_load_img_req {
++	u32 mdt_len;
++	u32 img_len;
++	s32 ifd_data_fd;
++	char img_name[QSEECOM_MAX_APP_NAME_SIZE];
++	u32 app_arch;
++	u32 app_id;
++};
++
++struct qseecom_set_sb_mem_param_req {
++	s32 ifd_data_fd;
++	u64 virt_sb_base;
++	u32 sb_len;
++};
++
++struct qseecom_qseos_version_req {
++	u32 qseos_version;
++};
++
++struct qseecom_qseos_app_load_query {
++	char app_name[QSEECOM_MAX_APP_NAME_SIZE];
++	u32 app_id;
++	u32 app_arch;
++};
++
++#define QSEECOM_IOCTL_REGISTER_LISTENER_REQ	_IOWR(QSEECOM_IOC_MAGIC, 1, struct qseecom_register_listener_req)
++#define QSEECOM_IOCTL_UNREGISTER_LISTENER_REQ	_IO(QSEECOM_IOC_MAGIC, 2)
++#define QSEECOM_IOCTL_SEND_CMD_REQ		_IOWR(QSEECOM_IOC_MAGIC, 3, struct qseecom_send_cmd_req)
++#define QSEECOM_IOCTL_RECEIVE_REQ		_IO(QSEECOM_IOC_MAGIC, 5)
++#define QSEECOM_IOCTL_SEND_RESP_REQ		_IO(QSEECOM_IOC_MAGIC, 6)
++#define QSEECOM_IOCTL_LOAD_APP_REQ		_IOWR(QSEECOM_IOC_MAGIC, 7, struct qseecom_load_img_req)
++#define QSEECOM_IOCTL_SET_MEM_PARAM_REQ		_IOWR(QSEECOM_IOC_MAGIC, 8, struct qseecom_set_sb_mem_param_req)
++#define QSEECOM_IOCTL_UNLOAD_APP_REQ		_IO(QSEECOM_IOC_MAGIC, 9)
++#define QSEECOM_IOCTL_GET_QSEOS_VERSION_REQ	_IOWR(QSEECOM_IOC_MAGIC, 10, struct qseecom_qseos_version_req)
++#define QSEECOM_IOCTL_PERF_ENABLE_REQ		_IO(QSEECOM_IOC_MAGIC, 11)
++#define QSEECOM_IOCTL_PERF_DISABLE_REQ		_IO(QSEECOM_IOC_MAGIC, 12)
++#define QSEECOM_IOCTL_APP_LOADED_QUERY_REQ	_IOWR(QSEECOM_IOC_MAGIC, 15, struct qseecom_qseos_app_load_query)
++#define QSEECOM_IOCTL_SET_BUS_SCALING_REQ	_IOWR(QSEECOM_IOC_MAGIC, 23, int)
++
++/* A client's shared buffer: a dma-buf, mapped for the kernel and attached */
++struct qseecom_sb {
++	struct dma_buf *dmabuf;
++	struct dma_buf_attachment *att;
++	struct sg_table *sgt;
++	phys_addr_t phys;
++	size_t len;
++	u64 uvirt;	/* the client's mapping of it */
++};
++
++struct qseecom_listener {
++	struct list_head node;
++	u32 id;
++	struct qseecom_sb sb;
++	wait_queue_head_t rcv_wq;
++	bool rcv_req;	/* a request is pending for this listener */
++	bool resp_sent;	/* the listener answered */
++	u32 resp_status;
++	struct qseecom_client *owner;
++};
++
++struct qseecom_client {
++	struct qseecom_sb sb;
++	u32 app_id;
++	char app_name[QSEECOM_MAX_APP_NAME_SIZE];
++	bool app_loaded_here;
++	struct qseecom_listener *listener;
++};
++
++struct qseecom_dev {
++	struct device *dev;
++	struct miscdevice misc;
++	struct mutex lock;	/* app loads, listener list, sends */
++	struct list_head listeners;
++	wait_queue_head_t resp_wq;
++	const char *fw_dir;
++	bool cmnlib_loaded;
++};
++
++static struct qseecom_dev *qdev;
++
++/* ---- shared buffers (dma-buf) ---- */
++
++static int qseecom_sb_get(struct qseecom_sb *sb, int fd, u64 uvirt, u32 len)
++{
++	int ret;
++
++	sb->dmabuf = dma_buf_get(fd);
++	if (IS_ERR(sb->dmabuf))
++		return PTR_ERR(sb->dmabuf);
++	sb->att = dma_buf_attach(sb->dmabuf, qdev->dev);
++	if (IS_ERR(sb->att)) {
++		ret = PTR_ERR(sb->att);
++		goto put;
++	}
++	sb->sgt = dma_buf_map_attachment_unlocked(sb->att, DMA_BIDIRECTIONAL);
++	if (IS_ERR(sb->sgt)) {
++		ret = PTR_ERR(sb->sgt);
++		goto detach;
++	}
++	if (sb->sgt->nents != 1) {
++		dev_err(qdev->dev, "shared buffer is not contiguous (%d entries)\n",
++			sb->sgt->nents);
++		ret = -EINVAL;
++		goto unmap;
++	}
++	sb->phys = sg_dma_address(sb->sgt->sgl);
++	sb->len = min_t(size_t, len, sb->dmabuf->size);
++	sb->uvirt = uvirt;
++	return 0;
++unmap:
++	dma_buf_unmap_attachment_unlocked(sb->att, sb->sgt, DMA_BIDIRECTIONAL);
++detach:
++	dma_buf_detach(sb->dmabuf, sb->att);
++put:
++	dma_buf_put(sb->dmabuf);
++	sb->dmabuf = NULL;
++	return ret;
++}
++
++static void qseecom_sb_put(struct qseecom_sb *sb)
++{
++	if (!sb->dmabuf)
++		return;
++	dma_buf_unmap_attachment_unlocked(sb->att, sb->sgt, DMA_BIDIRECTIONAL);
++	dma_buf_detach(sb->dmabuf, sb->att);
++	dma_buf_put(sb->dmabuf);
++	sb->dmabuf = NULL;
++}
++
++/* A client pointer inside its shared buffer -> physical address */
++static int qseecom_sb_phys(struct qseecom_sb *sb, u64 uptr, u32 len,
++			   phys_addr_t *phys)
++{
++	if (!sb->dmabuf || uptr < sb->uvirt || len > sb->len ||
++	    uptr - sb->uvirt > sb->len - len)
++		return -EINVAL;
++	*phys = sb->phys + (uptr - sb->uvirt);
++	return 0;
++}
++
++/* ---- app images ---- */
++
++static int qseecom_load_image(const char *name, void **buf, dma_addr_t *dma,
++			      u32 *mdt_len, u32 *img_len, size_t *total)
++{
++	const struct firmware *fw;
++	char path[128];
++	unsigned int i, nseg;
++	int ret;
++
++	snprintf(path, sizeof(path), "%s/%s.mdt", qdev->fw_dir, name);
++	ret = request_firmware(&fw, path, qdev->dev);
++	if (ret)
++		return ret;
++	if (fw->size < sizeof(struct elf32_hdr)) {
++		release_firmware(fw);
++		return -EINVAL;
++	}
++	if (((struct elf32_hdr *)fw->data)->e_ident[EI_CLASS] == ELFCLASS64)
++		nseg = ((struct elf64_hdr *)fw->data)->e_phnum;
++	else
++		nseg = ((struct elf32_hdr *)fw->data)->e_phnum;
++	*mdt_len = fw->size;
++	*total = fw->size;
++	release_firmware(fw);
++	for (i = 0; i < nseg; i++) {
++		snprintf(path, sizeof(path), "%s/%s.b%02u", qdev->fw_dir, name, i);
++		if (request_firmware(&fw, path, qdev->dev))
++			continue;
++		*total += fw->size;
++		release_firmware(fw);
++	}
++	*buf = dma_alloc_coherent(qdev->dev, *total, dma, GFP_KERNEL);
++	if (!*buf)
++		return -ENOMEM;
++	snprintf(path, sizeof(path), "%s/%s.mdt", qdev->fw_dir, name);
++	ret = request_firmware(&fw, path, qdev->dev);
++	if (ret)
++		goto err;
++	memcpy(*buf, fw->data, fw->size);
++	*img_len = fw->size;
++	release_firmware(fw);
++	for (i = 0; i < nseg; i++) {
++		snprintf(path, sizeof(path), "%s/%s.b%02u", qdev->fw_dir, name, i);
++		if (request_firmware(&fw, path, qdev->dev))
++			continue;
++		memcpy(*buf + *img_len, fw->data, fw->size);
++		*img_len += fw->size;
++		release_firmware(fw);
++	}
++	return 0;
++err:
++	dma_free_coherent(qdev->dev, *total, *buf, *dma);
++	return ret;
++}
++
++static int qseecom_load_cmnlib(void)
++{
++	void *buf;
++	dma_addr_t dma;
++	u32 mdt_len, img_len;
++	size_t total;
++	int ret;
++
++	if (qdev->cmnlib_loaded)
++		return 0;
++	ret = qseecom_load_image("cmnlib", &buf, &dma, &mdt_len, &img_len, &total);
++	if (ret)
++		return ret;
++	ret = qcom_scm_qseecom_load_services_image(dma, mdt_len, img_len);
++	dma_free_coherent(qdev->dev, total, buf, dma);
++	if (!ret)
++		qdev->cmnlib_loaded = true;
++	dev_info(qdev->dev, "cmnlib: %d\n", ret);
++	return ret;
++}
++
++/*
++ * Load an app by name from the firmware directory (the client's image fd is
++ * ignored: on this device the apps come from the apnhlos partition, which
++ * the firmware service copies to /lib/firmware). Also used when the client
++ * asks for an app that is already running.
++ */
++static int qseecom_load_app(struct qseecom_client *c, const char *name,
++			    u32 *app_id)
++{
++	void *buf;
++	dma_addr_t dma;
++	u32 mdt_len, img_len;
++	size_t total;
++	int ret;
++
++	ret = qcom_scm_qseecom_app_get_id(name, app_id);
++	if (!ret)
++		return 0;
++	ret = qseecom_load_cmnlib();
++	if (ret)
++		return ret;
++	ret = qseecom_load_image(name, &buf, &dma, &mdt_len, &img_len, &total);
++	if (ret) {
++		dev_err(qdev->dev, "%s: no image (%d)\n", name, ret);
++		return ret;
++	}
++	ret = qcom_scm_qseecom_app_start(dma, mdt_len, img_len, app_id);
++	dma_free_coherent(qdev->dev, total, buf, dma);
++	dev_info(qdev->dev, "%s: start %d, app id %u\n", name, ret, *app_id);
++	if (!ret)
++		c->app_loaded_here = true;
++	return ret;
++}
++
++/* ---- listeners ---- */
++
++static struct qseecom_listener *qseecom_find_listener(u32 id)
++{
++	struct qseecom_listener *l;
++
++	list_for_each_entry(l, &qdev->listeners, node)
++		if (l->id == id)
++			return l;
++	return NULL;
++}
++
++/*
++ * Run an app command to completion: while QSEE reports a listener request,
++ * wake that listener's client (blocked in RECEIVE_REQ), wait for its
++ * SEND_RESP, and resume the app. Called with qdev->lock held; the lock is
++ * dropped while waiting so that the listener client can answer.
++ */
++static int qseecom_run(struct qcom_scm_qseecom_resp *res)
++{
++	int rounds = 0;
++
++	while (res->result == QCOM_QSEECOM_RESULT_INCOMPLETE ||
++	       res->result == QCOM_QSEECOM_RESULT_BLOCKED_ON_LISTENER) {
++		u32 id = res->data;
++		struct qseecom_listener *l = qseecom_find_listener(id);
++		u32 status;
++		int ret;
++
++		if (!l || ++rounds > 256) {
++			dev_err(qdev->dev, "listener %#x: %s\n", id,
++				l ? "too many rounds" : "not registered");
++			status = 0xffffffff;
++		} else {
++			l->rcv_req = true;
++			l->resp_sent = false;
++			wake_up_interruptible(&l->rcv_wq);
++			mutex_unlock(&qdev->lock);
++			ret = wait_event_interruptible_timeout(qdev->resp_wq,
++							       l->resp_sent,
++							       10 * HZ);
++			mutex_lock(&qdev->lock);
++			status = ret > 0 ? l->resp_status : 0xffffffff;
++			if (ret <= 0)
++				dev_warn(qdev->dev, "listener %#x: no answer (%d)\n",
++					 id, ret);
++		}
++		ret = qcom_scm_qseecom_listener_response(id, status, res);
++		if (ret)
++			return ret;
++	}
++	return 0;
++}
++
++/* ---- ioctls ---- */
++
++static long qseecom_ioctl_set_mem(struct qseecom_client *c, void __user *arg)
++{
++	struct qseecom_set_sb_mem_param_req req;
++
++	if (copy_from_user(&req, arg, sizeof(req)))
++		return -EFAULT;
++	qseecom_sb_put(&c->sb);
++	return qseecom_sb_get(&c->sb, req.ifd_data_fd, req.virt_sb_base, req.sb_len);
++}
++
++static long qseecom_ioctl_load_app(struct qseecom_client *c, void __user *arg)
++{
++	struct qseecom_load_img_req req;
++	int ret;
++
++	if (copy_from_user(&req, arg, sizeof(req)))
++		return -EFAULT;
++	req.img_name[sizeof(req.img_name) - 1] = 0;
++	mutex_lock(&qdev->lock);
++	ret = qseecom_load_app(c, req.img_name, &req.app_id);
++	mutex_unlock(&qdev->lock);
++	if (ret)
++		return ret;
++	c->app_id = req.app_id;
++	strscpy(c->app_name, req.img_name, sizeof(c->app_name));
++	if (copy_to_user(arg, &req, sizeof(req)))
++		return -EFAULT;
++	return 0;
++}
++
++static long qseecom_ioctl_query(void __user *arg)
++{
++	struct qseecom_qseos_app_load_query q;
++	int ret;
++
++	if (copy_from_user(&q, arg, sizeof(q)))
++		return -EFAULT;
++	q.app_name[sizeof(q.app_name) - 1] = 0;
++	ret = qcom_scm_qseecom_app_get_id(q.app_name, &q.app_id);
++	if (ret)
++		return -EINVAL;	/* downstream: -EINVAL = not loaded */
++	if (copy_to_user(arg, &q, sizeof(q)))
++		return -EFAULT;
++	return -EEXIST;		/* downstream: -EEXIST = loaded, app_id filled */
++}
++
++static long qseecom_ioctl_send_cmd(struct qseecom_client *c, void __user *arg)
++{
++	struct qseecom_send_cmd_req req;
++	struct qcom_scm_qseecom_resp res = {};
++	phys_addr_t preq, prsp;
++	int ret;
++
++	if (copy_from_user(&req, arg, sizeof(req)))
++		return -EFAULT;
++	if (!c->app_id)
++		return -EINVAL;
++	if (qseecom_sb_phys(&c->sb, req.cmd_req_buf, req.cmd_req_len, &preq) ||
++	    qseecom_sb_phys(&c->sb, req.resp_buf, req.resp_len, &prsp))
++		return -EINVAL;
++	dma_buf_end_cpu_access(c->sb.dmabuf, DMA_TO_DEVICE);
++	mutex_lock(&qdev->lock);
++	ret = qcom_scm_qseecom_app_send_phys(c->app_id, preq, req.cmd_req_len,
++					     prsp, req.resp_len, &res);
++	if (!ret)
++		ret = qseecom_run(&res);
++	mutex_unlock(&qdev->lock);
++	dma_buf_begin_cpu_access(c->sb.dmabuf, DMA_FROM_DEVICE);
++	if (ret)
++		return ret;
++	if (res.result != QCOM_QSEECOM_RESULT_SUCCESS)
++		return -EIO;
++	return 0;
++}
++
++static long qseecom_ioctl_register_listener(struct qseecom_client *c,
++					    void __user *arg)
++{
++	struct qseecom_register_listener_req req;
++	struct qseecom_listener *l;
++	int ret;
++
++	if (copy_from_user(&req, arg, sizeof(req)))
++		return -EFAULT;
++	if (c->listener)
++		return -EBUSY;
++	l = kzalloc(sizeof(*l), GFP_KERNEL);
++	if (!l)
++		return -ENOMEM;
++	ret = qseecom_sb_get(&l->sb, req.ifd_data_fd, req.virt_sb_base, req.sb_size);
++	if (ret)
++		goto free;
++	init_waitqueue_head(&l->rcv_wq);
++	l->id = req.listener_id;
++	l->owner = c;
++	mutex_lock(&qdev->lock);
++	if (qseecom_find_listener(l->id)) {
++		ret = -EBUSY;
++	} else {
++		ret = qcom_scm_qseecom_listener_register(l->id, l->sb.phys,
++							 l->sb.len);
++		if (!ret)
++			list_add(&l->node, &qdev->listeners);
++	}
++	mutex_unlock(&qdev->lock);
++	dev_info(qdev->dev, "listener %#x: register %d\n", l->id, ret);
++	if (ret)
++		goto put;
++	c->listener = l;
++	return 0;
++put:
++	qseecom_sb_put(&l->sb);
++free:
++	kfree(l);
++	return ret;
++}
++
++static void qseecom_unregister_listener(struct qseecom_client *c)
++{
++	struct qseecom_listener *l = c->listener;
++
++	if (!l)
++		return;
++	mutex_lock(&qdev->lock);
++	qcom_scm_qseecom_listener_deregister(l->id);
++	list_del(&l->node);
++	/* an app waiting on it gets a failure */
++	l->resp_sent = true;
++	l->resp_status = 0xffffffff;
++	wake_up_interruptible(&qdev->resp_wq);
++	mutex_unlock(&qdev->lock);
++	qseecom_sb_put(&l->sb);
++	kfree(l);
++	c->listener = NULL;
++}
++
++static long qseecom_ioctl_receive_req(struct qseecom_client *c)
++{
++	struct qseecom_listener *l = c->listener;
++	int ret;
++
++	if (!l)
++		return -ENODATA;
++	ret = wait_event_interruptible(l->rcv_wq, l->rcv_req);
++	if (ret)
++		return -ERESTARTSYS;
++	l->rcv_req = false;
++	dma_buf_begin_cpu_access(l->sb.dmabuf, DMA_FROM_DEVICE);
++	return 0;
++}
++
++static long qseecom_ioctl_send_resp(struct qseecom_client *c)
++{
++	struct qseecom_listener *l = c->listener;
++
++	if (!l)
++		return -ENODATA;
++	dma_buf_end_cpu_access(l->sb.dmabuf, DMA_TO_DEVICE);
++	l->resp_status = 0;
++	l->resp_sent = true;
++	wake_up_interruptible(&qdev->resp_wq);
++	return 0;
++}
++
++static long qseecom_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
++{
++	struct qseecom_client *c = file->private_data;
++	void __user *uarg = (void __user *)arg;
++
++	switch (cmd) {
++	case QSEECOM_IOCTL_SET_MEM_PARAM_REQ:
++		return qseecom_ioctl_set_mem(c, uarg);
++	case QSEECOM_IOCTL_LOAD_APP_REQ:
++		return qseecom_ioctl_load_app(c, uarg);
++	case QSEECOM_IOCTL_UNLOAD_APP_REQ:
++		/* apps stay resident, as downstream keeps them for other clients */
++		c->app_id = 0;
++		return 0;
++	case QSEECOM_IOCTL_APP_LOADED_QUERY_REQ:
++		return qseecom_ioctl_query(uarg);
++	case QSEECOM_IOCTL_SEND_CMD_REQ:
++		return qseecom_ioctl_send_cmd(c, uarg);
++	case QSEECOM_IOCTL_REGISTER_LISTENER_REQ:
++		return qseecom_ioctl_register_listener(c, uarg);
++	case QSEECOM_IOCTL_UNREGISTER_LISTENER_REQ:
++		qseecom_unregister_listener(c);
++		return 0;
++	case QSEECOM_IOCTL_RECEIVE_REQ:
++		return qseecom_ioctl_receive_req(c);
++	case QSEECOM_IOCTL_SEND_RESP_REQ:
++		return qseecom_ioctl_send_resp(c);
++	case QSEECOM_IOCTL_GET_QSEOS_VERSION_REQ: {
++		struct qseecom_qseos_version_req v = { .qseos_version = 0x1001000 };
++
++		return copy_to_user(uarg, &v, sizeof(v)) ? -EFAULT : 0;
++	}
++	case QSEECOM_IOCTL_PERF_ENABLE_REQ:
++	case QSEECOM_IOCTL_PERF_DISABLE_REQ:
++	case QSEECOM_IOCTL_SET_BUS_SCALING_REQ:
++		return 0;
++	default:
++		dev_dbg(qdev->dev, "unsupported ioctl %#x\n", cmd);
++		return -ENOTTY;
++	}
++}
++
++static int qseecom_open(struct inode *inode, struct file *file)
++{
++	struct qseecom_client *c = kzalloc(sizeof(*c), GFP_KERNEL);
++
++	if (!c)
++		return -ENOMEM;
++	file->private_data = c;
++	return 0;
++}
++
++static int qseecom_release(struct inode *inode, struct file *file)
++{
++	struct qseecom_client *c = file->private_data;
++
++	qseecom_unregister_listener(c);
++	qseecom_sb_put(&c->sb);
++	kfree(c);
++	return 0;
++}
++
++static const struct file_operations qseecom_fops = {
++	.owner = THIS_MODULE,
++	.open = qseecom_open,
++	.release = qseecom_release,
++	.unlocked_ioctl = qseecom_ioctl,
++	.compat_ioctl = compat_ptr_ioctl,
++};
++
++static char *fw_dir = "qcom/msm8996/samsung/gts3/tz";
++module_param(fw_dir, charp, 0444);
++
++static int qseecom_dev_probe(struct platform_device *pdev)
++{
++	int ret;
++
++	qdev = devm_kzalloc(&pdev->dev, sizeof(*qdev), GFP_KERNEL);
++	if (!qdev)
++		return -ENOMEM;
++	qdev->dev = &pdev->dev;
++	qdev->fw_dir = fw_dir;
++	mutex_init(&qdev->lock);
++	INIT_LIST_HEAD(&qdev->listeners);
++	init_waitqueue_head(&qdev->resp_wq);
++	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
++	if (ret)
++		return ret;
++	qdev->misc.minor = MISC_DYNAMIC_MINOR;
++	qdev->misc.name = "qseecom";
++	qdev->misc.fops = &qseecom_fops;
++	qdev->misc.mode = 0660;
++	ret = misc_register(&qdev->misc);
++	if (ret)
++		return ret;
++	dev_info(&pdev->dev, "/dev/qseecom ready, apps from %s\n", fw_dir);
++	return 0;
++}
++
++static void qseecom_dev_remove(struct platform_device *pdev)
++{
++	misc_deregister(&qdev->misc);
++}
++
++static struct platform_driver qseecom_dev_driver = {
++	.probe = qseecom_dev_probe,
++	.remove = qseecom_dev_remove,
++	.driver = { .name = "qseecom" },
++};
++
++static struct platform_device *qseecom_pdev;
++
++static int __init qseecom_dev_init(void)
++{
++	struct device_node *np;
++	struct platform_device *scm;
++	int ret;
++
++	ret = platform_driver_register(&qseecom_dev_driver);
++	if (ret)
++		return ret;
++	/* child of the SCM device: DMA from its (qseecom) memory region */
++	np = of_find_compatible_node(NULL, NULL, "qcom,scm");
++	scm = np ? of_find_device_by_node(np) : NULL;
++	of_node_put(np);
++	qseecom_pdev = platform_device_register_resndata(scm ? &scm->dev : NULL,
++							 "qseecom", -1, NULL, 0,
++							 NULL, 0);
++	if (IS_ERR(qseecom_pdev)) {
++		platform_driver_unregister(&qseecom_dev_driver);
++		return PTR_ERR(qseecom_pdev);
++	}
++	return 0;
++}
++
++static void __exit qseecom_dev_exit(void)
++{
++	platform_device_unregister(qseecom_pdev);
++	platform_driver_unregister(&qseecom_dev_driver);
++}
++
++module_init(qseecom_dev_init);
++module_exit(qseecom_dev_exit);
++
++MODULE_DESCRIPTION("/dev/qseecom: downstream qseecom ABI on mainline QSEE SCM calls");
++MODULE_IMPORT_NS("DMA_BUF");
++MODULE_LICENSE("GPL");

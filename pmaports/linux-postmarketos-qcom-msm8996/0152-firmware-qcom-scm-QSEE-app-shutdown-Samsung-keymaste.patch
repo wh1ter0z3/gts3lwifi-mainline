@@ -1,0 +1,143 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 15:10:56 +0530
+Subject: [PATCH 152/158] firmware: qcom: scm: QSEE app shutdown; Samsung
+ keymaster answers (Galaxy Tab S3)
+
+Add qcom_scm_qseecom_app_shutdown() (app manager command 2), and in the
+test module a shutdown_first parameter (unload a running app before
+loading another build of it), skm_req_len/skm_rsp_len (0x10000 + 0x10000
+for the 2017 stock HAL T820XXU1AQB6, 0x14080 + 0x40 for the later one), a
+hex dump of both buffers, and the status read from the right place.
+
+Result: Samsung's keymaster (both the tablet's build and the AQB6 one)
+answers get_supported_algorithms and SelfTest with status 0 in the
+response (word 3, where the stock libkeymaster_helper reads it) and a
+packed payload (the HAL's packing library, format tag 0xa000). The earlier
+"-1000" was the HAL's sentinel echoed into the request. App lifecycle,
+listeners and commands all work on mainline; what remains for a HAL is the
+response serialisation, not the kernel.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+(cherry picked from commit dc0f1e36b87903e80a712374af8586720b74eed4)
+---
+ .../firmware/qcom/qcom_qseecom_tabs3_test.c   | 30 ++++++++++++++-----
+ drivers/firmware/qcom/qcom_scm.c              | 21 +++++++++++++
+ include/linux/firmware/qcom/qcom_scm.h        |  1 +
+ 3 files changed, 44 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c b/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+index db9c604da..e2f277d10 100644
+--- a/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
++++ b/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+@@ -26,6 +26,8 @@ static bool listeners = true;
+ module_param(listeners, bool, 0444);
+ static bool km_version = true;
+ module_param(km_version, bool, 0444);
++static bool shutdown_first = false;
++module_param(shutdown_first, bool, 0444);
+ 
+ /*
+  * The standard QSEE listener services the stock qseecomd registers, with the
+@@ -110,8 +112,14 @@ static int tabs3_run_to_completion(struct device *dev,
+  * initialises it to -1000). Command IDs: 1 get_supported_algorithms ...
+  * 0x12 SelfTest (see wip/qseecom/NOTES.md).
+  */
+-#define SKM_REQ_LEN	0x14080
+-#define SKM_RSP_LEN	0x40
++/* 0x14080 + 0x40 for the app on the tablet (later firmware, LineageOS HAL),
++ * 0x10000 + 0x10000 for the 2017 stock HAL (T820XXU1AQB6) */
++static uint skm_req_len = 0x14080;
++module_param(skm_req_len, uint, 0444);
++static uint skm_rsp_len = 0x40;
++module_param(skm_rsp_len, uint, 0444);
++#define SKM_REQ_LEN	skm_req_len
++#define SKM_RSP_LEN	skm_rsp_len
+ static int tabs3_keymaster_cmd(struct device *dev, u32 app_id, u32 cmd)
+ {
+ 	struct qcom_scm_qseecom_resp res = {};
+@@ -137,13 +145,14 @@ static int tabs3_keymaster_cmd(struct device *dev, u32 app_id, u32 cmd)
+ 	if (!ret)
+ 		ret = tabs3_run_to_completion(dev, &res);
+ 	/*
+-	 * Samsung's keymaster writes its status into the request buffer at
+-	 * offset 0xc (the HAL reads [buf + 0xc] after QSEECom_send_cmd), not
+-	 * into the response.
++	 * The status is the response's word 3 (the stock libkeymaster_helper
++	 * reads [rsp + 0xc] after QSEECom_send_cmd); the rest of the response
++	 * is a packed structure (packing_init(..., 0xa000, 3) in the HAL).
+ 	 */
+-	dev_info(dev, "keymaster cmd %#x: ret %d result %llu; status %d (req %08x %08x %08x %08x %08x %08x %08x %08x) rsp %08x %08x\n",
+-		 cmd, ret, res.result, (int)req[3], req[0], req[1], req[2],
+-		 req[3], req[4], req[5], req[6], req[7], rsp[0], rsp[1]);
++	dev_info(dev, "keymaster cmd %#x: ret %d result %llu; status %d\n",
++		 cmd, ret, res.result, (int)rsp[3]);
++	print_hex_dump(KERN_INFO, "  req: ", DUMP_PREFIX_OFFSET, 16, 4, req, 64, false);
++	print_hex_dump(KERN_INFO, "  rsp: ", DUMP_PREFIX_OFFSET, 16, 4, rsp, 96, false);
+ 	dma_free_coherent(scm_dev, SKM_REQ_LEN + SKM_RSP_LEN, req, dma);
+ 	return ret;
+ }
+@@ -242,6 +251,11 @@ static int tabs3_test_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	ret = qcom_scm_qseecom_app_get_id(app, &app_id);
++	if (!ret && shutdown_first) {
++		ret = qcom_scm_qseecom_app_shutdown(app_id);
++		dev_info(dev, "%s shutdown (app id %u): %d\n", app, app_id, ret);
++		ret = -ENOENT;
++	}
+ 	if (!ret) {
+ 		dev_info(dev, "%s already loaded, app id %u\n", app, app_id);
+ 		goto loaded;
+diff --git a/drivers/firmware/qcom/qcom_scm.c b/drivers/firmware/qcom/qcom_scm.c
+index 6ae1c810f..c6d0a029c 100644
+--- a/drivers/firmware/qcom/qcom_scm.c
++++ b/drivers/firmware/qcom/qcom_scm.c
+@@ -112,6 +112,7 @@ enum qcom_scm_qseecom_tz_svc {
+ enum qcom_scm_qseecom_tz_cmd_app {
+ 	QSEECOM_TZ_CMD_APP_SEND			= 1,
+ 	QSEECOM_TZ_CMD_APP_START		= 1,
++	QSEECOM_TZ_CMD_APP_SHUTDOWN		= 2,
+ 	QSEECOM_TZ_CMD_APP_LOOKUP		= 3,
+ 	QSEECOM_TZ_CMD_LOAD_SERVICES_IMAGE	= 7,
+ 	QSEECOM_TZ_CMD_LISTENER_REGISTER	= 1,
+@@ -2294,6 +2295,26 @@ int qcom_scm_qseecom_app_start(phys_addr_t image, u32 mdt_len, u32 img_len,
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_start);
+ 
++/* qcom_scm_qseecom_app_shutdown() - Unload an app (TZ_OS_APP_SHUTDOWN_ID). */
++int qcom_scm_qseecom_app_shutdown(u32 app_id)
++{
++	struct qcom_scm_desc desc = {};
++	struct qcom_scm_qseecom_resp res = {};
++	int status;
++
++	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
++	desc.svc = QSEECOM_TZ_SVC_APP_MGR;
++	desc.cmd = QSEECOM_TZ_CMD_APP_SHUTDOWN;
++	desc.arginfo = QCOM_SCM_ARGS(1, QCOM_SCM_VAL);
++	desc.args[0] = app_id;
++
++	status = __qcom_scm_qseecom_call(&desc, &res);
++	if (status)
++		return status;
++	return res.result == QSEECOM_RESULT_SUCCESS ? 0 : -EIO;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_shutdown);
++
+ /**
+  * qcom_scm_qseecom_load_services_image() - Load the QSEE services library.
+  * @image:   Physical address of the library image (cmnlib), laid out as for
+diff --git a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+index 6758bc10e..fab7a2bfa 100644
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -185,6 +185,7 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
+ int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
+ int qcom_scm_qseecom_app_start(phys_addr_t image, u32 mdt_len, u32 img_len,
+ 			       u32 *app_id);
++int qcom_scm_qseecom_app_shutdown(u32 app_id);
+ int qcom_scm_qseecom_load_services_image(phys_addr_t image, u32 mdt_len,
+ 					 u32 img_len);
+ int qcom_scm_qseecom_listener_register(u32 listener_id, phys_addr_t sb,

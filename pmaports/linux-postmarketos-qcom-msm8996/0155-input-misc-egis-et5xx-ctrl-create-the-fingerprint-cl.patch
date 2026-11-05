@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 15:56:32 +0530
+Subject: [PATCH 155/158] input: misc: egis-et5xx-ctrl: create the fingerprint
+ class with the module
+
+The class was created in probe and never destroyed, so a module reload failed with -EEXIST. Create it in module init and destroy it in exit.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+(cherry picked from commit 42dce35321f21fd71bd45a86fb064b1fbde197b2)
+---
+ drivers/input/misc/egis-et5xx-ctrl.c | 30 +++++++++++++++++++---------
+ 1 file changed, 21 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/input/misc/egis-et5xx-ctrl.c b/drivers/input/misc/egis-et5xx-ctrl.c
+index 56722420b..18c98eb7e 100644
+--- a/drivers/input/misc/egis-et5xx-ctrl.c
++++ b/drivers/input/misc/egis-et5xx-ctrl.c
+@@ -397,14 +397,6 @@ static int et5xx_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		return ret;
+ 
+-	if (!fp_class) {
+-		fp_class = class_create("fingerprint");
+-		if (IS_ERR(fp_class)) {
+-			ret = PTR_ERR(fp_class);
+-			fp_class = NULL;
+-			goto unreg;
+-		}
+-	}
+ 	fp->fp_dev = device_create_with_groups(fp_class, dev, 0, fp,
+ 					       et5xx_fp_groups, "fingerprint");
+ 	if (IS_ERR(fp->fp_dev)) {
+@@ -431,6 +423,7 @@ static void et5xx_remove(struct platform_device *pdev)
+ 	misc_deregister(&fp->misc);
+ }
+ 
++
+ static const struct of_device_id et5xx_of_match[] = {
+ 	{ .compatible = "egistec,et5xx-ctrl" },
+ 	{ }
+@@ -445,7 +438,26 @@ static struct platform_driver et5xx_driver = {
+ 		.of_match_table = et5xx_of_match,
+ 	},
+ };
+-module_platform_driver(et5xx_driver);
++static int __init et5xx_init(void)
++{
++	int ret;
++
++	fp_class = class_create("fingerprint");
++	if (IS_ERR(fp_class))
++		return PTR_ERR(fp_class);
++	ret = platform_driver_register(&et5xx_driver);
++	if (ret)
++		class_destroy(fp_class);
++	return ret;
++}
++
++static void __exit et5xx_exit(void)
++{
++	platform_driver_unregister(&et5xx_driver);
++	class_destroy(fp_class);
++}
++module_init(et5xx_init);
++module_exit(et5xx_exit);
+ 
+ MODULE_DESCRIPTION("Egis ET5xx fingerprint sensor control (secure SPI bus)");
+ MODULE_LICENSE("GPL");

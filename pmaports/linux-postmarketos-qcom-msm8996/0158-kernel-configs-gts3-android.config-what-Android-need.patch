@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 20:08:33 +0530
+Subject: [PATCH 158/158] kernel/configs: gts3-android.config: what Android
+ needs on the Galaxy Tab S3
+
+A fragment on top of the postmarketOS config: binderfs, SELinux in the
+LSM list, file-based encryption, fs-verity, dm-verity, userfaultfd,
+sw_sync, uhid, netd's BPF and netfilter pieces, /proc/config.gz, and the
+TrustZone stack the vendor HALs use (/dev/qseecom, DMA-BUF heaps, the
+fingerprint sensor control driver). Additive: postmarketOS still boots
+with it, SELinux staying without a policy.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernel/configs/gts3-android.config | 61 ++++++++++++++++++++++++++++++
+ 1 file changed, 61 insertions(+)
+ create mode 100644 kernel/configs/gts3-android.config
+
+diff --git a/kernel/configs/gts3-android.config b/kernel/configs/gts3-android.config
+new file mode 100644
+index 000000000..0d6b4c7c0
+--- /dev/null
++++ b/kernel/configs/gts3-android.config
+@@ -0,0 +1,61 @@
++# Galaxy Tab S3: what Android needs on top of the postmarketOS kernel
++# config. Additive: a kernel built with it still boots postmarketOS (SELinux
++# stays without a policy unless Android's init loads one).
++#   make ... defconfig-or-olddefconfig && scripts/kconfig/merge_config.sh -m .config kernel/configs/gts3-android.config
++
++# binder through binderfs, as Android 10+ mounts it
++CONFIG_ANDROID_BINDER_IPC=y
++CONFIG_ANDROID_BINDERFS=y
++CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"
++
++# SELinux, required by Android's init
++CONFIG_SECURITY=y
++CONFIG_SECURITY_NETWORK=y
++CONFIG_SECURITY_SELINUX=y
++CONFIG_SECURITY_SELINUX_BOOTPARAM=y
++CONFIG_AUDIT=y
++CONFIG_LSM="lockdown,yama,loadpin,safesetid,integrity,selinux,bpf"
++
++# File-based encryption of /data, fs-verity for APEX/APKs, verified boot
++CONFIG_KEYS=y
++CONFIG_FS_ENCRYPTION=y
++CONFIG_BLK_INLINE_ENCRYPTION=y
++CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK=y
++CONFIG_FS_ENCRYPTION_INLINE_CRYPT=y
++CONFIG_FS_VERITY=y
++CONFIG_DM_VERITY=y
++CONFIG_DM_VERITY_FEC=y
++CONFIG_EXT4_FS_SECURITY=y
++CONFIG_F2FS_FS_SECURITY=y
++CONFIG_QUOTA=y
++CONFIG_QUOTACTL=y
++
++# ART's garbage collector, graphics fences, Bluetooth HID
++CONFIG_USERFAULTFD=y
++CONFIG_SW_SYNC=y
++CONFIG_UHID=y
++
++# netd's traffic accounting and firewall (x_tables is modular in the base
++# config, so the matches are modules; Android's init loads them)
++CONFIG_NETFILTER_XT_MATCH_BPF=m
++CONFIG_NETFILTER_XT_MATCH_OWNER=m
++CONFIG_NETFILTER_XT_MATCH_QUOTA=m
++CONFIG_NET_SCH_INGRESS=y
++CONFIG_NET_CLS_ACT=y
++CONFIG_NET_CLS_BPF=y
++CONFIG_NET_ACT_BPF=y
++CONFIG_TUN=y
++
++# Kernel config visible to Android's VTS
++CONFIG_IKCONFIG=y
++CONFIG_IKCONFIG_PROC=y
++
++# TrustZone apps (keymaster, gatekeeper, fingerprint) for the vendor HALs:
++# /dev/qseecom with buffers from the qseecom DMA-BUF heap; fingerprint
++# sensor control (/dev/esfp0)
++CONFIG_QCOM_QSEECOM=y
++CONFIG_QCOM_QSEECOM_DEV=m
++CONFIG_DMABUF_HEAPS=y
++CONFIG_DMABUF_HEAPS_SYSTEM=y
++CONFIG_DMABUF_HEAPS_CMA=y
++CONFIG_INPUT_EGIS_ET5XX_CTRL=m

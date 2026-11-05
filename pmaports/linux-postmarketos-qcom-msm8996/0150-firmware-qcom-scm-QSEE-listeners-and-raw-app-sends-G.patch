@@ -1,0 +1,389 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 14:22:59 +0530
+Subject: [PATCH 150/158] firmware: qcom: scm: QSEE listeners and raw app sends
+ (Galaxy Tab S3)
+
+QSEE apps call back into the non-secure world through listener services:
+an app send returns INCOMPLETE / BLOCKED_ON_LISTENER with the listener ID
+in data, the listener serves the request from its shared buffer, and the
+app resumes through the listener response handler.
+
+Add qcom_scm_qseecom_listener_register() / _deregister() (listener
+service, commands 1 and 2, the buffer passed as RW), a raw app send that
+hands the QSEE response back to the caller, and
+qcom_scm_qseecom_listener_response() (command 3). Move the response struct
+and result codes to the public header.
+
+The Tab S3 test module registers the four standard listeners the stock
+qseecomd provides (rpmb 0x2000, ssd 0x3000, fs 0x4000, time 0x5000) with
+stub handlers that log a request and answer with a failure, and sends
+Samsung's keymaster a command 0 after loading it. On an SM-T820: all four
+register, keymaster (app 6) answers the command with result 0 and no
+listener callback. The command numbering of Samsung's keymaster is still
+to be taken from its HAL.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+(cherry picked from commit f5b81a8c2f4d1b38144cc1094dc3aa97bdfeff74)
+---
+ .../firmware/qcom/qcom_qseecom_tabs3_test.c   | 121 +++++++++++++++++-
+ drivers/firmware/qcom/qcom_scm.c              | 116 ++++++++++++++++-
+ include/linux/firmware/qcom/qcom_scm.h        |  21 +++
+ 3 files changed, 251 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c b/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+index 573c0c742..6d1b54c58 100644
+--- a/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
++++ b/drivers/firmware/qcom/qcom_qseecom_tabs3_test.c
+@@ -12,6 +12,7 @@
+ #include <linux/firmware/qcom/qcom_scm.h>
+ #include <linux/module.h>
+ #include <linux/platform_device.h>
++#include <linux/firmware/qcom/qcom_tzmem.h>
+ 
+ static char *fw_dir = "qcom/msm8996/samsung/gts3/tz";
+ module_param(fw_dir, charp, 0444);
+@@ -19,6 +20,109 @@ static char *app = "skeymast";
+ module_param(app, charp, 0444);
+ static bool load_cmnlib = true;
+ module_param(load_cmnlib, bool, 0444);
++static bool listeners = true;
++module_param(listeners, bool, 0444);
++static bool km_version = true;
++module_param(km_version, bool, 0444);
++
++/*
++ * The standard QSEE listener services the stock qseecomd registers, with the
++ * buffer sizes the public qseecom trees use. Served here by a stub that logs
++ * the request and answers with a failure status, so that an app which calls
++ * one returns instead of hanging; a real implementation comes later.
++ */
++static const struct { u32 id; u32 sb_len; const char *name; } tabs3_listeners[] = {
++	{ 0x2000, 0x20000, "rpmb" },
++	{ 0x3000, 0x20000, "ssd" },
++	{ 0x4000, 0x20000, "fs (gpfs/drmfs)" },
++	{ 0x5000, 0x1000,  "time" },
++};
++static void *lsn_buf[ARRAY_SIZE(tabs3_listeners)];
++static dma_addr_t lsn_dma[ARRAY_SIZE(tabs3_listeners)];
++static struct device *lsn_dev;
++
++static int tabs3_listeners_register(struct device *dev)
++{
++	int i, ret;
++
++	for (i = 0; i < ARRAY_SIZE(tabs3_listeners); i++) {
++		lsn_buf[i] = dma_alloc_coherent(dev, tabs3_listeners[i].sb_len,
++						&lsn_dma[i], GFP_KERNEL);
++		if (!lsn_buf[i])
++			return -ENOMEM;
++		ret = qcom_scm_qseecom_listener_register(tabs3_listeners[i].id,
++							 lsn_dma[i],
++							 tabs3_listeners[i].sb_len);
++		dev_info(dev, "listener %#x (%s): register %d\n",
++			 tabs3_listeners[i].id, tabs3_listeners[i].name, ret);
++	}
++	lsn_dev = dev;
++	return 0;
++}
++
++static void tabs3_listeners_remove(void)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(tabs3_listeners); i++) {
++		if (!lsn_buf[i])
++			continue;
++		qcom_scm_qseecom_listener_deregister(tabs3_listeners[i].id);
++		dma_free_coherent(lsn_dev, tabs3_listeners[i].sb_len, lsn_buf[i],
++				  lsn_dma[i]);
++		lsn_buf[i] = NULL;
++	}
++}
++
++/* Serve (stub) listener requests until the app's command completes. */
++static int tabs3_run_to_completion(struct device *dev,
++				   struct qcom_scm_qseecom_resp *res)
++{
++	int rounds = 0, i, ret;
++
++	while (res->result == QCOM_QSEECOM_RESULT_INCOMPLETE ||
++	       res->result == QCOM_QSEECOM_RESULT_BLOCKED_ON_LISTENER) {
++		u32 lsn = res->data;
++		u32 *sb = NULL;
++
++		for (i = 0; i < ARRAY_SIZE(tabs3_listeners); i++)
++			if (tabs3_listeners[i].id == lsn)
++				sb = lsn_buf[i];
++		dev_info(dev, "listener %#x request%s: %08x %08x %08x %08x\n", lsn,
++			 sb ? "" : " (unregistered!)",
++			 sb ? sb[0] : 0, sb ? sb[1] : 0, sb ? sb[2] : 0, sb ? sb[3] : 0);
++		if (!sb || ++rounds > 16)
++			return -EIO;
++		/* stub: generic failure, the response is left as is */
++		ret = qcom_scm_qseecom_listener_response(lsn, 0xffffffff, res);
++		if (ret)
++			return ret;
++	}
++	return 0;
++}
++
++/* Keymaster: GET_VERSION_INFO (cmd 0): rsp = status, major, minor */
++static int tabs3_keymaster_version(struct device *dev, u32 app_id)
++{
++	struct qcom_scm_qseecom_resp res = {};
++	u32 *req __free(qcom_tzmem) = qcom_tzmem_alloc(qcom_scm_get_tzmem_pool(), 64, GFP_KERNEL);
++	u32 *rsp __free(qcom_tzmem) = qcom_tzmem_alloc(qcom_scm_get_tzmem_pool(), 64, GFP_KERNEL);
++	int ret;
++
++	if (!req || !rsp)
++		return -ENOMEM;
++	req[0] = 0;	/* KEYMASTER_GET_VERSION */
++	memset(rsp, 0, 64);
++	ret = qcom_scm_qseecom_app_send_raw(app_id, req, 4, rsp, 64, &res);
++	dev_info(dev, "keymaster GET_VERSION: scm %d result %llu type %llx data %llx\n",
++		 ret, res.result, res.resp_type, res.data);
++	if (ret)
++		return ret;
++	ret = tabs3_run_to_completion(dev, &res);
++	dev_info(dev, "keymaster GET_VERSION: done %d result %llu; rsp status %u major %u minor %u\n",
++		 ret, res.result, rsp[0], rsp[1], rsp[2]);
++	return ret;
++}
+ 
+ /* The mdt and every segment file, back to back, in one DMA buffer. */
+ static int tabs3_load_image(struct device *dev, const char *name,
+@@ -100,10 +204,16 @@ static int tabs3_test_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		return ret;
+ 
++	if (listeners) {
++		ret = tabs3_listeners_register(dev);
++		if (ret)
++			return ret;
++	}
++
+ 	ret = qcom_scm_qseecom_app_get_id(app, &app_id);
+ 	if (!ret) {
+ 		dev_info(dev, "%s already loaded, app id %u\n", app, app_id);
+-		return 0;
++		goto loaded;
+ 	}
+ 	dev_info(dev, "%s lookup before load: %d\n", app, ret);
+ 
+@@ -132,11 +242,20 @@ static int tabs3_test_probe(struct platform_device *pdev)
+ 	ret = qcom_scm_qseecom_app_get_id(app, &app_id);
+ 	dev_info(dev, "%s lookup after load: %d, app id %u\n", app, ret,
+ 		 app_id);
++loaded:
++	if (km_version && !strcmp(app, "skeymast"))
++		tabs3_keymaster_version(dev, app_id);
+ 	return 0;
+ }
+ 
++static void tabs3_test_remove(struct platform_device *pdev)
++{
++	tabs3_listeners_remove();
++}
++
+ static struct platform_driver tabs3_test_driver = {
+ 	.probe = tabs3_test_probe,
++	.remove = tabs3_test_remove,
+ 	.driver = {
+ 		.name = "qseecom_tabs3_test",
+ 	},
+diff --git a/drivers/firmware/qcom/qcom_scm.c b/drivers/firmware/qcom/qcom_scm.c
+index dbd604e6d..17a425c71 100644
+--- a/drivers/firmware/qcom/qcom_scm.c
++++ b/drivers/firmware/qcom/qcom_scm.c
+@@ -84,12 +84,6 @@ struct qcom_scm_mem_map_info {
+  * @resp_type: Type of the response. See &enum qcom_scm_qseecom_resp_type.
+  * @data:      Response data. The type of this data is given in @resp_type.
+  */
+-struct qcom_scm_qseecom_resp {
+-	u64 result;
+-	u64 resp_type;
+-	u64 data;
+-};
+-
+ enum qcom_scm_qseecom_result {
+ 	QSEECOM_RESULT_SUCCESS			= 0,
+ 	QSEECOM_RESULT_INCOMPLETE		= 1,
+@@ -111,6 +105,7 @@ enum qcom_scm_qseecom_tz_owner {
+ enum qcom_scm_qseecom_tz_svc {
+ 	QSEECOM_TZ_SVC_APP_ID_PLACEHOLDER	= 0,
+ 	QSEECOM_TZ_SVC_APP_MGR			= 1,
++	QSEECOM_TZ_SVC_LISTENER			= 2,
+ 	QSEECOM_TZ_SVC_INFO			= 6,
+ };
+ 
+@@ -119,6 +114,9 @@ enum qcom_scm_qseecom_tz_cmd_app {
+ 	QSEECOM_TZ_CMD_APP_START		= 1,
+ 	QSEECOM_TZ_CMD_APP_LOOKUP		= 3,
+ 	QSEECOM_TZ_CMD_LOAD_SERVICES_IMAGE	= 7,
++	QSEECOM_TZ_CMD_LISTENER_REGISTER	= 1,
++	QSEECOM_TZ_CMD_LISTENER_DEREGISTER	= 2,
++	QSEECOM_TZ_CMD_LISTENER_RESPONSE	= 3,
+ };
+ 
+ enum qcom_scm_qseecom_tz_cmd_info {
+@@ -253,6 +251,7 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void)
+ 
+ 	return __scm->mempool;
+ }
++EXPORT_SYMBOL_GPL(qcom_scm_get_tzmem_pool);
+ 
+ static enum qcom_scm_convention __get_convention(void)
+ {
+@@ -2335,6 +2334,111 @@ int qcom_scm_qseecom_load_services_image(phys_addr_t image, u32 mdt_len,
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_qseecom_load_services_image);
+ 
++/**
++ * qcom_scm_qseecom_listener_register() - Register a listener service.
++ * @listener_id: Listener (service) ID the apps call.
++ * @sb:          Physical address of the shared buffer for requests/responses.
++ * @sb_len:      Length of that buffer.
++ *
++ * Downstream TZ_OS_REGISTER_LISTENER_ID (listener service, command 1).
++ */
++int qcom_scm_qseecom_listener_register(u32 listener_id, phys_addr_t sb,
++				       u32 sb_len)
++{
++	struct qcom_scm_desc desc = {};
++	struct qcom_scm_qseecom_resp res = {};
++	int status;
++
++	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
++	desc.svc = QSEECOM_TZ_SVC_LISTENER;
++	desc.cmd = QSEECOM_TZ_CMD_LISTENER_REGISTER;
++	desc.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_RW, QCOM_SCM_VAL);
++	desc.args[0] = listener_id;
++	desc.args[1] = sb;
++	desc.args[2] = sb_len;
++
++	status = __qcom_scm_qseecom_call(&desc, &res);
++	if (status)
++		return status;
++	if (res.result != QSEECOM_RESULT_SUCCESS) {
++		pr_err("qseecom: listener %#x register: result %llu type %llx data %llx\n",
++		       listener_id, res.result, res.resp_type, res.data);
++		return -EIO;
++	}
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_listener_register);
++
++/**
++ * qcom_scm_qseecom_listener_deregister() - Deregister a listener service.
++ */
++int qcom_scm_qseecom_listener_deregister(u32 listener_id)
++{
++	struct qcom_scm_desc desc = {};
++	struct qcom_scm_qseecom_resp res = {};
++
++	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
++	desc.svc = QSEECOM_TZ_SVC_LISTENER;
++	desc.cmd = QSEECOM_TZ_CMD_LISTENER_DEREGISTER;
++	desc.arginfo = QCOM_SCM_ARGS(1, QCOM_SCM_VAL);
++	desc.args[0] = listener_id;
++
++	return __qcom_scm_qseecom_call(&desc, &res);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_listener_deregister);
++
++/**
++ * qcom_scm_qseecom_app_send_raw() - Send a command to an app, returning the
++ * raw QSEE response, so that the caller can serve listener requests.
++ * @app_id, @req, @req_size, @rsp, @rsp_size: as qcom_scm_qseecom_app_send().
++ * @res: the raw response (output). result INCOMPLETE / BLOCKED_ON_LISTENER
++ *       with the listener ID in data means a listener has to answer, then
++ *       the caller resumes with qcom_scm_qseecom_listener_response().
++ */
++int qcom_scm_qseecom_app_send_raw(u32 app_id, void *req, size_t req_size,
++				  void *rsp, size_t rsp_size,
++				  struct qcom_scm_qseecom_resp *res)
++{
++	struct qcom_scm_desc desc = {};
++
++	desc.owner = QSEECOM_TZ_OWNER_TZ_APPS;
++	desc.svc = QSEECOM_TZ_SVC_APP_ID_PLACEHOLDER;
++	desc.cmd = QSEECOM_TZ_CMD_APP_SEND;
++	desc.arginfo = QCOM_SCM_ARGS(5, QCOM_SCM_VAL, QCOM_SCM_RW, QCOM_SCM_VAL,
++				     QCOM_SCM_RW, QCOM_SCM_VAL);
++	desc.args[0] = app_id;
++	desc.args[1] = qcom_tzmem_to_phys(req);
++	desc.args[2] = req_size;
++	desc.args[3] = qcom_tzmem_to_phys(rsp);
++	desc.args[4] = rsp_size;
++
++	return __qcom_scm_qseecom_call(&desc, res);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_send_raw);
++
++/**
++ * qcom_scm_qseecom_listener_response() - Resume an app after a listener
++ * served its request (TZ_OS_LISTENER_RESPONSE_HANDLER_ID, command 3).
++ * @listener_id: the listener that answered.
++ * @status:      its status (0 = success).
++ * @res:         the raw response, which may again be INCOMPLETE.
++ */
++int qcom_scm_qseecom_listener_response(u32 listener_id, u32 status,
++				       struct qcom_scm_qseecom_resp *res)
++{
++	struct qcom_scm_desc desc = {};
++
++	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
++	desc.svc = QSEECOM_TZ_SVC_LISTENER;
++	desc.cmd = QSEECOM_TZ_CMD_LISTENER_RESPONSE;
++	desc.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_VAL, QCOM_SCM_VAL);
++	desc.args[0] = listener_id;
++	desc.args[1] = status;
++
++	return __qcom_scm_qseecom_call(&desc, res);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_listener_response);
++
+ /**
+  * qcom_scm_qseecom_app_send() - Send to and receive data from a given QSEE app.
+  * @app_id:   The ID of the target app.
+diff --git a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+index 2a701cdc0..4e3d08351 100644
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -167,13 +167,34 @@ int qcom_scm_shm_bridge_create(u64 pfn_and_ns_perm_flags,
+ 			       u64 ns_vmids, u64 *handle);
+ int qcom_scm_shm_bridge_delete(u64 handle);
+ 
++/* Raw QSEE response: result, response type, data (e.g. an app or listener ID) */
++struct qcom_scm_qseecom_resp {
++	u64 result;
++	u64 resp_type;
++	u64 data;
++};
++
++#define QCOM_QSEECOM_RESULT_SUCCESS		0
++#define QCOM_QSEECOM_RESULT_INCOMPLETE		1
++#define QCOM_QSEECOM_RESULT_BLOCKED_ON_LISTENER	2
++#define QCOM_QSEECOM_RESULT_FAILURE		0xFFFFFFFF
++
+ #ifdef CONFIG_QCOM_QSEECOM
+ 
++struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
+ int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
+ int qcom_scm_qseecom_app_start(phys_addr_t image, u32 mdt_len, u32 img_len,
+ 			       u32 *app_id);
+ int qcom_scm_qseecom_load_services_image(phys_addr_t image, u32 mdt_len,
+ 					 u32 img_len);
++int qcom_scm_qseecom_listener_register(u32 listener_id, phys_addr_t sb,
++				       u32 sb_len);
++int qcom_scm_qseecom_listener_deregister(u32 listener_id);
++int qcom_scm_qseecom_app_send_raw(u32 app_id, void *req, size_t req_size,
++				  void *rsp, size_t rsp_size,
++				  struct qcom_scm_qseecom_resp *res);
++int qcom_scm_qseecom_listener_response(u32 listener_id, u32 status,
++				       struct qcom_scm_qseecom_resp *res);
+ int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
+ 			      void *rsp, size_t rsp_size);
+ 

@@ -1,0 +1,518 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Thu, 5 Nov 2026 15:48:43 +0530
+Subject: [PATCH 154/158] input: misc: Egis ET5xx fingerprint sensor control
+ for a secure SPI bus
+
+On the Samsung Galaxy Tab S3 the Egis ET510 fingerprint sensor's SPI bus
+(BLSP1 QUP6, TLMM 25-28) belongs to TrustZone: the sensor is driven by a
+QSEE app, and Linux only switches its power (BTP_LDO_EN) and reset
+(BTP_RST_N), runs the QUP's clocks for the secure world at the rate the
+HAL asks for, and delivers the data-ready interrupt. This driver does that
+through the ABI of Samsung's et5xx-spi driver, which the vendor biometric
+library (libbauthserver) uses: /dev/esfp0 with EGIS_IOC_MESSAGE and the
+control opcodes (power, reset, SPI clock on/off, sensor type, DRDY
+interrupt init/close/abort), poll() for a finger, and the
+/sys/class/fingerprint/fingerprint attributes (name, vendor, adm,
+type_check, bfs_values, intcnt, resetcnt). The register, image and NVM
+opcodes are refused: they are the secure world's.
+
+Binding: compatible "egistec,et5xx-ctrl", reset-gpios, ldo-enable-gpios,
+drdy-gpios, clocks "core" (the QUP SPI clock) and "iface" (AHB), optional
+vdd-supply, egistec,chipid. On an SM-T820 (dts/test/test-fp-ctrl.dts:
+PM8994 MPP 2/8, TLMM 131, GCC_BLSP1_QUP6_SPI_APPS_CLK/AHB): the power,
+clock (12.5 MHz asked, 15 MHz set) and reset sequence runs with no
+reaction from TrustZone.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+(cherry picked from commit ac97a754fa6d9d5655fdd6b77b2cd26b5b759c96)
+---
+ drivers/input/misc/Kconfig           |   8 +
+ drivers/input/misc/Makefile          |   1 +
+ drivers/input/misc/egis-et5xx-ctrl.c | 451 +++++++++++++++++++++++++++
+ 3 files changed, 460 insertions(+)
+ create mode 100644 drivers/input/misc/egis-et5xx-ctrl.c
+
+diff --git a/drivers/input/misc/Kconfig b/drivers/input/misc/Kconfig
+index f0cfa6821..1468f0d92 100644
+--- a/drivers/input/misc/Kconfig
++++ b/drivers/input/misc/Kconfig
+@@ -1036,3 +1036,11 @@ config INPUT_STPMIC1_ONKEY
+ 	  module will be called stpmic1_onkey.
+ 
+ endif
++
++config INPUT_EGIS_ET5XX_CTRL
++	tristate "Egis ET5xx fingerprint sensor control (secure SPI bus)"
++	depends on OF && GPIOLIB
++	help
++	  Power, reset, SPI clock gating and the data-ready interrupt of an Egis
++	  ET5xx fingerprint sensor whose SPI bus belongs to the secure world
++	  (Samsung Galaxy Tab S3), through Samsung's /dev/esfp0 ABI.
+diff --git a/drivers/input/misc/Makefile b/drivers/input/misc/Makefile
+index df9895cae..f20f76c27 100644
+--- a/drivers/input/misc/Makefile
++++ b/drivers/input/misc/Makefile
+@@ -98,3 +98,4 @@ obj-$(CONFIG_INPUT_WM831X_ON)		+= wm831x-on.o
+ obj-$(CONFIG_INPUT_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
+ obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
+ obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
++obj-$(CONFIG_INPUT_EGIS_ET5XX_CTRL)	+= egis-et5xx-ctrl.o
+diff --git a/drivers/input/misc/egis-et5xx-ctrl.c b/drivers/input/misc/egis-et5xx-ctrl.c
+new file mode 100644
+index 000000000..56722420b
+--- /dev/null
++++ b/drivers/input/misc/egis-et5xx-ctrl.c
+@@ -0,0 +1,451 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Egis ET5xx fingerprint sensor, control side, for boards where the
++ * sensor's SPI bus belongs to TrustZone (Samsung Galaxy Tab S3: BLSP1 QUP6
++ * and its pins are secure; the sensor is driven by the dualfp/fingerpr QSEE
++ * app). Linux switches the sensor's power and reset, gates the SPI
++ * controller's clocks for the secure world, and delivers the data-ready
++ * interrupt, through the /dev/esfp0 ABI of Samsung's et5xx-spi driver
++ * (EGIS_IOC_MESSAGE with control opcodes, poll() for a finger) and its
++ * /sys/class/fingerprint/fingerprint attributes, which the vendor
++ * biometric library (libbauthserver) uses.
++ */
++
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <linux/fs.h>
++#include <linux/gpio/consumer.h>
++#include <linux/interrupt.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/poll.h>
++#include <linux/pm_wakeirq.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++#include <linux/uaccess.h>
++#include <linux/wait.h>
++
++/* Samsung drivers/fingerprint/et5xx.h */
++#define EGIS_IOC_MAGIC		'k'
++struct egis_ioc_transfer {
++	u64 tx_buf;
++	u64 rx_buf;
++	u32 len;
++	u32 speed_hz;
++	u16 delay_usecs;
++	u8 bits_per_word;
++	u8 cs_change;
++	u8 opcode;
++	u8 pad[3];
++};
++#define FP_SENSOR_RESET		0x04
++#define FP_POWER_CONTROL	0x05
++#define FP_SET_SPI_CLOCK	0x06
++#define FP_RESET_SET		0x07
++#define FP_DISABLE_SPI_CLOCK	0x10
++#define FP_CPU_SPEEDUP		0x11
++#define FP_SET_SENSOR_TYPE	0x14
++#define FP_SET_LOCKSCREEN	0x16
++#define FP_SET_WAKE_UP_SIGNAL	0x17
++#define FP_POWER_CONTROL_ET5XX	0x18
++#define FP_IOCTL_RESERVED_01	0x19
++#define INT_TRIGGER_INIT	0xa4
++#define INT_TRIGGER_CLOSE	0xa5
++#define INT_TRIGGER_READ	0xa6
++#define INT_TRIGGER_POLLING	0xa7
++#define INT_TRIGGER_ABORT	0xa8
++
++enum { SENSOR_UNKNOWN = -1, SENSOR_FAILED, SENSOR_VIPER, SENSOR_RAPTOR,
++       SENSOR_EGIS, SENSOR_VIPER_WOG, SENSOR_NAMSAN, SENSOR_GOODIX };
++
++struct et5xx {
++	struct device *dev;
++	struct miscdevice misc;
++	struct device *fp_dev;	/* /sys/class/fingerprint/fingerprint */
++	struct gpio_desc *reset;	/* BTP_RST_N, the driver's "sleepPin" */
++	struct gpio_desc *ldo;		/* BTP_LDO_EN */
++	struct gpio_desc *drdy;
++	struct regulator *vdd;
++	struct clk *core_clk, *ahb_clk;
++	int irq;
++	bool irq_on;
++	bool clk_on;
++	u32 speed_hz;
++	int sensortype;
++	const char *chipid;
++	wait_queue_head_t waitq;
++	bool finger_on;
++	u32 int_count, reset_count;
++	struct mutex lock;
++};
++
++static struct class *fp_class;
++
++static irqreturn_t et5xx_drdy(int irq, void *data)
++{
++	struct et5xx *fp = data;
++
++	fp->int_count++;
++	fp->finger_on = true;
++	disable_irq_nosync(irq);
++	wake_up_interruptible(&fp->waitq);
++	dev_dbg(fp->dev, "DRDY, count %u\n", fp->int_count);
++	return IRQ_HANDLED;
++}
++
++static void et5xx_power(struct et5xx *fp, bool on)
++{
++	dev_info(fp->dev, "power %s\n", on ? "on" : "off");
++	if (on) {
++		if (fp->vdd && regulator_enable(fp->vdd))
++			dev_warn(fp->dev, "vdd enable failed\n");
++		gpiod_set_value_cansleep(fp->ldo, 1);
++		usleep_range(50, 100);
++		gpiod_set_value_cansleep(fp->reset, 1);	/* out of reset */
++		usleep_range(10000, 10050);
++	} else {
++		gpiod_set_value_cansleep(fp->reset, 0);
++		gpiod_set_value_cansleep(fp->ldo, 0);
++		if (fp->vdd)
++			regulator_disable(fp->vdd);
++	}
++}
++
++static void et5xx_reset(struct et5xx *fp)
++{
++	gpiod_set_value_cansleep(fp->reset, 0);
++	usleep_range(1050, 1100);
++	gpiod_set_value_cansleep(fp->reset, 1);
++	usleep_range(1050, 1100);
++	fp->reset_count++;
++}
++
++/* The secure world drives the QUP; Linux only runs its clocks for it. */
++static int et5xx_clk(struct et5xx *fp, bool on, u32 speed_hz)
++{
++	int ret;
++
++	if (on) {
++		if (fp->clk_on && fp->speed_hz == speed_hz)
++			return 0;
++		if (fp->clk_on) {
++			clk_disable_unprepare(fp->core_clk);
++			clk_disable_unprepare(fp->ahb_clk);
++			fp->clk_on = false;
++			usleep_range(950, 1000);
++		}
++		ret = clk_set_rate(fp->core_clk, speed_hz);
++		if (ret)
++			dev_warn(fp->dev, "clock rate %u: %d\n", speed_hz, ret);
++		ret = clk_prepare_enable(fp->ahb_clk);
++		if (ret)
++			return ret;
++		ret = clk_prepare_enable(fp->core_clk);
++		if (ret) {
++			clk_disable_unprepare(fp->ahb_clk);
++			return ret;
++		}
++		fp->speed_hz = speed_hz;
++		fp->clk_on = true;
++		usleep_range(950, 1000);
++		dev_info(fp->dev, "SPI clocks on, %lu Hz\n", clk_get_rate(fp->core_clk));
++	} else if (fp->clk_on) {
++		clk_disable_unprepare(fp->core_clk);
++		clk_disable_unprepare(fp->ahb_clk);
++		fp->clk_on = false;
++		dev_info(fp->dev, "SPI clocks off\n");
++	}
++	return 0;
++}
++
++static int et5xx_irq_init(struct et5xx *fp, unsigned long flags)
++{
++	int ret;
++
++	fp->finger_on = false;
++	fp->int_count = 0;
++	if (fp->irq_on)
++		return 0;
++	ret = request_irq(fp->irq, et5xx_drdy, flags ?: IRQF_TRIGGER_RISING,
++			  "etspi_irq", fp);
++	if (ret)
++		return ret;
++	enable_irq_wake(fp->irq);
++	fp->irq_on = true;
++	return 0;
++}
++
++static void et5xx_irq_free(struct et5xx *fp)
++{
++	if (fp->irq_on) {
++		disable_irq_wake(fp->irq);
++		free_irq(fp->irq, fp);
++		fp->irq_on = false;
++	}
++	fp->finger_on = false;
++	fp->int_count = 0;
++}
++
++static long et5xx_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
++{
++	struct et5xx *fp = container_of(file->private_data, struct et5xx, misc);
++	struct egis_ioc_transfer *ioc;
++	u32 size = _IOC_SIZE(cmd);
++	int ret = 0;
++
++	if (_IOC_TYPE(cmd) != EGIS_IOC_MAGIC || _IOC_NR(cmd) != 0)
++		return -ENOTTY;
++	if (!size || size % sizeof(*ioc))
++		return -EINVAL;
++	ioc = memdup_user((void __user *)arg, size);
++	if (IS_ERR(ioc))
++		return PTR_ERR(ioc);
++
++	mutex_lock(&fp->lock);
++	switch (ioc->opcode) {
++	case FP_SENSOR_RESET:
++		et5xx_reset(fp);
++		break;
++	case FP_POWER_CONTROL:
++	case FP_POWER_CONTROL_ET5XX:
++		et5xx_power(fp, ioc->len);
++		break;
++	case FP_SET_SPI_CLOCK:
++		ret = et5xx_clk(fp, true, ioc->speed_hz);
++		break;
++	case FP_DISABLE_SPI_CLOCK:
++		ret = et5xx_clk(fp, false, 0);
++		break;
++	case FP_SET_SENSOR_TYPE:
++		if ((int)ioc->len >= SENSOR_UNKNOWN && (int)ioc->len <= SENSOR_GOODIX)
++			fp->sensortype = ioc->len;
++		else
++			fp->sensortype = SENSOR_UNKNOWN;
++		dev_info(fp->dev, "sensor type %d\n", fp->sensortype);
++		break;
++	case INT_TRIGGER_INIT:
++		ret = et5xx_irq_init(fp, ioc->pad[0]);
++		break;
++	case INT_TRIGGER_CLOSE:
++		et5xx_irq_free(fp);
++		break;
++	case INT_TRIGGER_ABORT:
++		wake_up_interruptible(&fp->waitq);
++		break;
++	case INT_TRIGGER_READ:
++	case INT_TRIGGER_POLLING:
++		/* the data-ready state is reported through poll() */
++		break;
++	case FP_RESET_SET:
++	case FP_CPU_SPEEDUP:
++	case FP_SET_LOCKSCREEN:
++	case FP_SET_WAKE_UP_SIGNAL:
++	case FP_IOCTL_RESERVED_01:
++		break;
++	default:
++		/* register, image and NVM access: the secure world's job here */
++		dev_dbg(fp->dev, "opcode %#x: not for the AP\n", ioc->opcode);
++		ret = -EFAULT;
++	}
++	mutex_unlock(&fp->lock);
++	kfree(ioc);
++	return ret;
++}
++
++static __poll_t et5xx_poll(struct file *file, struct poll_table_struct *wait)
++{
++	struct et5xx *fp = container_of(file->private_data, struct et5xx, misc);
++	__poll_t mask = 0;
++
++	if (!fp->finger_on)
++		poll_wait(file, &fp->waitq, wait);
++	if (fp->finger_on) {
++		mask |= EPOLLIN | EPOLLRDNORM;
++		fp->finger_on = false;
++		if (fp->irq_on)
++			enable_irq(fp->irq);
++	}
++	return mask;
++}
++
++static const struct file_operations et5xx_fops = {
++	.owner = THIS_MODULE,
++	.unlocked_ioctl = et5xx_ioctl,
++	.compat_ioctl = compat_ptr_ioctl,
++	.poll = et5xx_poll,
++};
++
++/* /sys/class/fingerprint/fingerprint attributes as in Samsung's driver */
++static ssize_t name_show(struct device *dev, struct device_attribute *a, char *buf)
++{
++	struct et5xx *fp = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%s\n", fp->chipid);
++}
++static ssize_t vendor_show(struct device *dev, struct device_attribute *a, char *buf)
++{
++	return sysfs_emit(buf, "EGISTEC\n");
++}
++static ssize_t adm_show(struct device *dev, struct device_attribute *a, char *buf)
++{
++	return sysfs_emit(buf, "1\n");
++}
++static ssize_t type_check_show(struct device *dev, struct device_attribute *a, char *buf)
++{
++	struct et5xx *fp = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%d\n", fp->sensortype);
++}
++static ssize_t bfs_values_show(struct device *dev, struct device_attribute *a, char *buf)
++{
++	struct et5xx *fp = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "\"FP_SPICLK\":\"%u\"\n", fp->speed_hz);
++}
++static ssize_t intcnt_show(struct device *dev, struct device_attribute *a, char *buf)
++{
++	struct et5xx *fp = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%u\n", fp->int_count);
++}
++static ssize_t intcnt_store(struct device *dev, struct device_attribute *a,
++			    const char *buf, size_t n)
++{
++	struct et5xx *fp = dev_get_drvdata(dev);
++
++	if (sysfs_streq(buf, "c"))
++		fp->int_count = 0;
++	return n;
++}
++static ssize_t resetcnt_show(struct device *dev, struct device_attribute *a, char *buf)
++{
++	struct et5xx *fp = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%u\n", fp->reset_count);
++}
++static ssize_t resetcnt_store(struct device *dev, struct device_attribute *a,
++			      const char *buf, size_t n)
++{
++	struct et5xx *fp = dev_get_drvdata(dev);
++
++	if (sysfs_streq(buf, "c"))
++		fp->reset_count = 0;
++	return n;
++}
++static DEVICE_ATTR_RO(name);
++static DEVICE_ATTR_RO(vendor);
++static DEVICE_ATTR_RO(adm);
++static DEVICE_ATTR_RO(type_check);
++static DEVICE_ATTR_RO(bfs_values);
++static DEVICE_ATTR_RW(intcnt);
++static DEVICE_ATTR_RW(resetcnt);
++static struct attribute *et5xx_fp_attrs[] = {
++	&dev_attr_name.attr, &dev_attr_vendor.attr, &dev_attr_adm.attr,
++	&dev_attr_type_check.attr, &dev_attr_bfs_values.attr,
++	&dev_attr_intcnt.attr, &dev_attr_resetcnt.attr, NULL,
++};
++ATTRIBUTE_GROUPS(et5xx_fp);
++
++static int et5xx_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct et5xx *fp;
++	int ret;
++
++	fp = devm_kzalloc(dev, sizeof(*fp), GFP_KERNEL);
++	if (!fp)
++		return -ENOMEM;
++	fp->dev = dev;
++	mutex_init(&fp->lock);
++	init_waitqueue_head(&fp->waitq);
++	fp->sensortype = SENSOR_UNKNOWN;
++	if (of_property_read_string(dev->of_node, "egistec,chipid", &fp->chipid))
++		fp->chipid = "ET5XX";
++
++	fp->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
++	if (IS_ERR(fp->reset))
++		return dev_err_probe(dev, PTR_ERR(fp->reset), "reset gpio\n");
++	fp->ldo = devm_gpiod_get_optional(dev, "ldo-enable", GPIOD_OUT_LOW);
++	if (IS_ERR(fp->ldo))
++		return dev_err_probe(dev, PTR_ERR(fp->ldo), "ldo gpio\n");
++	fp->drdy = devm_gpiod_get(dev, "drdy", GPIOD_IN);
++	if (IS_ERR(fp->drdy))
++		return dev_err_probe(dev, PTR_ERR(fp->drdy), "drdy gpio\n");
++	fp->irq = gpiod_to_irq(fp->drdy);
++	if (fp->irq < 0)
++		return fp->irq;
++	fp->vdd = devm_regulator_get_optional(dev, "vdd");
++	if (IS_ERR(fp->vdd)) {
++		if (PTR_ERR(fp->vdd) != -ENODEV)
++			return dev_err_probe(dev, PTR_ERR(fp->vdd), "vdd\n");
++		fp->vdd = NULL;
++	}
++	fp->core_clk = devm_clk_get(dev, "core");
++	if (IS_ERR(fp->core_clk))
++		return dev_err_probe(dev, PTR_ERR(fp->core_clk), "core clock\n");
++	fp->ahb_clk = devm_clk_get(dev, "iface");
++	if (IS_ERR(fp->ahb_clk))
++		return dev_err_probe(dev, PTR_ERR(fp->ahb_clk), "iface clock\n");
++
++	fp->misc.minor = MISC_DYNAMIC_MINOR;
++	fp->misc.name = "esfp0";
++	fp->misc.fops = &et5xx_fops;
++	fp->misc.mode = 0660;
++	ret = misc_register(&fp->misc);
++	if (ret)
++		return ret;
++
++	if (!fp_class) {
++		fp_class = class_create("fingerprint");
++		if (IS_ERR(fp_class)) {
++			ret = PTR_ERR(fp_class);
++			fp_class = NULL;
++			goto unreg;
++		}
++	}
++	fp->fp_dev = device_create_with_groups(fp_class, dev, 0, fp,
++					       et5xx_fp_groups, "fingerprint");
++	if (IS_ERR(fp->fp_dev)) {
++		ret = PTR_ERR(fp->fp_dev);
++		goto unreg;
++	}
++	platform_set_drvdata(pdev, fp);
++	device_init_wakeup(dev, true);
++	dev_info(dev, "%s control: /dev/esfp0, DRDY irq %d\n", fp->chipid, fp->irq);
++	return 0;
++unreg:
++	misc_deregister(&fp->misc);
++	return ret;
++}
++
++static void et5xx_remove(struct platform_device *pdev)
++{
++	struct et5xx *fp = platform_get_drvdata(pdev);
++
++	et5xx_irq_free(fp);
++	et5xx_clk(fp, false, 0);
++	et5xx_power(fp, false);
++	device_unregister(fp->fp_dev);
++	misc_deregister(&fp->misc);
++}
++
++static const struct of_device_id et5xx_of_match[] = {
++	{ .compatible = "egistec,et5xx-ctrl" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, et5xx_of_match);
++
++static struct platform_driver et5xx_driver = {
++	.probe = et5xx_probe,
++	.remove = et5xx_remove,
++	.driver = {
++		.name = "egis-et5xx-ctrl",
++		.of_match_table = et5xx_of_match,
++	},
++};
++module_platform_driver(et5xx_driver);
++
++MODULE_DESCRIPTION("Egis ET5xx fingerprint sensor control (secure SPI bus)");
++MODULE_LICENSE("GPL");
