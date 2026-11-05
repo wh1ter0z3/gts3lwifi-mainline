@@ -77,6 +77,19 @@ app through QSEEComAPI and needs a kernel sysfs node
 own driver (SPI, power, reset) is the missing piece on mainline, not
 TrustZone.
 
+## Fingerprint control driver (patch 6, `dts/test/test-fp-ctrl.dts`)
+
+`egis-et5xx-ctrl` (`CONFIG_INPUT_EGIS_ET5XX_CTRL=m`): Samsung's
+`/dev/esfp0` ABI (EGIS_IOC_MESSAGE control opcodes, poll() for DRDY) and
+`/sys/class/fingerprint/fingerprint`, for a sensor whose SPI bus is
+TrustZone's. Verified on the SM-T820 with `tools/esfp0-test.c`: power on,
+QUP6 clocks on (12.5 MHz asked, 15 MHz granted), reset, clocks off, power
+off, no reaction from TrustZone. DRDY needs a Home key (the dev board has
+none): `esfp0-test wait 10`. The full flow is now user space: the vendor
+`fingerprint.default.so` + `libbauthserver.so` (CTD5) on the open
+QSEEComAPI and this driver, with the `fingerpr`/`dualfp` app from the
+firmware directory.
+
 ## Firmware (never in the repo)
 
 The apps are in the `apnhlos` partition, `image/`: `cmnlib`, `cmnlib64`,

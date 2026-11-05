@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#include "test-qseecom.dts"
+#include <dt-bindings/pinctrl/qcom,pmic-mpp.h>
+
+/*
+ * Test: the Egis ET510 fingerprint sensor's control side (power, reset,
+ * SPI clocks for the secure world, DRDY), on top of the QSEE test DT. The
+ * sensor's SPI bus (BLSP1 QUP6, TLMM 25-28) stays with TrustZone; wiring
+ * per docs/fingerprint.md: BTP_RST_N = PM8994 MPP 2, BTP_LDO_EN = MPP 8,
+ * DRDY = TLMM 131, QUP6 clocks GCC_BLSP1_QUP6_SPI_APPS_CLK + GCC_BLSP1_AHB_CLK.
+ */
+
+&tlmm {
+	fp_drdy_default: fp-drdy-default-state {
+		pins = "gpio131";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+};
+
+&pm8994_mpps {
+	fp_ctrl_mpps: fp-ctrl-mpps-state {
+		pins = "mpp2", "mpp8";
+		function = "digital";
+		output-low;
+		power-source = <PM8994_MPP_S4>;
+	};
+};
+
+&soc {
+	fingerprint-control {
+		compatible = "egistec,et5xx-ctrl";
+		egistec,chipid = "ET510";
+		reset-gpios = <&pm8994_mpps 2 GPIO_ACTIVE_HIGH>;
+		ldo-enable-gpios = <&pm8994_mpps 8 GPIO_ACTIVE_HIGH>;
+		drdy-gpios = <&tlmm 131 GPIO_ACTIVE_HIGH>;
+		clocks = <&gcc GCC_BLSP1_QUP6_SPI_APPS_CLK>, <&gcc GCC_BLSP1_AHB_CLK>;
+		clock-names = "core", "iface";
+		pinctrl-names = "default";
+		pinctrl-0 = <&fp_drdy_default>, <&fp_ctrl_mpps>;
+	};
+};
