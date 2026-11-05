@@ -55,5 +55,27 @@ policy). Not in it, on purpose:
 
 ## Status
 
-- Built and boot-tested as postmarketOS on an SM-T820: see below.
-- No Android build has run on it yet.
+Built with the fragment and RAM-booted as postmarketOS on an SM-T820
+(2026-11-05): boots to a running system with no failed units; Wi-Fi up.
+On the running kernel:
+
+| Check | Result |
+|---|---|
+| SELinux | in the active LSMs (`capability,selinux`), no policy loaded |
+| binderfs | mounts, creates `binder`, `hwbinder`, `vndbinder` |
+| ext4 | `encryption` and `verity` features |
+| userfaultfd, sw_sync, `/proc/config.gz` | present |
+| TrustZone pool | 44 MiB CMA, SCM's memory-region, heap `qseecom@fd400000` |
+| `/dev/qseecom` | loads cmnlib and keymaster (app 6); commands answered, through the open libQSEEComAPI |
+
+No Android build has run on it yet.
+
+Notes:
+
+- The fingerprint control driver needs a device tree node (the wiring is
+  in `dts/test/test-fp-ctrl.dts` on `qseecom-wip`); it is not in the
+  board DTS yet.
+- Test boots: the APSS watchdog's maximum timeout is about 30 s, so use
+  `systemd.watchdog_sec=30` (60 is rejected).
+- Building on a host without `lld`: `HOSTLDFLAGS=-fuse-ld=bfd` (7.3 links
+  host tools with lld when `LLVM=1`).
