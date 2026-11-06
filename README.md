@@ -19,7 +19,7 @@ only changes the SoC ID, the modem memory and the pins TrustZone may own.
 | Model | State |
 |---|---|
 | SM-T820 (Wi-Fi, `gts3lwifi`) | main target, everything below is tested on it |
-| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM, GPS) not supported; top speakers left out until checked |
+| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM, GPS) work in progress; top speakers left out until checked |
 
 ## Status
 
@@ -38,6 +38,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | **Display and input** | | |
 | Display | Works | colours, brightness, blank/unblank; HBM (outdoor brightness) through the panel's `hbm` attribute ([display](docs/display.md)) |
 | GPU (Adreno 530) | Works | freedreno, OpenGL ES 3.1 ([gpu](docs/gpu.md)) |
+| Vulkan | WIP | Mesa's Vulkan driver (turnip) covers Adreno 6xx and newer, not the 530; a driver for it is in development, conformance tests running |
 | Touchscreen | Works | [input](docs/input.md) |
 | S-Pen | Works | pressure, hover, side button ([input](docs/input.md)) |
 | Power, Volume, Home keys | Works | |
@@ -49,7 +50,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | USB device mode | Works | network, serial, storage |
 | USB host / OTG, USB 3 | Works | 5 Gbit/s as a host ([usb](docs/usb.md)) |
 | USB-C power (PD) | Works | 5 V / 3 A or 9 V / 1.65 A sink, 5 V / 1.5 A source ([usb](docs/usb.md)) |
-| LTE modem, SIM, GPS (SM-T825) | Not yet | planned |
+| LTE modem, SIM, GPS (SM-T825) | WIP | the modem (MSS) bring-up needs the SM-T825's own modem firmware and memory layout |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
 | Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
