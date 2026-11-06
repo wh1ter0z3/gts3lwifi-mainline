@@ -44,7 +44,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | S-Pen | Works | pressure, hover, side button ([input](docs/input.md)) |
 | Power, Volume, Home keys | Works | |
 | Book Cover Keyboard | Works | hotplug through the MUIC; a key press wakes the tablet ([input](docs/input.md)) |
-| Back/Recent touch keys | Not yet | separate controller (TC305K) |
+| Back/Recent touch keys | Works | Recent opens Present Windows; lights time out ([input](docs/input.md)) |
 | **Connectivity** | | |
 | Wi-Fi | Works | 2.4 and 5 GHz ([wifi](docs/wifi.md)) |
 | Bluetooth | Works | [bluetooth](docs/bluetooth.md) |

@@ -1,0 +1,2 @@
+# Back and Recent lights: on at any input, off 5 s after the last, as on stock
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="tm2-touchkey", ATTR{trigger}="input-events"

@@ -1,0 +1,2 @@
+[kwin]
+ExposeAll=Launch (A)\tLaunch (C)\tCtrl+F10\tMeta+F10,Launch (C)\tCtrl+F10\tMeta+F10,Toggle Present Windows (All desktops)
