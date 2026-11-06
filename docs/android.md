@@ -73,7 +73,7 @@ On the running kernel:
 
 No Android build has run on it yet.
 
-The kernel package on this branch (7.3.1-r3, one above `main`'s r2) merges the fragment in
+The kernel package on this branch (7.3.1-r4, one above `main`'s r3) merges the fragment in
 `prepare()`, so a postmarketOS build from the branch is the Android
 kernel. To check one, on the tablet: `sudo sh tools/android-kernel-check.sh`
 (features, TrustZone pool, keymaster through `/dev/qseecom`, fingerprint

@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..366b1af9bc 100644
+index 601fa9f44e..b939c1e075 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -9,7 +9,7 @@ index 601fa9f44e..366b1af9bc 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=3
++pkgrel=4
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -18,7 +18,7 @@ index 601fa9f44e..366b1af9bc 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,16 +28,223 @@ makedepends="
+@@ -28,16 +28,224 @@ makedepends="
  "
  
  # Source
@@ -231,6 +231,7 @@ index 601fa9f44e..366b1af9bc 100644
 +	0179-arm64-dts-qcom-gts3lwifi-TrustZone-buffer-pool-as-CM.patch
 +	0180-kernel-configs-gts3-android.config-what-Android-need.patch
 +	0181-arm64-dts-qcom-gts3lwifi-Egis-ET510-fingerprint-sens.patch
++	0182-media-venus-vdec-crop-to-stream-size.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
@@ -245,7 +246,7 @@ index 601fa9f44e..366b1af9bc 100644
  }
  
  build() {
-@@ -61,6 +268,210 @@ package() {
+@@ -61,6 +269,211 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -457,4 +458,5 @@ index 601fa9f44e..366b1af9bc 100644
 +f04b5ba6291c6633f49dd76574fd207eec3b156e871d95f9f170589b7f849c07a94ebfd126b76f5a0d03efb82afa3a617eca737923fd8e0d4f7a884cf68c4e11  0179-arm64-dts-qcom-gts3lwifi-TrustZone-buffer-pool-as-CM.patch
 +ef45f3645a394d47e81dcc26608e1d7f37b20a72b945e3f5a2c044fb01d658434fc421eaa7fdb78b97308e5d1172afc7f9dbc2587b29fcf28f23486693f17714  0180-kernel-configs-gts3-android.config-what-Android-need.patch
 +6e9ba14a372934e580eb521e7dbdd14db9334632c73dea7dcd6d2ff73dbbc4180c605e79571df4f50d967e1df1c47c186ade0ba3dce249da5e11e482586166a4  0181-arm64-dts-qcom-gts3lwifi-Egis-ET510-fingerprint-sens.patch
++92fcd7cd2729b29f3116ee84ec39d9ad95330ed1eb17127acdbf4b673052145b37e238349d143ae62ca48babcb7467ec466d1e6b9f5a48e10df237509bcca489  0182-media-venus-vdec-crop-to-stream-size.patch
  "

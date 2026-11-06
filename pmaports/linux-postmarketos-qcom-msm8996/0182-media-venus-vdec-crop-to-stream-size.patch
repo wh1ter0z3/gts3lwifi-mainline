@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 6 Nov 2026 19:51:25 +0530
+Subject: [PATCH] media: venus: vdec: Crop to the stream size when the firmware
+ gives none
+
+The Venus 3.x firmware (VIDEO.VE.4.4, MSM8996) reports no crop
+rectangle with the sequence-changed event, so the decoder exposes the
+coded size: H.264 and HEVC 1920x1080 decode to 1920x1088, an 854x480
+HEVC stream to 856x480, with extra lines at the bottom and right that
+the stream crops away.
+
+When the firmware gives no crop and the coded size is the stream size
+userspace set on the OUTPUT queue, rounded up by less than a 64-pixel
+coding block, use the userspace size as the crop. The size is kept
+apart from out_width/out_height, which the event overwrites, so the
+crop also holds across seeks and repeated events. Everything else keeps
+the coded size as before.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/core.h |  4 ++++
+ drivers/media/platform/qcom/venus/vdec.c | 15 ++++++++++++++-
+ 2 files changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index 67c89af5b0..dea8850b46 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -415,6 +415,8 @@ enum venus_inst_modes {
+  * @fw_min_cnt:	 firmware minimum buffer count
+  * @out_width:	current output width
+  * @out_height:	current output height
++ * @user_width:	stream width set by userspace on the output queue, 0 if unset
++ * @user_height:	stream height set by userspace on the output queue
+  * @colorspace:	current color space
+  * @ycbcr_enc:	current YCbCr encoding
+  * @quantization:	current quantization
+@@ -488,6 +490,8 @@ struct venus_inst {
+ 	u32 fw_min_cnt;
+ 	u32 out_width;
+ 	u32 out_height;
++	u32 user_width;
++	u32 user_height;
+ 	u32 colorspace;
+ 	u8 ycbcr_enc;
+ 	u8 quantization;
+diff --git a/drivers/media/platform/qcom/venus/vdec.c b/drivers/media/platform/qcom/venus/vdec.c
+index a1e23c7405..95b211a4ac 100644
+--- a/drivers/media/platform/qcom/venus/vdec.c
++++ b/drivers/media/platform/qcom/venus/vdec.c
+@@ -355,6 +355,8 @@ static int vdec_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
+ 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+ 		inst->out_width = format.fmt.pix_mp.width;
+ 		inst->out_height = format.fmt.pix_mp.height;
++		inst->user_width = format.fmt.pix_mp.width;
++		inst->user_height = format.fmt.pix_mp.height;
+ 		inst->colorspace = pixmp->colorspace;
+ 		inst->ycbcr_enc = pixmp->ycbcr_enc;
+ 		inst->quantization = pixmp->quantization;
+@@ -1541,13 +1543,24 @@ static void vdec_event_change(struct venus_inst *inst,
+ 	inst->height = format.fmt.pix_mp.height;
+ 	/*
+ 	 * Some versions of the firmware do not report crop information for
+-	 * all codecs. For these cases, set the crop to the coded resolution.
++	 * all codecs (HEVC on Venus 3.x). For these cases use the stream size
++	 * userspace set on the output queue when the coded size is that size
++	 * rounded up to the coding block size, else the coded resolution.
+ 	 */
+ 	if (ev_data->input_crop.width > 0 && ev_data->input_crop.height > 0) {
+ 		inst->crop.left = ev_data->input_crop.left;
+ 		inst->crop.top = ev_data->input_crop.top;
+ 		inst->crop.width = ev_data->input_crop.width;
+ 		inst->crop.height = ev_data->input_crop.height;
++	} else if (inst->user_width && inst->user_height &&
++		   inst->user_width <= ev_data->width &&
++		   inst->user_height <= ev_data->height &&
++		   ev_data->width - inst->user_width < 64 &&
++		   ev_data->height - inst->user_height < 64) {
++		inst->crop.left = 0;
++		inst->crop.top = 0;
++		inst->crop.width = inst->user_width;
++		inst->crop.height = inst->user_height;
+ 	} else {
+ 		inst->crop.left = 0;
+ 		inst->crop.top = 0;
