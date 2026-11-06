@@ -1,6 +1,6 @@
 # Mobile data on the SM-T825: IPA v2.5 port (work in progress)
 
-Status: **started 2026-11-06, not compile-tested, not in any package.** The patches are in
+Status: **started 2026-11-06; compile-tested (W=1, clean), not run on hardware, not in any package.** The patches are in
 `wip/ipa-v2/` (for Linux 7.3.1 on top of this repo's kernel patches). Nothing here has run on
 hardware yet.
 
