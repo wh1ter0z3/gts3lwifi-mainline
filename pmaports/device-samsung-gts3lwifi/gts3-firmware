@@ -8,6 +8,9 @@
 #    ath10k board.bin. apnhlos has a bdwlan30.bin too, but a different one;
 #    Wi-Fi was brought up with this one (docs/wifi.md)
 #  - efs: the sensor registry with this unit's factory calibration
+#  - apnhlos: the Samsung-signed TrustZone apps that /dev/qseecom clients
+#    (keymaster, the fingerprint HAL, DRM) load by name from
+#    qcom/msm8996/samsung/gts3/tz/; cmnlib first, then the app
 # Only missing or changed files are written. Remote processors that could
 # not start for lack of firmware are started afterwards; Wi-Fi picks up its
 # board data on the next boot.
@@ -49,6 +52,13 @@ if mount_part apnhlos; then
 	for f in "$tmp"/apnhlos/image/a530_zap.* "$tmp"/apnhlos/image/venus.* \
 		 "$tmp"/apnhlos/image/slpi.*; do
 		copy "$f" "$FW/${f##*/}"
+	done
+	# TrustZone apps: libraries, keymaster, fingerprint (dualfp + authhat),
+	# Widevine. Not fingerpr (20 MiB, unused by the fingerprint HAL)
+	for a in cmnlib cmnlib64 skeymast dualfp authhat widevine; do
+		for f in "$tmp"/apnhlos/image/$a.*; do
+			copy "$f" "$FW/tz/${f##*/}"
+		done
 	done
 fi
 
