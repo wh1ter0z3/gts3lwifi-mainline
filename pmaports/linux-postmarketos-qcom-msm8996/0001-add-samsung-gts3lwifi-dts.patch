@@ -31,9 +31,9 @@ Signed-off-by: psigod <psigod@example.com>
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  arch/arm64/boot/dts/qcom/Makefile             |    2 +
- .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 2111 +++++++++++++++++
+ .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 2216 +++++++++++++++++
  .../dts/qcom/msm8996-samsung-gts3llte.dts     |   52 +
- 3 files changed, 2165 insertions(+)
+ 3 files changed, 2270 insertions(+)
  create mode 100644 arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
  create mode 100644 arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts
 
@@ -59,10 +59,10 @@ index 15e2dd65bb..ae48760bb7 100644
  dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-keyaki.dtb
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 new file mode 100644
-index 0000000000..e99e30eea9
+index 0000000000..34d358b515
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
-@@ -0,0 +1,2173 @@
+@@ -0,0 +1,2216 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Samsung Galaxy Tab S3 Wi-Fi (SM-T820), codename gts3lwifi, board rev 05
@@ -1493,6 +1493,22 @@ index 0000000000..e99e30eea9
 +			vdd-tx-supply = <&vreg_s4a_1p8>;
 +			vdd-rx-supply = <&vreg_s4a_1p8>;
 +			vdd-io-supply = <&vreg_s4a_1p8>;
++
++			qcom,micbias2-microvolt = <2700000>;
++
++			/*
++			 * Both jack switches are normally open (downstream
++			 * qcom,msm-mbhc-hphl-swh and -gnd-swh = <1>), so neither
++			 * normally-closed property. Buttons: 0 (play), 135
++			 * (voice), 240 (volume up) and 470 ohm (volume down) on
++			 * the 1.8 V pull up. These are downstream's upper limits
++			 * without its first one (13 mV), which it only used to
++			 * give play two codes, and with the last ones at 470 mV.
++			 * The top one tells headphones from a headset: downstream
++			 * has 690 mV, but at 2.7 V. 470 mV is the same 750 ohm.
++			 */
++			qcom,mbhc-buttons-vthreshold-microvolt = <88000 138000 225000 450000
++								  470000 470000 470000 470000>;
 +		};
 +	};
 +};
@@ -1508,6 +1524,10 @@ index 0000000000..e99e30eea9
 +
 +	dai@2 {
 +		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
++	};
++
++	dai@3 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA4>;
 +	};
 +};
 +
@@ -1556,6 +1576,14 @@ index 0000000000..e99e30eea9
 +		};
 +	};
 +
++	/* The headset mic, its own stream so it never reopens the built-in mics */
++	mm4-dai-link {
++		link-name = "MultiMedia4";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA4>;
++		};
++	};
++
 +	slim-dai-link {
 +		link-name = "SLIM Playback";
 +		cpu {
@@ -1583,6 +1611,21 @@ index 0000000000..e99e30eea9
 +
 +		codec {
 +			sound-dai = <&wcd9335 AIF1_CAP>;
++		};
++	};
++
++	slimcap-headset-dai-link {
++		link-name = "SLIM Headset Capture";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_1_TX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9335 AIF2_CAP>;
 +		};
 +	};
 +

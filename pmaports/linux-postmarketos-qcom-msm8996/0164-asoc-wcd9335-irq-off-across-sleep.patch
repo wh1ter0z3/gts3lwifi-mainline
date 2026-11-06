@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 23:06:03 -0700
+Subject: [PATCH] ASoC: codecs: wcd9335: Keep the interrupt off across system
+ sleep
+
+INTR1 is level triggered and stays high until its status is cleared over
+SLIMbus. If the codec raises it during suspend, the interrupt thread runs
+as soon as interrupts are back on, before the SLIMbus controller has
+resumed. The status read fails, nothing clears the line, and it fires
+again.
+
+With jack detection on a Galaxy Tab S3, plugging in a headset during
+s2idle gave 100000 interrupts in a few seconds, then "irq 136: nobody
+cared". After that every register read failed with -ENOSPC until a
+reboot, which looks like SLIMbus running out of transaction IDs.
+
+Disable it in the codec's system sleep callbacks. The codec is a child of
+the controller, so the controller is back by the time resume runs, and an
+event during sleep is handled then.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ sound/soc/codecs/wcd9335.c | 35 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 35 insertions(+)
+
+diff --git a/sound/soc/codecs/wcd9335.c b/sound/soc/codecs/wcd9335.c
+index d50d752524..e0aa83e9e0 100644
+--- a/sound/soc/codecs/wcd9335.c
++++ b/sound/soc/codecs/wcd9335.c
+@@ -333,6 +333,7 @@ struct wcd9335_codec {
+ 	int comp_enabled[COMPANDER_MAX];
+ 
+ 	int intr1;
++	bool intr1_off;
+ 	struct gpio_desc *reset_gpio;
+ 
+ 	unsigned int rx_port_value[WCD9335_RX_MAX];
+@@ -5159,6 +5160,39 @@ static int wcd9335_slim_probe(struct slim_device *slim)
+ 	return 0;
+ }
+ 
++/*
++ * The interrupt line stays high until its status is cleared over SLIMbus, and
++ * interrupt threads run again before any driver has resumed. An event during
++ * sleep would then fail to read its status and fire again, until the kernel
++ * disables the interrupt. The controller is our parent, so it is back by the
++ * time resume runs here.
++ */
++static int wcd9335_suspend(struct device *dev)
++{
++	struct wcd9335_codec *wcd = dev_get_drvdata(dev);
++
++	if (wcd && wcd->irq_data) {
++		disable_irq(wcd->intr1);
++		wcd->intr1_off = true;
++	}
++
++	return 0;
++}
++
++static int wcd9335_resume(struct device *dev)
++{
++	struct wcd9335_codec *wcd = dev_get_drvdata(dev);
++
++	if (wcd && wcd->intr1_off) {
++		wcd->intr1_off = false;
++		enable_irq(wcd->intr1);
++	}
++
++	return 0;
++}
++
++static DEFINE_SIMPLE_DEV_PM_OPS(wcd9335_pm_ops, wcd9335_suspend, wcd9335_resume);
++
+ static int wcd9335_slim_status(struct slim_device *sdev,
+ 			       enum slim_device_status status)
+ {
+@@ -5220,6 +5254,7 @@ MODULE_DEVICE_TABLE(slim, wcd9335_slim_id);
+ static struct slim_driver wcd9335_slim_driver = {
+ 	.driver = {
+ 		.name = "wcd9335-slim",
++		.pm = pm_sleep_ptr(&wcd9335_pm_ops),
+ 	},
+ 	.probe = wcd9335_slim_probe,
+ 	.device_status = wcd9335_slim_status,

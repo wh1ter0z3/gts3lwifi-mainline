@@ -17,10 +17,12 @@ package's UCM profile and WirePlumber config:
   "Built-in microphones (main, sub)" source. Repeated play/record cycles, node
   suspend/resume and WirePlumber restarts run without DSP errors.
 
+**Jack detection and the headset mic work on a T820:** [Jack and headset
+mic](#jack-and-headset-mic), kernel patches 0162-0169.
+
 Not done yet:
 
-- Headset mic (AMIC2), jack detection (WCD9335 MBHC; `apq8096.c` sets up no
-  jack), and mic gain tuning.
+- Mic gain tuning.
 
 ## Hardware and firmware
 
@@ -40,7 +42,9 @@ Routing in the UCM profile (`pmaports/device-samsung-gts3lwifi/ucm2-*`):
 - playback: MultiMedia2 -> SLIMBUS_6_RX -> AIF4_PB -> SLIM RX5/RX6 ->
   RX INT1/INT2 mix -> HPHL/HPHR;
 - capture: MultiMedia3 <- SLIMBUS_0_TX <- AIF1_CAP <- SLIM TX0/TX1 <-
-  DEC0/DEC1 <- AMIC3/AMIC4.
+  DEC0/DEC1 <- AMIC3/AMIC4;
+- headset mic, not yet tested on hardware: MultiMedia4 <- SLIMBUS_1_TX <-
+  AIF2_CAP <- SLIM TX2/TX3 <- DEC2/DEC3 <- AMIC2.
 
 The headphone settings follow Samsung's `mixer_paths_tasha.xml` ("headset"
 path): compander on (`COMP1/COMP2 Switch`), `RX HPH Mode` class-H low power,
@@ -106,12 +110,89 @@ Also seen: unbinding and rebinding the sound card fails because wcd9335 does
 not free its SLIM slave interrupt (`request_irq ... -EBUSY`). Reboot instead
 of reloading the machine driver.
 
+## Jack and headset mic
+
+| | |
+|---|---|
+| Plug in and out | the codec's mechanical switch, MBHC SW_DET, both switches normally open |
+| Headphones or headset | the button FSM and HS_COMP against HS_VREF, with MIC BIAS2 at 1.8 V: first look 500 ms after plug in, final answer after about 3 s |
+| Buttons | 8 thresholds, `<88 138 225 450 470 470 470 470>` mV: play/pause, voice command, volume up, volume down |
+| Mic | AMIC2 on `hw:N,3`, one mic on two channels, UCM device `Headset`, `ADC2 Volume` 20, MIC BIAS2 at 2.7 V while recording |
+| ALSA | `Headphone Jack` and `Mic Jack`, UCM's JackControls; input device `Headset Jack` for the buttons |
+| Priorities | headphones above speakers, headset mic above built-in mics, only while plugged in (WirePlumber route availability) |
+
+Mainline's `wcd-mbhc-v2` could only classify a plug with the MBHC ADC, which
+the WCD9335 doesn't have, so patch 0162 adds the path without one. It follows
+the non-ADC path in Qualcomm's downstream driver.
+
+**Stock doesn't do this on this tablet.** It reads the mic line through PM8994
+MPP4 on the PMIC's VADC: at most 690 mV is headphones, more is a headset. It uses
+MBHC only for the switch, buttons and removal. We use the comparators, which needs
+no PMIC and is the upstream form. During bring-up, MPP4 was the ground truth for
+the numbers below.
+
+### Tested
+
+SM-T820 on 7.3.1, 2026-11-02, by hand, with a plain 3-pole headset and Apple EarPods.
+
+| Check | Result |
+|---|---|
+| The switch | 5 of 5 moves, one interrupt each, no bounce |
+| 3-pole | headphones, 13 of 13. The last 6, with the final timing, never briefly read as a headset |
+| EarPods | headset, 8 of 8, including across a boot and pushed in slowly |
+| Centre button | `KEY_PLAYPAUSE`, press and release paired, no ghost keys: idle, held for 2 s, and during a recording |
+| Mic | speech peaks at 10 to 40 %, no tone |
+| PipeWire | the right default sink and source for nothing, 3-pole and EarPods, within 2 s of each move |
+| 5 plug cycles in 20 s, during playback and a recording | both ran to the end, no DSP errors, clocks released after. Sound moves to the speakers on a pull |
+| Sleep with nothing, 3-pole, EarPods | 2 of 2 each. Nothing held: MCLK, master bias and MIC BIAS2 users 0 |
+| Plug, pull or button during sleep | doesn't wake it, and shows up on resume |
+
+Not tested:
+
+- anything on a T825, whose device tree includes this one;
+- a built package: RAM boots, with the UCM and WirePlumber files copied in by hand. The series applies and matches the kernel branch;
+- the volume buttons. EarPods raise no interrupt at all for theirs, and nothing else with buttons was tried;
+- any other 4-pole headset, or an OMTP one;
+- Plasma's audio panel, by eye;
+- sleep current, or the deep sleep work.
+
+### What the hardware had to teach us
+
+- **HS_VREF isn't linear.** With EarPods the mic line sits at 1066 mV on a 1.8 V bias,
+  about 3.2 kohm on a 2.2 kohm pull up. Codes 0, 1 and 2, including the 1600 every
+  other codec here uses, read "above" at every level down to 592 mV, so EarPods read
+  as line out. Code 3 switches between 1126 and 1156 mV. With 470 mV as the top button
+  threshold, a headset is about 0.77 to 3.8 kohm.
+- **1.8 V is for detection, not for recording.** At 1.8 V, EarPods put out a steady 972 Hz
+  tone with harmonics, and no speech. At 2.7 V, stock's voltage, the tone is gone. So patch
+  0168 records at the board's voltage, and detection goes back to 1.8 V for as long
+  as it needs the line. Other headsets weren't tried at 1.8 V.
+- **`ADC2 Volume` 20, its top.** About 1.5 dB per step. Stock's 7 is too quiet here.
+- **A press can be late.** 150 to 470 ms after the switch with plain headphones. A first
+  look at 50 ms made 4 of 7 of them read as a headset for 3 s, hence 500 ms.
+- **An event during sleep killed the jack until a reboot**, before patch 0164. The level
+  interrupt fired on resume before SLIMbus was back, the status read failed, and it fired
+  again until the kernel disabled it, at 100000 interrupts. Register reads then failed with
+  -ENOSPC. That looks like SLIMbus running out of transaction IDs: `slim_do_transfer()`
+  only frees one on a timeout. Not chased further, since this no longer reaches it.
+
+Seen, harmless so far: `wcd9335_slimbus_irq: overflow error on TX port N` when a
+capture ends, and one `overrun!!!` from `arecord`.
+
+Left out on purpose:
+
+- an OMTP headset (ground and mic swapped) reads as headphones;
+- a headset outside the window above reads as line out or headphones;
+- extension cables, impedance detection, micbias ramp on press.
+
+Stock wakes the tablet on jack events. We don't, so a plug during suspend is seen
+at the next wake.
+
 ## Speakers
 
 All four speakers play: checked by ear with `tests/audio/spk.sh` (left,
 right and both channels) and on every amplifier with the probe below. PipeWire offers a "Speakers"
-sink (UCM device `Speaker`, priority above the headphones, as there is no jack
-detection yet).
+sink (UCM device `Speaker`, below the headphones while those are plugged in).
 
 | | |
 |---|---|

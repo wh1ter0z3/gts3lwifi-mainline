@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 15:13:53 -0700
+Subject: [PATCH] ASoC: dt-bindings: qcom,wcd9335: Add the jack properties
+
+Headset detection needs to know how the switches in the jack are wired
+and the button thresholds of the board, and a microphone may want more
+voltage than detection uses. Use the names wcd934x has, and only on the
+SLIMbus interface device, the one that holds the codec.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ .../bindings/sound/qcom,wcd9335.yaml          | 26 +++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/sound/qcom,wcd9335.yaml b/Documentation/devicetree/bindings/sound/qcom,wcd9335.yaml
+index 34f8fe4da9..b0ae0539f5 100644
+--- a/Documentation/devicetree/bindings/sound/qcom,wcd9335.yaml
++++ b/Documentation/devicetree/bindings/sound/qcom,wcd9335.yaml
+@@ -73,6 +73,28 @@ properties:
+   vdd-vbat-supply:
+     description: vbat supply
+ 
++  qcom,hphl-jack-type-normally-closed:
++    description: The HPHL jack switch is normally closed
++    type: boolean
++
++  qcom,ground-jack-type-normally-closed:
++    description: The headset ground jack switch is normally closed
++    type: boolean
++
++  qcom,mbhc-buttons-vthreshold-microvolt:
++    description:
++      Upper voltage on the mic line of headset buttons 0 to 7, with the line
++      pulled up to 1.8 V. Headset detection runs only if this is present.
++    minItems: 8
++    maxItems: 8
++
++  qcom,micbias2-microvolt:
++    description:
++      MIC BIAS2 voltage while recording. Headset detection always uses 1.8 V.
++    minimum: 1800000
++    maximum: 2850000
++    default: 1800000
++
+ required:
+   - compatible
+   - reg
+@@ -116,6 +138,10 @@ allOf:
+         vdd-rx-supply: false
+         vdd-tx-supply: false
+         vdd-vbat-supply: false
++        qcom,hphl-jack-type-normally-closed: false
++        qcom,ground-jack-type-normally-closed: false
++        qcom,mbhc-buttons-vthreshold-microvolt: false
++        qcom,micbias2-microvolt: false
+ 
+ additionalProperties: false
+ 
