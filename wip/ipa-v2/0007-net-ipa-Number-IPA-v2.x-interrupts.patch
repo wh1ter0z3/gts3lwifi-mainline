@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 6 Nov 2026 21:55:18 +0530
+Subject: [PATCH 7/8] net: ipa: Number IPA v2.x interrupts
+
+IPA v2.x has two more microcontroller queue interrupts than IPA v3.0+
+(bits 8 and 9), so from PROC_UC_ACK_Q_NOT_EMPTY on its interrupt bits
+are two higher, up to BAM_IDLE at bit 18; nothing above that exists.
+Translate between interrupt type and hardware bit in both directions:
+when enabling, and when dispatching a pending bit, which the RFC
+("net: ipa: Add support for IPA v2.x interrupts", Sireesh Kodali,
+2021) did not do, so a v2 TX_SUSPEND (bit 16) would have been handled
+as BAM_GSI_IDLE. The two IPA v2.x-only bits are cleared and ignored.
+
+Like IPA v3.0, IPA v2.x has no TX_SUSPEND enable or clear registers.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/net/ipa/ipa_interrupt.c | 58 +++++++++++++++++++++++++++------
+ 1 file changed, 48 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/net/ipa/ipa_interrupt.c b/drivers/net/ipa/ipa_interrupt.c
+index 131b9cc942..93e0075986 100644
+--- a/drivers/net/ipa/ipa_interrupt.c
++++ b/drivers/net/ipa/ipa_interrupt.c
+@@ -61,8 +61,8 @@ static void ipa_interrupt_suspend_clear_all(struct ipa_interrupt *interrupt)
+ 		reg = ipa_reg(ipa, IRQ_SUSPEND_INFO);
+ 		val = ioread32(ipa->reg_virt + reg_n_offset(reg, unit));
+ 
+-		/* SUSPEND interrupt status isn't cleared on IPA version 3.0 */
+-		if (!val || ipa->version == IPA_VERSION_3_0)
++		/* SUSPEND interrupt status isn't cleared on IPA v3.0 and older */
++		if (!val || ipa->version <= IPA_VERSION_3_0)
+ 			continue;
+ 
+ 		reg = ipa_reg(ipa, IRQ_SUSPEND_CLR);
+@@ -70,12 +70,45 @@ static void ipa_interrupt_suspend_clear_all(struct ipa_interrupt *interrupt)
+ 	}
+ }
+ 
++/* IPA v2.x numbers its interrupt bits like IPA v3.0+ up to bit 7
++ * (UC_RX_CMD_Q_NOT_FULL), then has two more microcontroller queue
++ * interrupts (bits 8 and 9), so the rest, up to BAM_IDLE (bit 18), are
++ * two bits higher.  Interrupts above IPA_IRQ_BAM_GSI_IDLE don't exist.
++ */
++#define IPA_IRQ_V2_SHIFT	2
++
++/* Hardware bit for an interrupt type */
++static u32 ipa_irq_bit(struct ipa *ipa, enum ipa_irq_id irq_id)
++{
++	if (ipa->version >= IPA_VERSION_3_0 ||
++	    irq_id < IPA_IRQ_PROC_UC_ACK_Q_NOT_EMPTY)
++		return irq_id;
++
++	WARN_ON(irq_id > IPA_IRQ_BAM_GSI_IDLE);
++
++	return irq_id + IPA_IRQ_V2_SHIFT;
++}
++
++/* Interrupt type for a hardware bit; IPA_IRQ_COUNT if there is none */
++static u32 ipa_irq_id(struct ipa *ipa, u32 bit)
++{
++	if (ipa->version >= IPA_VERSION_3_0 ||
++	    bit < IPA_IRQ_PROC_UC_ACK_Q_NOT_EMPTY)
++		return bit;
++
++	if (bit < IPA_IRQ_PROC_UC_ACK_Q_NOT_EMPTY + IPA_IRQ_V2_SHIFT ||
++	    bit > IPA_IRQ_BAM_GSI_IDLE + IPA_IRQ_V2_SHIFT)
++		return IPA_IRQ_COUNT;
++
++	return bit - IPA_IRQ_V2_SHIFT;
++}
++
+ /* Process a particular interrupt type that has been received */
+ static void ipa_interrupt_process(struct ipa_interrupt *interrupt, u32 irq_id)
+ {
+ 	struct ipa *ipa = interrupt->ipa;
++	u32 mask = BIT(ipa_irq_bit(ipa, irq_id));
+ 	const struct reg *reg;
+-	u32 mask = BIT(irq_id);
+ 	u32 offset;
+ 
+ 	reg = ipa_reg(ipa, IPA_IRQ_CLR);
+@@ -132,11 +165,16 @@ static irqreturn_t ipa_isr_thread(int irq, void *dev_id)
+ 	pending = ioread32(ipa->reg_virt + offset);
+ 	while ((mask = pending & enabled)) {
+ 		do {
+-			u32 irq_id = __ffs(mask);
++			u32 bit = __ffs(mask);
++			u32 irq_id = ipa_irq_id(ipa, bit);
+ 
+-			mask ^= BIT(irq_id);
++			mask ^= BIT(bit);
+ 
+-			ipa_interrupt_process(interrupt, irq_id);
++			if (irq_id < IPA_IRQ_COUNT)
++				ipa_interrupt_process(interrupt, irq_id);
++			else	/* An IPA v2.x-only condition; just clear it */
++				iowrite32(BIT(bit), ipa->reg_virt +
++					  reg_offset(ipa_reg(ipa, IPA_IRQ_CLR)));
+ 		} while (mask);
+ 		pending = ioread32(ipa->reg_virt + offset);
+ 	}
+@@ -165,7 +203,7 @@ static void ipa_interrupt_enabled_update(struct ipa *ipa)
+ void ipa_interrupt_enable(struct ipa *ipa, enum ipa_irq_id ipa_irq)
+ {
+ 	/* Update the IPA interrupt mask to enable it */
+-	ipa->interrupt->enabled |= BIT(ipa_irq);
++	ipa->interrupt->enabled |= BIT(ipa_irq_bit(ipa, ipa_irq));
+ 	ipa_interrupt_enabled_update(ipa);
+ }
+ 
+@@ -173,7 +211,7 @@ void ipa_interrupt_enable(struct ipa *ipa, enum ipa_irq_id ipa_irq)
+ void ipa_interrupt_disable(struct ipa *ipa, enum ipa_irq_id ipa_irq)
+ {
+ 	/* Update the IPA interrupt mask to disable it */
+-	ipa->interrupt->enabled &= ~BIT(ipa_irq);
++	ipa->interrupt->enabled &= ~BIT(ipa_irq_bit(ipa, ipa_irq));
+ 	ipa_interrupt_enabled_update(ipa);
+ }
+ 
+@@ -201,8 +239,8 @@ static void ipa_interrupt_suspend_control(struct ipa_interrupt *interrupt,
+ 
+ 	WARN_ON(!test_bit(endpoint_id, ipa->available));
+ 
+-	/* IPA version 3.0 does not support TX_SUSPEND interrupt control */
+-	if (ipa->version == IPA_VERSION_3_0)
++	/* IPA v3.0 and older don't support TX_SUSPEND interrupt control */
++	if (ipa->version <= IPA_VERSION_3_0)
+ 		return;
+ 
+ 	weight = bitmap_weight(interrupt->suspend_enabled, ipa->endpoint_count);

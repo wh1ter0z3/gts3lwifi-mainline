@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sireesh Kodali <sireeshkodali1@gmail.com>
+Date: Sun, 19 Sep 2021 20:13:20 +0530
+Subject: [PATCH 2/8] dmaengine: Add support for immediate commands in the
+ client API
+
+Immediate commands are needed by the IPA network driver, so that it can
+send commands via BAM to the microcontroller
+
+Signed-off-by: Sireesh Kodali <sireeshkodali1@gmail.com>
+---
+ include/linux/dmaengine.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/include/linux/dmaengine.h b/include/linux/dmaengine.h
+index fe33a20abc..bd13753d6c 100644
+--- a/include/linux/dmaengine.h
++++ b/include/linux/dmaengine.h
+@@ -200,6 +200,9 @@ struct dma_vec {
+  *  transaction is marked with DMA_PREP_REPEAT will cause the new transaction
+  *  to never be processed and stay in the issued queue forever. The flag is
+  *  ignored if the previous transaction is not a repeated transaction.
++ *  @DMA_PREP_IMM_CMD: tell the driver that the data passed to the DMA API is
++ *  immediate command data and the descriptor should be in a different format
++ *  from the normal data and descriptor
+  */
+ enum dma_ctrl_flags {
+ 	DMA_PREP_INTERRUPT = (1 << 0),
+@@ -212,6 +215,7 @@ enum dma_ctrl_flags {
+ 	DMA_PREP_CMD = (1 << 7),
+ 	DMA_PREP_REPEAT = (1 << 8),
+ 	DMA_PREP_LOAD_EOT = (1 << 9),
++	DMA_PREP_IMM_CMD = (1 << 10),
+ };
+ 
+ /**

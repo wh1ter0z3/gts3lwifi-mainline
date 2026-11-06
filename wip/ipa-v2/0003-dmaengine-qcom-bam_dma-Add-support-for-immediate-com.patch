@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sireesh Kodali <sireeshkodali1@gmail.com>
+Date: Sun, 19 Sep 2021 20:13:21 +0530
+Subject: [PATCH 3/8] dmaengine: qcom: bam_dma: Add support for immediate
+ commands
+
+Immediate commands are needed by the IPA driver to send commands to the
+IPA controller over BAM. To support immediate commands, all we need to
+do is set the relevant flag in the descriptor.
+
+Signed-off-by: Sireesh Kodali <sireeshkodali1@gmail.com>
+---
+ drivers/dma/qcom/bam_dma.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/dma/qcom/bam_dma.c b/drivers/dma/qcom/bam_dma.c
+index 05a3b1f9e0..a8cfa0a213 100644
+--- a/drivers/dma/qcom/bam_dma.c
++++ b/drivers/dma/qcom/bam_dma.c
+@@ -59,6 +59,7 @@ struct bam_desc_hw {
+ #define DESC_FLAG_EOB BIT(13)
+ #define DESC_FLAG_NWD BIT(12)
+ #define DESC_FLAG_CMD BIT(11)
++#define DESC_FLAG_IMM BIT(8)
+ 
+ struct bam_async_desc {
+ 	struct virt_dma_desc vd;
+@@ -714,6 +715,8 @@ static struct dma_async_tx_descriptor *bam_prep_slave_sg(struct dma_chan *chan,
+ 		do {
+ 			if (flags & DMA_PREP_CMD)
+ 				desc->flags |= cpu_to_le16(DESC_FLAG_CMD);
++			else if (flags & DMA_PREP_IMM_CMD)
++				desc->flags |= cpu_to_le16(DESC_FLAG_IMM);
+ 
+ 			desc->addr = cpu_to_le32(sg_dma_address(sg) +
+ 						 curr_offset);

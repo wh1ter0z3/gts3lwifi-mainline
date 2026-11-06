@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sireesh Kodali <sireeshkodali1@gmail.com>
+Date: Sun, 19 Sep 2021 20:13:19 +0530
+Subject: [PATCH 1/8] doc: dmaengine: client-api: Add immediate commands in the
+ DMA client API
+
+Immediate commands are used by the IPA driver to send commands to the
+microcontroller over BAM. These are different from PREP_CMD.
+
+Signed-off-by: Sireesh Kodali <sireeshkodali1@gmail.com>
+---
+ Documentation/driver-api/dmaengine/provider.rst | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/Documentation/driver-api/dmaengine/provider.rst b/Documentation/driver-api/dmaengine/provider.rst
+index f4ed98f701..dca71e612b 100644
+--- a/Documentation/driver-api/dmaengine/provider.rst
++++ b/Documentation/driver-api/dmaengine/provider.rst
+@@ -605,6 +605,16 @@ DMA_CTRL_REUSE
+     writes for which the descriptor should be in different format from
+     normal data descriptors.
+ 
++- DMA_PREP_IMM_CMD
++
++  - If set, the client driver tells DMA controller that passed data in DMA
++    API is immediate command data.
++
++  - Interpretation of command data is DMA controller specific. It can be
++    used for issuing immediate commands to other peripherals/register
++    reads/register writes for which the descriptor shoudl be in a
++    different format from normal data descriptors.
++
+ - DMA_PREP_REPEAT
+ 
+   - If set, the transfer will be automatically repeated when it ends until a

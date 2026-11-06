@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sireesh Kodali <sireeshkodali1@gmail.com>
+Date: Fri, 6 Nov 2026 21:55:19 +0530
+Subject: [PATCH 8/8] net: ipa: Add timeout for ipa_cmd_pipeline_clear_wait
+
+Sometimes the pipeline clear fails, and when it does, having a hang in
+kernel is ugly. The timeout gives us a nice error message. Note that
+this shouldn't actually hang, ever. It only hangs if there is a mistake
+in the config, and the timeout is only useful when debugging.
+
+Signed-off-by: Vladimir Lypak <vladimir.lypak@gmail.com>
+Signed-off-by: Sireesh Kodali <sireeshkodali1@gmail.com>
+[psigod: port to 7.3: ipa->dev]
+Signed-off-by: psigod <psigod@example.com>
+---
+ drivers/net/ipa/ipa_cmd.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/ipa/ipa_cmd.c b/drivers/net/ipa/ipa_cmd.c
+index 984311a9a5..94bf290ce1 100644
+--- a/drivers/net/ipa/ipa_cmd.c
++++ b/drivers/net/ipa/ipa_cmd.c
+@@ -616,7 +616,10 @@ u32 ipa_cmd_pipeline_clear_count(void)
+ 
+ void ipa_cmd_pipeline_clear_wait(struct ipa *ipa)
+ {
+-	wait_for_completion(&ipa->completion);
++	/* This only hangs if the pipeline clear is misconfigured */
++	if (!wait_for_completion_timeout(&ipa->completion,
++					 msecs_to_jiffies(1000)))
++		dev_err(ipa->dev, "pipeline clear timed out\n");
+ }
+ 
+ /* Allocate a transaction for the command TX endpoint */

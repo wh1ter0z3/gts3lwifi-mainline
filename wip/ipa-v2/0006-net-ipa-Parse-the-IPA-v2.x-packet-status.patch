@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 6 Nov 2026 21:55:16 +0530
+Subject: [PATCH 6/8] net: ipa: Parse the IPA v2.x packet status
+
+IPA v2.x status opcodes are plain numbers (packet 0, new rule 1,
+dropped 2, suspended 3), not the single-bit values of IPA v3.0+, and
+the IPA v2.5 status lays out words 3-7 differently: the filter fields,
+the 48-bit tag, time of day, NAT and router fields move, router and
+filter rule indexes are 8 bits wide (0xff meaning no match), and there
+are no hashed tables or sequence numbers. Translate them in
+ipa_status_extract() so the callers stay as they are.
+
+The RFC "net: ipa: Correct ipa_status_opcode enumeration" (Vladimir
+Lypak, Sireesh Kodali, 2021) changed the opcode values for every
+version; as Alex Elder pointed out in review, IPA v3.0+ uses the
+current values, so the IPA v2.x ones are mapped here instead. Layout
+from the downstream struct ipa_hw_pkt_status (IPA v2.5).
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/net/ipa/ipa_endpoint.c | 96 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 96 insertions(+)
+
+diff --git a/drivers/net/ipa/ipa_endpoint.c b/drivers/net/ipa/ipa_endpoint.c
+index 0bd9b9fbbf..04327809cf 100644
+--- a/drivers/net/ipa/ipa_endpoint.c
++++ b/drivers/net/ipa/ipa_endpoint.c
+@@ -125,12 +125,108 @@ enum ipa_status_field_id {
+ #define IPA_STATUS_SIZE			sizeof(__le32[8])
+ 
+ /* IPA status structure decoder; looks up field values for a structure */
++/* IPA v2.x status opcodes are plain numbers, not single bits */
++static u32 ipa_status_opcode_v2(u32 opcode)
++{
++	switch (opcode) {
++	case 0:
++		return IPA_STATUS_OPCODE_PACKET;
++	case 1:
++		return IPA_STATUS_OPCODE_NEW_RULE_PACKET;
++	case 2:
++		return IPA_STATUS_OPCODE_DROPPED_PACKET;
++	case 3:
++		return IPA_STATUS_OPCODE_SUSPENDED_PACKET;
++	default:
++		return 0;	/* Not a format we handle (6 is XLAT) */
++	}
++}
++
++/* The IPA v2.5 packet status has the same first three words as IPA v3.0+,
++ * but lays out the rest differently (IPA v2.0 differs again in word 3).
++ */
++static u32 ipa_status_extract_v2(const __le32 *word,
++				 enum ipa_status_field_id field)
++{
++	u32 val;
++
++	switch (field) {
++	case STATUS_OPCODE:
++		return ipa_status_opcode_v2(le32_get_bits(word[0],
++							  GENMASK(7, 0)));
++	case STATUS_EXCEPTION:
++		return le32_get_bits(word[0], GENMASK(15, 8));
++	case STATUS_MASK:
++		return le32_get_bits(word[0], GENMASK(31, 16));
++	case STATUS_LENGTH:
++		return le32_get_bits(word[1], GENMASK(15, 0));
++	case STATUS_SRC_ENDPOINT:
++		return le32_get_bits(word[1], GENMASK(20, 16));
++	case STATUS_DST_ENDPOINT:
++		return le32_get_bits(word[1], GENMASK(28, 24));
++	case STATUS_METADATA:
++		return le32_to_cpu(word[2]);
++	case STATUS_FILTER_LOCAL:
++		return le32_get_bits(word[3], GENMASK(0, 0));
++	case STATUS_FILTER_GLOBAL:
++		return le32_get_bits(word[3], GENMASK(1, 1));
++	/* Status word 3, bits 2-6 are the filtering endpoint */
++	case STATUS_FILTER_RETAIN:
++		return le32_get_bits(word[3], GENMASK(7, 7));
++	case STATUS_FILTER_RULE_INDEX:
++		val = le32_get_bits(word[3], GENMASK(15, 8));
++		return val == 0xff ? IPA_STATUS_RULE_MISS : val;
++	case STATUS_TAG_LOW32:
++		return le32_get_bits(word[3], GENMASK(31, 16)) |
++			(le32_get_bits(word[4], GENMASK(15, 0)) << 16);
++	case STATUS_TAG_HIGH16:
++		return le32_get_bits(word[4], GENMASK(31, 16));
++	case STATUS_TIME_OF_DAY:
++		return le32_to_cpu(word[5]);
++	case STATUS_NAT_HIT:
++		return le32_get_bits(word[6], GENMASK(0, 0));
++	case STATUS_NAT_INDEX:
++		return le32_get_bits(word[6], GENMASK(13, 1));
++	case STATUS_NAT_TYPE:
++		return le32_get_bits(word[6], GENMASK(15, 14));
++	case STATUS_ROUTER_LOCAL:
++		return le32_get_bits(word[6], GENMASK(16, 16));
++	case STATUS_ROUTER_TABLE:
++		return le32_get_bits(word[6], GENMASK(21, 17));
++	/* Status word 6, bit 22 is "route match" */
++	case STATUS_UCP:
++		return le32_get_bits(word[6], GENMASK(23, 23));
++	case STATUS_ROUTER_RULE_INDEX:
++		val = le32_get_bits(word[6], GENMASK(31, 24));
++		return val == 0xff ? IPA_STATUS_RULE_MISS : val;
++	case STATUS_HEADER_LOCAL:
++		return le32_get_bits(word[7], GENMASK(0, 0));
++	case STATUS_HEADER_OFFSET:
++		return le32_get_bits(word[7], GENMASK(10, 1));
++	case STATUS_FRAG_HIT:
++		return le32_get_bits(word[7], GENMASK(11, 11));
++	case STATUS_FRAG_RULE_INDEX:
++		return le32_get_bits(word[7], GENMASK(15, 12));
++	/* No hashed tables or sequence number on IPA v2.x */
++	case STATUS_FILTER_HASH:
++	case STATUS_ROUTER_HASH:
++	case STATUS_SEQUENCE:
++		return 0;
++	default:
++		WARN(true, "%s: bad field_id %u\n", __func__, field);
++		return 0;
++	}
++}
++
+ static u32 ipa_status_extract(struct ipa *ipa, const void *data,
+ 			      enum ipa_status_field_id field)
+ {
+ 	enum ipa_version version = ipa->version;
+ 	const __le32 *word = data;
+ 
++	if (version < IPA_VERSION_3_0)
++		return ipa_status_extract_v2(word, field);
++
+ 	switch (field) {
+ 	case STATUS_OPCODE:
+ 		return le32_get_bits(word[0], GENMASK(7, 0));

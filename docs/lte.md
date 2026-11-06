@@ -75,5 +75,5 @@ should not reset the tablet. A reset about 9 s into boot is TrustZone
 
 - Results of the test above.
 - Mobile data: port the IPA v2.x series (BAM transport, IPA v2.5 data)
-  to 7.3; large, and only worth it once registration works.
+  to 7.3; started, see `docs/ipa-v2.md`.
 - Memshare, if the modem turns out to need it.
