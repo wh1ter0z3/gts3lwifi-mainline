@@ -9,7 +9,7 @@ set -eu
 DTS=$(readlink -f "$1"); OUT=$2
 HERE=$(cd "$(dirname "$0")" && pwd)
 BOOT=${BOOT:-$HOME/.local/var/pmbootstrap/chroot_rootfs_samsung-gts3lwifi/boot/boot.img}
-MKBOOTIMG=${MKBOOTIMG:-$HOME/samsung/lk2nd/lk2nd/scripts/mkbootimg}
+MKBOOTIMG=${MKBOOTIMG:-$HOME/Projects/samsung-tab-s3/lk2nd/lk2nd/scripts/mkbootimg}
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir "$W/k"; tar -xzf "$HERE/base/kernel-dts-v7.3.1.tar.gz" -C "$W/k"
 Q=$W/k/arch/arm64/boot/dts/qcom

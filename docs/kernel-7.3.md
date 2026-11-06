@@ -109,7 +109,7 @@ it on an SM-T825: only its device tree is compile-tested.
 | Suspend, 20 s by RTC | 4 of 4 in a row, as RAM boot and as installed. Wi-Fi passes traffic after, Bluetooth stays powered |
 | Sensors | accelerometer, gyroscope, magnetometer, light, ADC; orientation reads normal |
 | GNSS | at a window, first fix after 80 s, probably with orbit data kept from earlier fixes; 12 GPS and 10 GLONASS in view, HDOP about 0.8. An idle modem doesn't wake a suspend, and a session carries on across one |
-| Venus decode | H.264 and HEVC both match a software decode |
+| Venus decode | H.264 and HEVC both match a software decode; HEVC table in [venus](venus.md) |
 | Cameras | both capture; "seems good" by hand in Ocellus |
 | Audio, by ear | speakers and headphones sound clean. The mic works but is quiet (peaks near 5 %): gain was never tuned, see `docs/audio.md` |
 | Panel, by eye | picture correct, brightness works, on a boot with the `pclk` warning below |
@@ -145,5 +145,5 @@ recorded anything. The recording played back fine.
 ### Better than 6.19
 
 HEVC decode works. The same 1080p clip hangs on r10 until the test's 90 s timeout
-(`docs/venus.md`) and matches a software decode here. We haven't looked for the
-commit that fixed it.
+and matches a software decode here, as do all the other sizes and encoder options in
+[venus](venus.md). We haven't looked for the commit that fixed it.

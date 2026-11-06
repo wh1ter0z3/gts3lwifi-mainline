@@ -5,19 +5,20 @@ with the mainline kernel. Building the OS itself is not part of this repo.
 
 ## What the branch is
 
-The 7.3.1 kernel of the `linux-7.3` branch (PR #10: kernel.org 7.3.1,
-the msm8996 base patches `m001`–`m071`, the device patches `0001`–`0148`),
+The 7.3.1 kernel of `main` (kernel.org 7.3.1, the msm8996 base patches
+`m001`–`m071`, the device patches `0001`–`0170`, including the touch keys,
+headphone jack, GPU memory clock and GPS),
 plus:
 
 | Patches | What |
 |---|---|
-| `0149`–`0153` | TrustZone apps: loading from firmware images, listeners, app sends from the qseecom pool, shutdown, and `/dev/qseecom` with the downstream ioctl ABI and DMA-BUF buffers (`CONFIG_QCOM_QSEECOM_DEV`) |
-| `0154`–`0156` | Fingerprint sensor control (`CONFIG_INPUT_EGIS_ET5XX_CTRL`): Samsung's `/dev/esfp0` ABI and `/sys/class/fingerprint/fingerprint`, sensor type reported at probe as the stock kernel does |
-| `0157` | TrustZone buffer pool as a 44 MiB CMA pool for the SCM device, exported as the DMA-BUF heap `qseecom@fd400000` |
-| `0158` | `kernel/configs/gts3-android.config` |
-| `0159` | Device tree node for the fingerprint control driver: reset and LDO enable on PM8994 MPP 2/8, data-ready on TLMM 131, the QUP6 SPI and AHB clocks |
+| `0171`–`0175` | TrustZone apps: loading from firmware images, listeners, app sends from the qseecom pool, shutdown, and `/dev/qseecom` with the downstream ioctl ABI and DMA-BUF buffers (`CONFIG_QCOM_QSEECOM_DEV`) |
+| `0176`–`0178` | Fingerprint sensor control (`CONFIG_INPUT_EGIS_ET5XX_CTRL`): Samsung's `/dev/esfp0` ABI and `/sys/class/fingerprint/fingerprint`, sensor type reported at probe as the stock kernel does |
+| `0179` | TrustZone buffer pool as a 44 MiB CMA pool for the SCM device, exported as the DMA-BUF heap `qseecom@fd400000` |
+| `0180` | `kernel/configs/gts3-android.config` |
+| `0181` | Device tree node for the fingerprint control driver: reset and LDO enable on PM8994 MPP 2/8, data-ready on TLMM 131, the QUP6 SPI and AHB clocks |
 
-Details and test results of `0149`–`0156`: `wip/qseecom/` on branch
+Details and test results of `0171`–`0178`: `wip/qseecom/` on branch
 `qseecom-wip` (the same work on 6.19.5).
 
 ## The config fragment
@@ -72,7 +73,7 @@ On the running kernel:
 
 No Android build has run on it yet.
 
-The kernel package on this branch (7.3.1-r1) merges the fragment in
+The kernel package on this branch (7.3.1-r3, one above `main`'s r2) merges the fragment in
 `prepare()`, so a postmarketOS build from the branch is the Android
 kernel. To check one, on the tablet: `sudo sh tools/android-kernel-check.sh`
 (features, TrustZone pool, keymaster through `/dev/qseecom`, fingerprint

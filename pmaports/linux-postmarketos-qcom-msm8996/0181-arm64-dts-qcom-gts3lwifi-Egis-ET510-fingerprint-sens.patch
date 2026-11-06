@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 21:32:10 +0530
-Subject: [PATCH] arm64: dts: qcom: gts3lwifi: Egis ET510 fingerprint sensor
- control
+Subject: [PATCH 181/181] arm64: dts: qcom: gts3lwifi: Egis ET510 fingerprint
+ sensor control
 
 The Home key's Egis ET510 sensor sits on BLSP1 QUP6 (TLMM 25-28), which
 TrustZone owns and drives through its dualfp app. Describe the part
@@ -24,7 +24,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 40 insertions(+)
 
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
-index 6d2e14d79..28311de62 100644
+index ca9e3cc68..3befba742 100644
 --- a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 @@ -45,6 +45,7 @@
@@ -62,7 +62,7 @@ index 6d2e14d79..28311de62 100644
  	/*
  	 * SM5705 charger and MUIC. Downstream bit-bangs this bus on TLMM 33
  	 * (SDA) / 32 (SCL), which are HDMI DDC pins, not a BLSP pair. The
-@@ -1887,6 +1908,16 @@ bt_en_default: bt-en-state {
+@@ -1971,6 +1992,16 @@ bt_en_default: bt-en-state {
  	};
  };
  
@@ -79,7 +79,7 @@ index 6d2e14d79..28311de62 100644
  &tlmm {
  	/*
  	 * Pins owned by Samsung's TrustZone. If Linux reads them, the firmware
-@@ -2115,6 +2146,15 @@ pogo_kbd_int_default: pogo-kbd-int-default-state {
+@@ -2220,6 +2251,15 @@ pogo_kbd_int_default: pogo-kbd-int-default-state {
  		drive-strength = <8>;
  		bias-pull-up;
  	};

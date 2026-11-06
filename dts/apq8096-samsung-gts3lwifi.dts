@@ -317,6 +317,40 @@
 		};
 	};
 
+	/*
+	 * Recent and Back keys (downstream i2c@22, tc305k@20): the controller
+	 * runs from L19, and TLMM 118 switches the supply of the key LEDs.
+	 */
+	vreg_tkey_led: regulator-tkey-led {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_tkey_led";
+		gpio = <&tlmm 118 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		pinctrl-0 = <&tkey_led_en_default>;
+		pinctrl-names = "default";
+	};
+
+	i2c-touchkey {
+		compatible = "i2c-gpio";
+		sda-gpios = <&tlmm 21 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&tlmm 22 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		pinctrl-0 = <&tkey_i2c_default>;
+		pinctrl-names = "default";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		touchkey@20 {
+			compatible = "coreriver,tc305k-touchkey";
+			reg = <0x20>;
+			interrupts-extended = <&tlmm 64 IRQ_TYPE_LEVEL_LOW>;
+			vcc-supply = <&vreg_l19a_2p2>;
+			vdd-supply = <&vreg_tkey_led>;
+			linux,keycodes = <KEY_APPSELECT KEY_BACK>;
+			pinctrl-0 = <&tkey_int_default>;
+			pinctrl-names = "default";
+		};
+	};
+
 	/* Book Cover Keyboard (EJ-FT820) on the pogo pins */
 	pogo_i2c: i2c-pogo {
 		compatible = "i2c-gpio";
@@ -868,6 +902,13 @@
 			regulator-always-on;
 		};
 
+		/* Touch key controller */
+		vreg_l19a_2p2: l19 {
+			regulator-name = "vreg_l19a_2p2";
+			regulator-min-microvolt = <2200000>;
+			regulator-max-microvolt = <2200000>;
+		};
+
 		/* eMMC flash rail; downstream marks it qcom,vdd-always-on */
 		vreg_l20a_2p95: l20 {
 			regulator-name = "vreg_l20a_2p95";
@@ -1387,6 +1428,22 @@
 			vdd-tx-supply = <&vreg_s4a_1p8>;
 			vdd-rx-supply = <&vreg_s4a_1p8>;
 			vdd-io-supply = <&vreg_s4a_1p8>;
+
+			qcom,micbias2-microvolt = <2700000>;
+
+			/*
+			 * Both jack switches are normally open (downstream
+			 * qcom,msm-mbhc-hphl-swh and -gnd-swh = <1>), so neither
+			 * normally-closed property. Buttons: 0 (play), 135
+			 * (voice), 240 (volume up) and 470 ohm (volume down) on
+			 * the 1.8 V pull up. These are downstream's upper limits
+			 * without its first one (13 mV), which it only used to
+			 * give play two codes, and with the last ones at 470 mV.
+			 * The top one tells headphones from a headset: downstream
+			 * has 690 mV, but at 2.7 V. 470 mV is the same 750 ohm.
+			 */
+			qcom,mbhc-buttons-vthreshold-microvolt = <88000 138000 225000 450000
+								  470000 470000 470000 470000>;
 		};
 	};
 };
@@ -1402,6 +1459,10 @@
 
 	dai@2 {
 		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
+	};
+
+	dai@3 {
+		reg = <MSM_FRONTEND_DAI_MULTIMEDIA4>;
 	};
 };
 
@@ -1450,6 +1511,14 @@
 		};
 	};
 
+	/* The headset mic, its own stream so it never reopens the built-in mics */
+	mm4-dai-link {
+		link-name = "MultiMedia4";
+		cpu {
+			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA4>;
+		};
+	};
+
 	slim-dai-link {
 		link-name = "SLIM Playback";
 		cpu {
@@ -1477,6 +1546,21 @@
 
 		codec {
 			sound-dai = <&wcd9335 AIF1_CAP>;
+		};
+	};
+
+	slimcap-headset-dai-link {
+		link-name = "SLIM Headset Capture";
+		cpu {
+			sound-dai = <&q6afedai SLIMBUS_1_TX>;
+		};
+
+		platform {
+			sound-dai = <&q6routing>;
+		};
+
+		codec {
+			sound-dai = <&wcd9335 AIF2_CAP>;
 		};
 	};
 
@@ -1890,6 +1974,27 @@
 	 * carry the quaternary TDM bus to the top speakers.
 	 */
 	gpio-reserved-ranges = <25 4>;
+
+	tkey_i2c_default: tkey-i2c-default-state {
+		pins = "gpio21", "gpio22";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	tkey_int_default: tkey-int-default-state {
+		pins = "gpio64";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	tkey_led_en_default: tkey-led-en-default-state {
+		pins = "gpio118";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
 
 	sm5705_i2c_default: sm5705-i2c-default-state {
 		pins = "gpio32", "gpio33";

@@ -20,7 +20,7 @@ only changes the SoC ID, the modem memory and the pins TrustZone may own.
 | Model | State |
 |---|---|
 | SM-T820 (Wi-Fi, `gts3lwifi`) | main target, everything below is tested on it |
-| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM) and GPS not supported yet; top speakers left out until checked |
+| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM) work in progress, GPS off until tested; top speakers left out until checked |
 
 ## Status
 
@@ -39,11 +39,12 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | **Display and input** | | |
 | Display | Works | colours, brightness, blank/unblank; HBM (outdoor brightness) through the panel's `hbm` attribute ([display](docs/display.md)) |
 | GPU (Adreno 530) | Works | freedreno, OpenGL ES 3.1 ([gpu](docs/gpu.md)) |
+| Vulkan | WIP | Mesa's Vulkan driver (turnip) covers Adreno 6xx and newer, not the 530; a driver for it is in development, conformance tests running |
 | Touchscreen | Works | [input](docs/input.md) |
 | S-Pen | Works | pressure, hover, side button ([input](docs/input.md)) |
 | Power, Volume, Home keys | Works | |
 | Book Cover Keyboard | Works | hotplug through the MUIC; a key press wakes the tablet ([input](docs/input.md)) |
-| Back/Recent touch keys | Not yet | separate controller (TC305K) |
+| Back/Recent touch keys | Works | Recent opens Present Windows; lights time out ([input](docs/input.md)) |
 | **Connectivity** | | |
 | Wi-Fi | Works | 2.4 and 5 GHz ([wifi](docs/wifi.md)) |
 | Bluetooth | Works | [bluetooth](docs/bluetooth.md) |
@@ -51,25 +52,40 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | USB host / OTG, USB 3 | Works | 5 Gbit/s as a host ([usb](docs/usb.md)) |
 | USB-C power (PD) | Works | 5 V / 3 A or 9 V / 1.65 A sink, 5 V / 1.5 A source ([usb](docs/usb.md)) |
 | GPS / GNSS | Works on the SM-T820 | through geoclue (modem DSP in the main DT, gnss-share `qmi_loc` driver), first fix 2.5-8 min after boot. Off on the SM-T825 until tested ([gnss](docs/gnss.md)) |
-| LTE modem, SIM (SM-T825) | Not yet | planned |
+| LTE modem, SIM (SM-T825) | WIP | the modem (MSS) bring-up needs the SM-T825's own modem firmware and memory layout |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
 | Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
 | Flash LED | Works | as a torch |
 | **Multimedia** | | |
-| Speakers (4), headphones, microphones | Works | headphone jack detection and headset mic not yet ([audio](docs/audio.md)) |
-| Video decode / encode (Venus) | Partial | H.264, VP8, VP9 decode; H.264 and HEVC encode, 4K30 HEVC from the camera; HEVC decode fails ([venus](docs/venus.md)) |
+| Speakers (4), headphones, microphones, headset mic | Works | jack detection and centre button tested on the T820 ([audio](docs/audio.md)) |
+| Video decode / encode (Venus) | Partial | H.264, HEVC, VP8, VP9 decode, HEVC up to 1536p in real time and 4K at about 20 fps; H.264 and HEVC encode, 4K30 HEVC from the camera ([venus](docs/venus.md)) |
 | Cameras (front, rear) | Works | rear 13 MP with autofocus, front 5 MP, through libcamera (`pmaports/libcamera` for AF) ([camera](docs/camera.md)) |
 | **Sensors** | | |
 | Accelerometer, gyroscope, magnetometer | Works | auto-rotate with iio-sensor-proxy; KWin rotation fixes in `pmaports/kwin`; no compass heading yet ([sensors](docs/sensors.md)) |
 | Light sensor | Works | lux through iio-sensor-proxy; KWin auto-brightness is off by default and needs training (patch 0077, [sensors](docs/sensors.md)) |
 | Cover (hall) sensor | Not yet | test DT `dts/test/test-hall.dts`; waits for reliable suspend |
 | Grip sensor (SM-T825) | Not yet | test DT `dts/test/test-sar.dts`; nothing reads it without the modem |
-| Fingerprint (Home key) | Blocked | its pins are owned by Samsung's TrustZone |
+| Fingerprint (Home key) | Kernel side done, finger scan untested | Egis ET510 on a TrustZone-owned SPI bus, run by Samsung's `dualfp` trustlet. On the `android` branch (7.3) the kernel loads the trustlets, offers `/dev/qseecom` and drives the sensor's power, clocks and interrupt; a finger scan needs Samsung's Android fingerprint HAL, so it waits for Android on this kernel ([fingerprint](docs/fingerprint.md)) |
 | **Software** | | |
 | postmarketOS with Plasma (Wayland) | Works | installed on the eMMC behind lk2nd ([pmos-install](docs/pmos-install.md)) |
 | Widevine DRM | Partial | L3 plays in Waydroid and Flatpak Firefox; L1 not on mainline ([widevine](docs/widevine.md)) |
 | Waydroid (Android 13) | Works | Android apps on Linux, GPU-accelerated; an extra, not a stock Android replacement; optional `-waydroid` subpackage ([waydroid](docs/waydroid.md)) |
+
+## Needs testing
+
+Merged on 2026-11-06 after testing on an SM-T820 only (7.3.1 kernel). Reports
+from either model help, the SM-T825 most of all:
+
+- **Linux 7.3.1 on the SM-T825**: boot, display, touch, Wi-Fi, audio, sensors.
+  Only its device tree was compile-tested (PR #10).
+- **GPS** (PR #9): the moved modem DSP and ADSP/SLPI memory on the SM-T825
+  (GPS stays off there), the modem's battery cost, a real fix through stock
+  geoclue on either model.
+- **Back/Recent touch keys** (PR #13), **headphone jack and headset mic**
+  (PR #14), **GPU memory clock** (PR #15): tested on an SM-T820 from RAM
+  boots; still to check as installed packages, and on an SM-T825.
+- **HEVC decode** (PR #12): the SM-T825, and 10-bit video.
 
 ## Layout
 

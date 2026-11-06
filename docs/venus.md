@@ -16,6 +16,45 @@ With `dts/test/test-venus.dts` (merged into the main DTS on 2026-10-28) and kern
   `v4l2h265enc`) with patches 0099-0102, up to 3840x2160 from the camera
   ([camera](camera.md)): HEVC at 29.8 fps, H.264 at about 27 fps.
 
+## HEVC decode on Linux 7.3.1 (2026-11-02)
+
+`tests/venus-hevc.sh` on an SM-T820, x265 8-bit clips from `tests/venus-hevc-clips.py`,
+each compared with a software decode. Speed is with nothing reading the frames. The
+kernel was 7.3.1 plus the touch key patches, which don't touch Venus.
+
+| Clip | Frames match | fps |
+|---|---|---|
+| 1280x720 | yes | 153 |
+| 1920x1080, 30 and 60 fps | yes | 79 |
+| 1080p with wavefront off, many references, no B-frames, open GOP, closed GOP | yes | |
+| 2048x1536, the panel's size | yes | 99 |
+| 3840x2160 | yes | 20 |
+| 720p, 1080p, 720p in one stream | yes | |
+| 720p with parameter sets in the stream (`hev1`) | yes | |
+| 854x480, 1366x768 | yes, see below | |
+
+Also on the T820:
+
+- A 1080p clip from our own `v4l2h265enc` decodes, and all 300 frames match once the
+  extra lines below are removed.
+- 80 runs of the 1080p clip over 10 minutes: available memory went from 1656 MB to
+  1673 MB, with no kernel messages.
+- 1080p through `waylandsink`, on the panel: looked right by eye.
+
+Limits:
+
+- **4K isn't real time.** The clip takes 7.7 s for 150 frames, with Venus already at
+  490 MHz. An extra 2 or 6 GB/s vote on its memory path changed nothing. Same
+  suspects as H.264 encode at 4K below.
+- **The stream's crop isn't applied.** 854x480 comes out 856 wide, 1366x768 comes out
+  1368 wide, and 1080p from our encoder comes out 1088 high. As far as we can tell, the
+  firmware gives no usable crop for HEVC, so the driver reports the coded size. Without the extra rows
+  and columns, every frame matches. Any encoder that rounds 1080 up to 1088 gets 8
+  extra lines at the bottom. x265 doesn't.
+- The driver offers 16x16 to 4096x4096.
+
+Not tried: an SM-T825, 10-bit (Main 10), and which commit fixed it on 7.3.
+
 ## Encoder fixes (2026-10-31, patches 0099-0102)
 
 - **0099:** GStreamer asks for more capture buffers (CREATE_BUFS) once the
@@ -36,11 +75,11 @@ With `dts/test/test-venus.dts` (merged into the main DTS on 2026-10-28) and kern
 
 Open:
 
-- **HEVC decoding:** the firmware never reports the stream resolution, so
-  GStreamer fails to negotiate ("Video device returned invalid dimensions").
-  Seen with libx265 Main profile streams at 720p and 1080p.
-  Works on Linux 7.3.1 (a 1080p clip matches a software decode), commit not
-  identified: see [kernel-7.3](kernel-7.3.md).
+- **HEVC decoding on 6.19:** the firmware never reports the stream resolution, so
+  GStreamer fails to negotiate ("Video device returned invalid dimensions"), or the
+  clip hangs. Linux 7.3.1 fixes it: see below. Commit not identified.
+- **10-bit HEVC (Main 10)** is untested and stays out of the default run.
+- **4K HEVC decode** runs at about 20 fps, below real time: see above.
 - ~~**Encoding through GStreamer (`v4l2h264enc`):** the firmware stops with
   `Err_Fatal ... venus\utils\src\vbuffer.c:1219` after about 5 frames.~~
   Fixed by patch 0099 (above).

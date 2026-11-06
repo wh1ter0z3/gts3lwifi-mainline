@@ -10,7 +10,8 @@ reserved memory matching the Samsung firmware layout, PM8994 RPM
 regulators, eMMC and microSD, dwc3 USB as dual role with USB 3.0,
 PS_HOLD restart and power-off, the AMS968HH01 dual-DSI command-mode
 panel, the Adreno 530 GPU, the Synaptics RMI4 touchscreen, the Wacom
-W9019 S-Pen digitizer, the Volume and Home keys, the Book Cover Keyboard
+W9019 S-Pen digitizer, the Volume and Home keys, the Recent and Back
+touch keys, the Book Cover Keyboard
 (STMPE1801), QCA6174 Wi-Fi on PCIe and Bluetooth on UART, Venus, the
 rear IMX258 camera with its DW9807 lens and the front S5K5E3 camera on
 CAMSS, the SLPI sensor core (accelerometer, gyroscope and magnetometer),
@@ -30,9 +31,9 @@ Signed-off-by: psigod <psigod@example.com>
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  arch/arm64/boot/dts/qcom/Makefile             |    2 +
- .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 2111 +++++++++++++++++
+ .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 2216 +++++++++++++++++
  .../dts/qcom/msm8996-samsung-gts3llte.dts     |   52 +
- 3 files changed, 2165 insertions(+)
+ 3 files changed, 2270 insertions(+)
  create mode 100644 arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
  create mode 100644 arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts
 
@@ -58,10 +59,10 @@ index 15e2dd65bb..ae48760bb7 100644
  dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-keyaki.dtb
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 new file mode 100644
-index 0000000000..f5e87f22a2
+index 0000000000..34d358b515
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
-@@ -0,0 +1,2111 @@
+@@ -0,0 +1,2216 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Samsung Galaxy Tab S3 Wi-Fi (SM-T820), codename gts3lwifi, board rev 05
@@ -378,6 +379,40 @@ index 0000000000..f5e87f22a2
 +			otg_vbus: usb-otg-vbus {
 +				regulator-name = "usb_otg_vbus";
 +			};
++		};
++	};
++
++	/*
++	 * Recent and Back keys (downstream i2c@22, tc305k@20): the controller
++	 * runs from L19, and TLMM 118 switches the supply of the key LEDs.
++	 */
++	vreg_tkey_led: regulator-tkey-led {
++		compatible = "regulator-fixed";
++		regulator-name = "vreg_tkey_led";
++		gpio = <&tlmm 118 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		pinctrl-0 = <&tkey_led_en_default>;
++		pinctrl-names = "default";
++	};
++
++	i2c-touchkey {
++		compatible = "i2c-gpio";
++		sda-gpios = <&tlmm 21 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
++		scl-gpios = <&tlmm 22 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
++		pinctrl-0 = <&tkey_i2c_default>;
++		pinctrl-names = "default";
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		touchkey@20 {
++			compatible = "coreriver,tc305k-touchkey";
++			reg = <0x20>;
++			interrupts-extended = <&tlmm 64 IRQ_TYPE_LEVEL_LOW>;
++			vcc-supply = <&vreg_l19a_2p2>;
++			vdd-supply = <&vreg_tkey_led>;
++			linux,keycodes = <KEY_APPSELECT KEY_BACK>;
++			pinctrl-0 = <&tkey_int_default>;
++			pinctrl-names = "default";
 +		};
 +	};
 +
@@ -932,6 +967,13 @@ index 0000000000..f5e87f22a2
 +			regulator-always-on;
 +		};
 +
++		/* Touch key controller */
++		vreg_l19a_2p2: l19 {
++			regulator-name = "vreg_l19a_2p2";
++			regulator-min-microvolt = <2200000>;
++			regulator-max-microvolt = <2200000>;
++		};
++
 +		/* eMMC flash rail; downstream marks it qcom,vdd-always-on */
 +		vreg_l20a_2p95: l20 {
 +			regulator-name = "vreg_l20a_2p95";
@@ -1451,6 +1493,22 @@ index 0000000000..f5e87f22a2
 +			vdd-tx-supply = <&vreg_s4a_1p8>;
 +			vdd-rx-supply = <&vreg_s4a_1p8>;
 +			vdd-io-supply = <&vreg_s4a_1p8>;
++
++			qcom,micbias2-microvolt = <2700000>;
++
++			/*
++			 * Both jack switches are normally open (downstream
++			 * qcom,msm-mbhc-hphl-swh and -gnd-swh = <1>), so neither
++			 * normally-closed property. Buttons: 0 (play), 135
++			 * (voice), 240 (volume up) and 470 ohm (volume down) on
++			 * the 1.8 V pull up. These are downstream's upper limits
++			 * without its first one (13 mV), which it only used to
++			 * give play two codes, and with the last ones at 470 mV.
++			 * The top one tells headphones from a headset: downstream
++			 * has 690 mV, but at 2.7 V. 470 mV is the same 750 ohm.
++			 */
++			qcom,mbhc-buttons-vthreshold-microvolt = <88000 138000 225000 450000
++								  470000 470000 470000 470000>;
 +		};
 +	};
 +};
@@ -1466,6 +1524,10 @@ index 0000000000..f5e87f22a2
 +
 +	dai@2 {
 +		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
++	};
++
++	dai@3 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA4>;
 +	};
 +};
 +
@@ -1514,6 +1576,14 @@ index 0000000000..f5e87f22a2
 +		};
 +	};
 +
++	/* The headset mic, its own stream so it never reopens the built-in mics */
++	mm4-dai-link {
++		link-name = "MultiMedia4";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA4>;
++		};
++	};
++
 +	slim-dai-link {
 +		link-name = "SLIM Playback";
 +		cpu {
@@ -1541,6 +1611,21 @@ index 0000000000..f5e87f22a2
 +
 +		codec {
 +			sound-dai = <&wcd9335 AIF1_CAP>;
++		};
++	};
++
++	slimcap-headset-dai-link {
++		link-name = "SLIM Headset Capture";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_1_TX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9335 AIF2_CAP>;
 +		};
 +	};
 +
@@ -1954,6 +2039,27 @@ index 0000000000..f5e87f22a2
 +	 * carry the quaternary TDM bus to the top speakers.
 +	 */
 +	gpio-reserved-ranges = <25 4>;
++
++	tkey_i2c_default: tkey-i2c-default-state {
++		pins = "gpio21", "gpio22";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	tkey_int_default: tkey-int-default-state {
++		pins = "gpio64";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	tkey_led_en_default: tkey-led-en-default-state {
++		pins = "gpio118";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
 +
 +	sm5705_i2c_default: sm5705-i2c-default-state {
 +		pins = "gpio32", "gpio33";

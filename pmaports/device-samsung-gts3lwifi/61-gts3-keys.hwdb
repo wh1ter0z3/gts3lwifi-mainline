@@ -1,0 +1,10 @@
+# Scan codes are each button's index in the DT.
+
+# Home: Plasma does nothing with KEY_HOMEPAGE, and a lone Meta tap opens the launcher
+evdev:name:gpio-keys:*
+ KEYBOARD_KEY_1=leftmeta
+
+# Recent: KEY_SCALE, bound to Present Windows by gts3-kglobalshortcutsrc. Written 00
+# to override systemd's own KEYBOARD_KEY_00=menu in 60-keyboard.hwdb.
+evdev:name:tm2-touchkey:*
+ KEYBOARD_KEY_00=scale

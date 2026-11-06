@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 20:08:33 +0530
-Subject: [PATCH 158/158] kernel/configs: gts3-android.config: what Android
+Subject: [PATCH 180/181] kernel/configs: gts3-android.config: what Android
  needs on the Galaxy Tab S3
 
 A fragment on top of the postmarketOS config: binderfs, SELinux in the

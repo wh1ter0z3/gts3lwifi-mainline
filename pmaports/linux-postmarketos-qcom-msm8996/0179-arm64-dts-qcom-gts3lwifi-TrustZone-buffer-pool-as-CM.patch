@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 20:08:33 +0530
-Subject: [PATCH 157/158] arm64: dts: qcom: gts3lwifi: TrustZone buffer pool as
+Subject: [PATCH 179/181] arm64: dts: qcom: gts3lwifi: TrustZone buffer pool as
  CMA for SCM
 
 Downstream's qseecom_mem is a reusable CMA pool that TrustZone app
@@ -18,7 +18,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 15 insertions(+), 4 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
-index f5e87f22a..6d2e14d79 100644
+index 34d358b51..ca9e3cc68 100644
 --- a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 @@ -195,10 +195,17 @@ memory@9c200000 {
@@ -43,7 +43,7 @@ index f5e87f22a..6d2e14d79 100644
  		};
  	};
  
-@@ -2109,3 +2116,7 @@ pogo_kbd_int_default: pogo-kbd-int-default-state {
+@@ -2214,3 +2221,7 @@ pogo_kbd_int_default: pogo-kbd-int-default-state {
  		bias-pull-up;
  	};
  };

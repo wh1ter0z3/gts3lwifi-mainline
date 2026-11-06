@@ -1,19 +1,19 @@
 #!/bin/sh
 # Round 9: msm.ko with the MDP5 split-display patch, for the round 8 boot image.
 # Run after building the module in the envkernel shell:
-#   cd ~/samsung/linux && make -j$(nproc) modules
+#   cd ~/Projects/samsung-tab-s3/linux && make -j$(nproc) modules
 set -eu
 P=$(cd "$(dirname "$0")" && pwd)
-KO=$HOME/samsung/linux/.output/drivers/gpu/drm/msm/msm.ko
-SRC=$HOME/samsung/linux/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.c
+KO=$HOME/Projects/samsung-tab-s3/linux/.output/drivers/gpu/drm/msm/msm.ko
+SRC=$HOME/Projects/samsung-tab-s3/linux/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.c
 OUT=$P/tester-round13
 [ -f "$KO" ] || { echo "error: $KO not found" >&2; exit 1; }
 [ "$KO" -nt "$SRC" ] || { echo "error: msm.ko is older than the mdp5 sources; rebuild with 'make -j\$(nproc) modules' in envkernel" >&2; exit 1; }
 strings -a "$KO" | grep -q "split_start_both" && strings -a "$KO" | grep -q "split display v5" && strings -a "$KO" | grep -q "rgb_swap" || { echo "error: msm.ko does not contain the split display code" >&2; exit 1; }
 strings -a "$KO" | grep -m1 "^vermagic=" | grep -q "^vermagic=6.19.5 " || { echo "error: unexpected vermagic" >&2; exit 1; }
 STRIP=$(command -v llvm-strip || ls /usr/lib/llvm-*/bin/llvm-strip 2>/dev/null | head -1 || true)
-PKO=$HOME/samsung/linux/.output/drivers/gpu/drm/panel/panel-samsung-ams968hh01.ko
-[ "$PKO" -nt "$HOME/samsung/linux/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c" ] || { echo "error: panel module is older than its source; rebuild with 'make -j\$(nproc) modules'" >&2; exit 1; }
+PKO=$HOME/Projects/samsung-tab-s3/linux/.output/drivers/gpu/drm/panel/panel-samsung-ams968hh01.ko
+[ "$PKO" -nt "$HOME/Projects/samsung-tab-s3/linux/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c" ] || { echo "error: panel module is older than its source; rebuild with 'make -j\$(nproc) modules'" >&2; exit 1; }
 strings -a "$PKO" | grep -q "gamma_ref" || { echo "error: panel module lacks the mdnie code" >&2; exit 1; }
 rm -rf "$OUT"; mkdir -p "$OUT/lib/modules/6.19.5/kernel/drivers/gpu/drm/msm" "$OUT/lib/modules/6.19.5/kernel/drivers/gpu/drm/panel"
 "$STRIP" --strip-debug -o "$OUT/panel.ko" "$PKO" 2>/dev/null || cp "$PKO" "$OUT/panel.ko"

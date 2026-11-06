@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 14:15:35 +0530
-Subject: [PATCH 149/158] firmware: qcom: scm: QSEE app loading from firmware
+Subject: [PATCH 171/181] firmware: qcom: scm: QSEE app loading from firmware
  images (Galaxy Tab S3)
 
 Mainline's qseecom interface only looks up and talks to apps the firmware

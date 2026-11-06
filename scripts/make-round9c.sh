@@ -1,11 +1,11 @@
 #!/bin/sh
 # Round 9: msm.ko with the MDP5 split-display patch, for the round 8 boot image.
 # Run after building the module in the envkernel shell:
-#   cd ~/samsung/linux && make -j$(nproc) modules
+#   cd ~/Projects/samsung-tab-s3/linux && make -j$(nproc) modules
 set -eu
 P=$(cd "$(dirname "$0")" && pwd)
-KO=$HOME/samsung/linux/.output/drivers/gpu/drm/msm/msm.ko
-SRC=$HOME/samsung/linux/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.c
+KO=$HOME/Projects/samsung-tab-s3/linux/.output/drivers/gpu/drm/msm/msm.ko
+SRC=$HOME/Projects/samsung-tab-s3/linux/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.c
 OUT=$P/tester-round9c
 [ -f "$KO" ] || { echo "error: $KO not found" >&2; exit 1; }
 [ "$KO" -nt "$SRC" ] || { echo "error: msm.ko is older than the mdp5 sources; rebuild with 'make -j\$(nproc) modules' in envkernel" >&2; exit 1; }

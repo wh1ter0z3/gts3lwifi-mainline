@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 15:10:56 +0530
-Subject: [PATCH 152/158] firmware: qcom: scm: QSEE app shutdown; Samsung
+Subject: [PATCH 174/181] firmware: qcom: scm: QSEE app shutdown; Samsung
  keymaster answers (Galaxy Tab S3)
 
 Add qcom_scm_qseecom_app_shutdown() (app manager command 2), and in the

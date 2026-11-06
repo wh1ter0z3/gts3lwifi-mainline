@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Thu, 5 Nov 2026 15:48:43 +0530
-Subject: [PATCH 154/158] input: misc: Egis ET5xx fingerprint sensor control
+Subject: [PATCH 176/181] input: misc: Egis ET5xx fingerprint sensor control
  for a secure SPI bus
 
 On the Samsung Galaxy Tab S3 the Egis ET510 fingerprint sensor's SPI bus

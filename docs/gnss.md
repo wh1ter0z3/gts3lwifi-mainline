@@ -112,7 +112,7 @@ installed with `apk add -u` from a local repository, then booted normally
 - **ADSP, SLPI:** running; the IIO sensors report, orientation correct.
 - **GPU:** KWin composites with OpenGL ES.
 - **Venus:** H.264 720p through `v4l2h264dec` is byte-identical to a software
-  decode. HEVC fails to negotiate, the limitation in `docs/venus.md`.
+  decode. HEVC fails to negotiate on this kernel; it works on 7.3.1 (`docs/venus.md`).
 - **Idle:** the modem adds no interrupts we can see (under 1/s); the 396/s on
   `smd-edge` is the accelerometer.
 - **GNSS session at a desk:** starts with the client and stops with it. No
