@@ -1,15 +1,33 @@
 # Fingerprint sensor (Home key)
 
-## Status (2026-11-01): blocked on mainline, hardware-tested; this is the end of the road
+## Status (2026-11-06): kernel side done; the finger scan waits for Android
 
-The one way forward, TrustZone's BLSP ownership call, was tried on an
-SM-T820 on 2026-11-01 (results in "Ownership test result" below). TrustZone
-accepts the call for the fingerprint bus but keeps both the pins and the SPI
-controller locked, so Linux can't drive the sensor. The remaining route would
-be running Samsung's `dualfp` trustlet through QSEECOM, which mainline can't
-do (see "Can Linux use the trustlet?"). The SPI protocol facts in
-[fingerprint-protocol.md](fingerprint-protocol.md), the test module in
-`tools/blsp-owner/` and `dts/test/test-fingerprint.dts` stay as a record.
+Linux still can't drive the sensor's SPI bus: TrustZone keeps it locked even
+after the BLSP ownership call (tested 2026-11-01, "Ownership test result"
+below). The other route, using Samsung's own `dualfp` trustlet, is open now.
+On the `android` branch (kernel 7.3.1; the same work on 6.19.5 is on
+`qseecom-wip`) the mainline kernel:
+
+- loads TrustZone apps (`cmnlib`, then `dualfp`, `authhat`, keymaster) from
+  the tablet's own `apnhlos` files, forwards their listener requests to user
+  space, and offers `/dev/qseecom` with the downstream ioctl ABI, buffers
+  coming from a 44 MiB DMA-BUF heap;
+- drives the sensor's power, reset, SPI clocks and data-ready interrupt
+  through Samsung's `/dev/esfp0` interface and
+  `/sys/class/fingerprint/fingerprint`, from a device tree node, reporting
+  the sensor exactly as the stock kernel does (`ET510`, type "egis").
+
+Samsung's fingerprint library (`libbauthserver.so`) loads all three apps
+through it and switches the sensor on. What is not done is a finger scan: run
+on postmarketOS through libhybris, the library picks the wrong sensor variant
+before talking to `dualfp`, and every command fails. On Android the library
+runs natively, so the end-to-end test waits for Android on this kernel
+(`docs/android.md` on the `android` branch). `wip/qseecom/NOTES.md` and
+`tools/libhybris-musl/README.md` on `qseecom-wip` hold the details.
+
+The SPI protocol facts in [fingerprint-protocol.md](fingerprint-protocol.md),
+the test module in `tools/blsp-owner/` and `dts/test/test-fingerprint.dts`
+stay as a record of the bus route.
 
 The sensor is an Egis (EgisTec) ET510 on BLSP1 QUP6 SPI. Samsung's TrustZone
 owns that bus. On the SM-T820 Linux can't even read its pins: psigod's boot
@@ -17,12 +35,12 @@ tests showed that a read resets the tablet. Stock Linux never talks to the
 sensor. It switches the sensor's power, reset line and SPI clocks, and
 forwards the finger interrupt. Everything else runs inside `dualfp`, a
 Samsung-signed QSEE trustlet (TrustZone app) loaded from the `apnhlos`
-partition. So there are two possible routes, and neither is open:
+partition. So there are two possible routes:
 
 | Route | What blocks it | Can it go upstream? |
 |---|---|---|
 | Linux drives the SPI bus itself | TrustZone protects TLMM 25-28 and the QUP6 registers from boot. lk2nd and the DT can't change that, and the ownership call doesn't either: TrustZone accepts it and the pins and the controller still reset the tablet when read (tested 2026-11-01) | No |
-| Linux uses the trustlet | Mainline QSEECOM can't load apps, has no listener support, only runs on allowlisted laptops and has no user-space interface. The trustlet's command protocol is proprietary and undocumented | No |
+| Linux uses the trustlet | **Open since 2026-11-05.** Mainline QSEECOM couldn't load apps, had no listener support, only ran on allowlisted laptops and had no user-space interface; our patches add all four for this tablet. The trustlet's command protocol stays Samsung's, spoken by its own HAL | No |
 
 ## The sensor and its wiring
 
@@ -274,8 +292,8 @@ the bus stays TrustZone's, and the match-quality question needs real images.
 ## Can Linux use the trustlet?
 
 On the 3.18 kernel this works today: Lineage runs `dualfp` through Qualcomm's
-downstream `drivers/misc/qseecom.c`. On mainline, almost every piece is
-missing:
+downstream `drivers/misc/qseecom.c`. Mainline v6.19, where we started, was
+missing almost every piece:
 
 | Needed | Mainline (v6.19) |
 |---|---|
@@ -289,6 +307,17 @@ missing:
 | Power, reset, interrupt | Possible (PM8994 MPP, TLMM 131) |
 | The `dualfp` command protocol (FUNC IDs 0x1-0x20, FP cmds such as 0x10, buffer layouts, template blobs, the auth-token challenge) | Undocumented; only Samsung's `libbauthserver.so` speaks it |
 
+What we built since (2026-11-05, branches `qseecom-wip` and `android`):
+
+| Missing piece | Now |
+|---|---|
+| Loading apps | `cmnlib`, then the app, from firmware files; app shutdown too. TrustZone's buffer pool is the downstream 20 MiB region grown to 44 MiB, a CMA pool for the SCM device (the fingerprint app alone takes ~20 MiB) |
+| Running on this tablet | Both models added to the allowlist |
+| Listener services | Registered by user space through `/dev/qseecom`; the kernel forwards the app's requests and resumes it with the answer |
+| Access from user space | `/dev/qseecom` with the downstream ioctl ABI, buffers as DMA-BUF fds instead of ION; plus an open `libQSEEComAPI` (`tools/libQSEEComAPI` on `qseecom-wip`) for clients built against the vendor one |
+| QUP6 clocks, power, reset, interrupt | `egis-et5xx-ctrl`: Samsung's `/dev/esfp0` and sysfs interface, clocks at the HAL's rate, from a device tree node |
+| The `dualfp` protocol | Unchanged: Samsung's HAL speaks it, we carry nothing of it |
+
 Upstream won't take a generic user-space path into proprietary trustlets
 (that is why mainline QSEECOM has none). A per-app kernel client for a
 Samsung biometric app, talking a protocol learned by reverse engineering,
@@ -297,19 +326,19 @@ trustlet at run time from the tablet's own partition is the same as other
 firmware here (never shipped). Learning its protocol from blobs would have
 to stay facts-only.
 
-What could work outside upstream, and only for Android: Qualcomm's GPL
-`qseecom` (as in the 3.18 tree, or the later vendor-module version) carried
-as an out-of-tree module, Samsung's HAL as is, and a small driver re-creating
-`/dev/esfp0`. That belongs to an Android-on-mainline build. For
-postmarketOS it would also need libhybris to run a bionic HAL. Months of
-work, and none of it upstreamable.
+What could work outside upstream: Samsung's HAL as is, on a kernel that
+loads its trustlets and re-creates `/dev/esfp0`. That is what the table above
+built, on mainline's own SCM driver rather than Qualcomm's downstream
+`qseecom`, so it is not upstreamable as a whole either, but it is small. It
+belongs to an Android-on-mainline build; for postmarketOS the HAL would also
+need libhybris, which got as far as loading it (see Status).
 
 ## Verdict
 
 | Model | Verdict | Effort | Risk to the tablet |
 |---|---|---|---|
-| SM-T820 (`gts3lwifi`, APQ8096) | **Blocked.** The SPI pins are TrustZone-owned (hardware-proven) and the sensor protocol lives in a Samsung-signed trustlet. One untested lever: the BLSP ownership call (test module now built, see "Ownership test") | Lever test: one short session with the prepared module. If it works: about 1-2 days for SPI bring-up and the ID read, then a capture driver (geometry 103x52x8, frame-ready poll and capture sequence already recovered from the trustlet; the exhaustive per-mode calibration script still to reconstruct, ~1-2 weeks), 2-4 weeks for a libfprint driver, with an uncertain match rate. Trustlet route: months, never upstream | Reading TLMM 25-28: reset after about 9 s (seen, harmless). Unclocked QUP read: possible bus hang (needs a long power-key press). Ownership call: secure-world state until reboot; worst case a reset. Hand-to-TZ (reverse) call on the wrong QUP index: breaks a live Linux bus (see "Ownership test"). Sensor NVM/VDM writes (0x42/0x46/0x62): permanent, never do them |
-| SM-T825 (`gts3llte`, MSM8996) | **Blocked**, same design and wiring. Pin ownership is inherited from the SM-T820 result, not measured, and its TrustZone build is different | Same, and every hardware result has to be repeated on an SM-T825 | Same |
+| SM-T820 (`gts3lwifi`, APQ8096) | **Bus route blocked** (hardware-proven, ownership call tested). **Trustlet route: kernel side done**, the finger scan untested | Trustlet route: an Android build on the `android` kernel with Samsung's fingerprint HAL. Bus route: only if TrustZone ever releases the bus; then 1-2 days for SPI bring-up, ~1-2 weeks for a capture driver and 2-4 weeks for a libfprint driver, with an uncertain match rate | Reading TLMM 25-28: reset after about 9 s (seen, harmless). Unclocked QUP read: possible bus hang (needs a long power-key press). Ownership call: secure-world state until reboot; worst case a reset. Hand-to-TZ (reverse) call on the wrong QUP index: breaks a live Linux bus (see "Ownership test"). Sensor NVM/VDM writes (0x42/0x46/0x62): permanent, never do them |
+| SM-T825 (`gts3llte`, MSM8996) | Same design and wiring; the device tree carries the same fingerprint node. Pin ownership is inherited from the SM-T820 result, not measured, and its TrustZone build is different | Same, and every hardware result has to be repeated on an SM-T825 | Same |
 
 Nothing here keeps hardware powered, so sleep is unaffected.
 
