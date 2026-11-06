@@ -223,6 +223,7 @@ source="
 	0167-asoc-wcd9335-headset-detection.patch
 	0168-asoc-wcd9335-micbias2-voltage.patch
 	0169-asoc-apq8096-headset-jack.patch
+	0170-arm64-dts-msm8996-gpu-opp-ddr.patch
 "
 builddir="$srcdir/linux-$pkgver"
 
@@ -446,4 +447,5 @@ b2c5b5ddc8779172b05b20bdc2509ac4896e8d74f6e3eaf6c4919e8bb6e947cff383df7054331ffc
 5a74cf18b84d246c24177ceaefc197250f9fad0d748f3b6c4d9a59253daf93d888e309aeaf2e00aa74a2ec2cf9723c87294fe4b6b26e127067cea51d2664796b  0167-asoc-wcd9335-headset-detection.patch
 4ae4f6f5e5eeb9f40100d0e7696f0abf9272067a6ac1a085c3493256f9f14fae88049d064d934024ed93a3a09eb676f78d17009d35d86eee14405df63debc992  0168-asoc-wcd9335-micbias2-voltage.patch
 82f3acd6e228245c12c4abcfbd8e3727e89e1c4a8d79e252b695be8a83a961e7be132cf6ce64303c07a12eda05ef62e2f9d2cb7dc390c7bf69480dba7fec182a  0169-asoc-apq8096-headset-jack.patch
+50dc1d7a57d223322fa8771f9b6a01a26c357e6d9a8b15a33e304b2f6a6dca823192db2f76082fb5ee9a028f63916756c88e0e8f22cc685633ed02a5430aafb8  0170-arm64-dts-msm8996-gpu-opp-ddr.patch
 "

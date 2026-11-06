@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 09:40:35 -0700
+Subject: [PATCH] arm64: dts: qcom: msm8996: Add DDR bandwidth to the GPU OPPs
+
+The GPU's gfx-mem path is in the device tree and the OPP core finds it by
+itself, but the OPPs have no bandwidth to vote for. So the GPU asks for
+nothing and DDR runs at what the display asks, 6400 MB/s (800 MHz) of a
+possible 1804 MHz.
+
+Add the nominal level downstream gives each GPU frequency (qcom,bus-freq).
+Downstream also moves up and down from that level at runtime, from the
+GPU's memory wait counters. This does not, so it can hold DDR higher than
+downstream would.
+
+The lowest OPP stays without a vote, where downstream has 1600 MB/s:
+disable_clk() parks a suspended GPU on it, and a vote there would stay on
+with the GPU off. While the display is on, its own vote is higher anyway.
+
+Tested on the Galaxy Tab S3 (SM-T820), with glmark2-es2-wayland off-screen
+at 1080p, two boots each way, three rounds each:
+
+  scene              fps before  fps after
+  desktop, blur          87         111
+  refract                35          45
+  terrain                24          30
+  texture               275         329
+  effect2d              150         162
+
+Battery current over those scenes, on USB, went from 632 to 744 mA, and
+peak GPU temperature from 59 to 66 C. Terrain held 29 to 31 fps for 10
+minutes, with the GPU levelling off at 76 C, against a trip at 90 C. The
+vote is back at 0 when idle.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ arch/arm64/boot/dts/qcom/msm8996.dtsi    | 6 ++++++
+ arch/arm64/boot/dts/qcom/msm8996pro.dtsi | 1 +
+ 2 files changed, 7 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996.dtsi b/arch/arm64/boot/dts/qcom/msm8996.dtsi
+index c34eae44eb..ca4f8ece65 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996.dtsi
+@@ -1305,26 +1305,32 @@ gpu_opp_table: opp-table {
+ 				 */
+ 				opp-624000000 {
+ 					opp-hz = /bits/ 64 <624000000>;
++					opp-peak-kBps = <14432000>;
+ 					opp-supported-hw = <0x09>;
+ 				};
+ 				opp-560000000 {
+ 					opp-hz = /bits/ 64 <560000000>;
++					opp-peak-kBps = <12440000>;
+ 					opp-supported-hw = <0x0d>;
+ 				};
+ 				opp-510000000 {
+ 					opp-hz = /bits/ 64 <510000000>;
++					opp-peak-kBps = <8136000>;
+ 					opp-supported-hw = <0xff>;
+ 				};
+ 				opp-401800000 {
+ 					opp-hz = /bits/ 64 <401800000>;
++					opp-peak-kBps = <6144000>;
+ 					opp-supported-hw = <0xff>;
+ 				};
+ 				opp-315000000 {
+ 					opp-hz = /bits/ 64 <315000000>;
++					opp-peak-kBps = <4376000>;
+ 					opp-supported-hw = <0xff>;
+ 				};
+ 				opp-214000000 {
+ 					opp-hz = /bits/ 64 <214000000>;
++					opp-peak-kBps = <2400000>;
+ 					opp-supported-hw = <0xff>;
+ 				};
+ 				opp-133000000 {
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro.dtsi b/arch/arm64/boot/dts/qcom/msm8996pro.dtsi
+index b74cff06f3..6c5aec7099 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996pro.dtsi
+@@ -324,6 +324,7 @@ &gpu_opp_table {
+ 
+ 	opp-652800000 {
+ 		opp-hz = /bits/ 64 <652800000>;
++		opp-peak-kBps = <14432000>;
+ 		opp-supported-hw = <0x01>;
+ 	};
+ 	opp-624000000 {

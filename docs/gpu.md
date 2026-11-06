@@ -61,6 +61,44 @@ Tested on the tablet: the same 8 rotations gave 0 faults without the lock
 screen (929 submits) and with it (905 submits); four later runs also had 0.
 No GPU hangs or recoveries.
 
+## Memory clock (0170)
+
+The GPU has an interconnect path to DDR, but its OPPs had no bandwidth to ask for. So
+it asked for nothing, and DDR ran at what the display asks: 800 MHz of a possible 1804.
+Patch 0170 gives each GPU clock the level the stock kernel has for it (`qcom,bus-freq`).
+It's device tree only, in `msm8996.dtsi`, so every MSM8996 board in this package gets it.
+
+SM-T820, 7.3.1, screen on, USB plugged in. `glmark2-es2-wayland --off-screen -s 1920x1080`,
+two boots each way, alternating, three rounds per boot:
+
+| Scene | fps before | fps after | |
+|---|---|---|---|
+| desktop, 4 windows, blur | 87 | 111 | +27 % |
+| refract | 35 | 45 | +26 % |
+| terrain | 24 | 30 | +23 % |
+| texture | 275 | 329 | +20 % |
+| effect2d, 5x3 kernel | 150 | 162 | +8 % |
+| shading, phong | 292 | 324 | too noisy to call: 275 to 418 |
+
+| Cost | Before | After |
+|---|---|---|
+| Battery current over those scenes | 632 mA | 744 mA |
+| Peak GPU temperature over them, about 4 min | 59 C | 66 C |
+| GPU idle | vote 0 | vote 0 |
+
+Terrain for 10 minutes on it: 29 to 31 fps throughout, with no slowdown. The GPU levels off at
+76 C, and its trip is 90 C. No GPU faults or hangs in any of these.
+
+The stock kernel also moves this level up and down at runtime, from the GPU's memory
+wait counters. This doesn't, so it can hold DDR higher than stock would, and a
+workload that doesn't need the bandwidth still pays for it.
+
+In a single run of opening Plasma panels, KWin's GPU time per frame went from 45-49 to about
+32 ms, summed over its jobs, but frame pacing was no better. Cold popups are mostly CPU.
+
+Not tested: a T825, a built package, sleep current. The deep sleep test kernels carried this
+patch and still reached VDD minimisation.
+
 ## Next
 
 - Move the GPU nodes into the main DTS once the regulator choice is settled
