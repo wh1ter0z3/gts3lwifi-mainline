@@ -20,7 +20,7 @@ only changes the SoC ID, the modem memory and the pins TrustZone may own.
 | Model | State |
 |---|---|
 | SM-T820 (Wi-Fi, `gts3lwifi`) | main target, everything below is tested on it |
-| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM) work in progress, GPS off until tested; top speakers left out until checked |
+| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem off in `main` until tested (branch `t825-modem` turns it on, [lte](https://github.com/wh1ter0z3/gts3lwifi-mainline/blob/t825-modem/docs/lte.md)); top speakers left out until checked |
 
 ## Status
 
@@ -52,14 +52,14 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | USB host / OTG, USB 3 | Works | 5 Gbit/s as a host ([usb](docs/usb.md)) |
 | USB-C power (PD) | Works | 5 V / 3 A or 9 V / 1.65 A sink, 5 V / 1.5 A source ([usb](docs/usb.md)) |
 | GPS / GNSS | Works on the SM-T820 | through geoclue (modem DSP in the main DT, gnss-share `qmi_loc` driver), first fix 2.5-8 min after boot. Off on the SM-T825 until tested ([gnss](docs/gnss.md)) |
-| LTE modem, SIM (SM-T825) | WIP | the modem (MSS) bring-up needs the SM-T825's own modem firmware and memory layout |
+| LTE modem, SIM (SM-T825) | WIP | its stock LTE modem image fits the memory layout both models share; branch `t825-modem` boots it, untested. SIM, registration and SMS should work over QMI/ModemManager; no mobile data: the modem's data path (IPA v2.5) has no mainline driver ([lte](https://github.com/wh1ter0z3/gts3lwifi-mainline/blob/t825-modem/docs/lte.md)) |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
 | Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
 | Flash LED | Works | as a torch |
 | **Multimedia** | | |
 | Speakers (4), headphones, microphones, headset mic | Works | jack detection and centre button tested on the T820 ([audio](docs/audio.md)) |
-| Video decode / encode (Venus) | Partial | H.264, HEVC, VP8, VP9 decode, bit-exact with the stream's crop and through a stress test (`tests/venus-stress.sh`), HEVC up to 1536p in real time and 4K at about 20 fps; H.264 and HEVC encode, 4K30 HEVC from the camera ([venus](docs/venus.md)) |
+| Video decode / encode (Venus) | Works | decode H.264, HEVC, VP8, VP9, bit-exact (with the stream's crop, patch 0182) and stable under `tests/venus-stress.sh` (parallel decoders, encode during decode, killed decodes, seeks, resolution changes); real time up to 1536p. Encode H.264 and HEVC, 4K30 HEVC from the camera. Limits: 4K HEVC decode about 20 fps and 4K H.264 encode about 27 fps; 10-bit HEVC untested ([venus](docs/venus.md)) |
 | Cameras (front, rear) | Works | rear 13 MP with autofocus, front 5 MP, through libcamera (`pmaports/libcamera` for AF) ([camera](docs/camera.md)) |
 | **Sensors** | | |
 | Accelerometer, gyroscope, magnetometer | Works | auto-rotate with iio-sensor-proxy; KWin rotation fixes in `pmaports/kwin`; no compass heading yet ([sensors](docs/sensors.md)) |
@@ -86,6 +86,10 @@ from either model help, the SM-T825 most of all:
   (PR #14), **GPU memory clock** (PR #15): tested on an SM-T820 from RAM
   boots; still to check as installed packages, and on an SM-T825.
 - **HEVC decode** (PR #12): the SM-T825, and 10-bit video.
+- **Video on the SM-T825**: `tests/venus-stress.sh` (makes its own clips;
+  run as root; about an hour, `SOAK=20` shortens it).
+- **The SM-T825's modem** (branch `t825-modem`, not in `main`): that it boots
+  its own LTE image, then SIM, registration and SMS ([test steps](https://github.com/wh1ter0z3/gts3lwifi-mainline/blob/t825-modem/docs/lte.md#test-on-an-sm-t825)).
 
 ## Layout
 

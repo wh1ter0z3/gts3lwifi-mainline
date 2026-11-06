@@ -117,6 +117,9 @@ Open:
   GStreamer fails to negotiate ("Video device returned invalid dimensions"), or the
   clip hangs. Linux 7.3.1 fixes it: see below. Commit not identified.
 - **10-bit HEVC (Main 10)** is untested and stays out of the default run.
+- **Crop after a resolution change in mid-stream** (to a size that needs a
+  crop, e.g. 1080p): the frames keep the coded size (1088 lines). See
+  "Crop and stability"; plain files are not affected.
 - **4K HEVC decode** runs at about 20 fps, below real time: see above.
 - ~~**Encoding through GStreamer (`v4l2h264enc`):** the firmware stops with
   `Err_Fatal ... venus\utils\src\vbuffer.c:1219` after about 5 frames.~~
