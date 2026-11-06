@@ -72,6 +72,21 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Widevine DRM | Partial | L3 plays in Waydroid and Flatpak Firefox; L1 not on mainline ([widevine](docs/widevine.md)) |
 | Waydroid (Android 13) | Works | Android apps on Linux, GPU-accelerated; an extra, not a stock Android replacement; optional `-waydroid` subpackage ([waydroid](docs/waydroid.md)) |
 
+## Needs testing
+
+Merged on 2026-11-06 after testing on an SM-T820 only (7.3.1 kernel). Reports
+from either model help, the SM-T825 most of all:
+
+- **Linux 7.3.1 on the SM-T825**: boot, display, touch, Wi-Fi, audio, sensors.
+  Only its device tree was compile-tested (PR #10).
+- **GPS** (PR #9): the moved modem DSP and ADSP/SLPI memory on the SM-T825
+  (GPS stays off there), the modem's battery cost, a real fix through stock
+  geoclue on either model.
+- **Back/Recent touch keys** (PR #13), **headphone jack and headset mic**
+  (PR #14), **GPU memory clock** (PR #15): tested on an SM-T820 from RAM
+  boots; still to check as installed packages, and on an SM-T825.
+- **HEVC decode** (PR #12): the SM-T825, and 10-bit video.
+
 ## Layout
 
 - `dts/` - device trees for both models (the SM-T825 one includes the SM-T820 one), plus test variants; the panel temperature channel is still test-only
