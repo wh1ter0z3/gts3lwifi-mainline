@@ -1,0 +1,5 @@
+# Start rmtfs (which boots the modem DSP) once the MSS remoteproc is
+# registered. rmtfs's own rule fires when /dev/qcom_rmtfs_mem1 appears,
+# which can be before qcom_q6v5_mss has probed; rmtfs.service then skips
+# (see rmtfs.service.d/gts3-gnss.conf).
+ACTION=="add", SUBSYSTEM=="remoteproc", KERNELS=="2080000.remoteproc", TAG+="systemd", ENV{SYSTEMD_WANTS}+="rmtfs.service"

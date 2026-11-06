@@ -44,7 +44,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 34 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
-index e3bc6c272ddd..a88a9f554572 100644
+index e3bc6c272d..a88a9f5545 100644
 --- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
 +++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
 @@ -159,6 +159,24 @@ static int qcom_smgr_request_single_sensor_info(struct qcom_smgr *smgr,
@@ -141,6 +141,3 @@ index e3bc6c272ddd..a88a9f554572 100644
  
  			dev_dbg(smgr->dev, "0x%02x,%d: type %u, %s %s, max %u Hz, range %u\n",
  				smgr->sensors[i].id, j,
--- 
-2.56.0
-

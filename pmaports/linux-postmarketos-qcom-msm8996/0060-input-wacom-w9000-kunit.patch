@@ -17,7 +17,7 @@ Assisted-by: Claude:claude-opus-5-5
  create mode 100644 drivers/input/touchscreen/wacom_w9000_test.c
 
 diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
-index a28328fb7648..0d3ece2a8ec9 100644
+index 9b9ae8ac3f..4cd41553fe 100644
 --- a/drivers/input/touchscreen/Kconfig
 +++ b/drivers/input/touchscreen/Kconfig
 @@ -622,6 +622,16 @@ config TOUCHSCREEN_WACOM_W9000
@@ -38,10 +38,10 @@ index a28328fb7648..0d3ece2a8ec9 100644
  	tristate "LPC32XX touchscreen controller"
  	depends on ARCH_LPC32XX
 diff --git a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
-index aa3915df83b2..9c020678632c 100644
+index bfd9de8338..5167927ff0 100644
 --- a/drivers/input/touchscreen/Makefile
 +++ b/drivers/input/touchscreen/Makefile
-@@ -103,6 +103,7 @@ obj-$(CONFIG_TOUCHSCREEN_TSC2007)	+= tsc2007.o
+@@ -101,6 +101,7 @@ obj-$(CONFIG_TOUCHSCREEN_TSC2007)	+= tsc2007.o
  obj-$(CONFIG_TOUCHSCREEN_WACOM_W8001)	+= wacom_w8001.o
  obj-$(CONFIG_TOUCHSCREEN_WACOM_I2C)	+= wacom_i2c.o
  obj-$(CONFIG_TOUCHSCREEN_WACOM_W9000)	+= wacom_w9000.o
@@ -51,7 +51,7 @@ index aa3915df83b2..9c020678632c 100644
  obj-$(CONFIG_TOUCHSCREEN_WM97XX)	+= wm97xx-ts.o
 diff --git a/drivers/input/touchscreen/wacom_w9000_test.c b/drivers/input/touchscreen/wacom_w9000_test.c
 new file mode 100644
-index 000000000000..b33112068c00
+index 0000000000..b33112068c
 --- /dev/null
 +++ b/drivers/input/touchscreen/wacom_w9000_test.c
 @@ -0,0 +1,263 @@
@@ -318,6 +318,3 @@ index 000000000000..b33112068c00
 +
 +MODULE_DESCRIPTION("KUnit tests for Wacom W9000-series protocol");
 +MODULE_LICENSE("GPL");
--- 
-2.56.0
-

@@ -27,7 +27,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 47 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/extcon/extcon-sm5705.c b/drivers/extcon/extcon-sm5705.c
-index 9d0d24318b6d..41e6860eb313 100644
+index 9d0d24318b..41e6860eb3 100644
 --- a/drivers/extcon/extcon-sm5705.c
 +++ b/drivers/extcon/extcon-sm5705.c
 @@ -17,9 +17,9 @@
@@ -142,6 +142,3 @@ index 9d0d24318b6d..41e6860eb313 100644
  	if (!ret)
  		ret = regmap_bulk_write(muic->regmap, SM5705_MUIC_REG_INTMASK1,
  					int_mask, sizeof(int_mask));
--- 
-2.56.0
-

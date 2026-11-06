@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Mon, 7 Nov 2022 13:50:39 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996pro-xiaomi-scorpio: Remove DSI PHY
+ clocks from MMCC
+
+Having DSI PHY clocks listed in the MMCC node while MDSS is disabled makes
+it defer probe indefinitely, resulting in simplefb and other blocks that
+depend on its clocks to defer probe as well. Remove DSI PHY clocks from
+MMCC to let it probe with MDSS disabled.
+
+Fixes: 48aa636285ad ("arm64: dts: qcom: msm8996: add clocks to the MMCC device node")
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+Link: https://lore.kernel.org/linux-arm-msm/20221107114016.356112-1-y.oudjana@protonmail.com/T/#u
+---
+ .../boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts     | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+index 1cc33c3123..154c7e269b 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+@@ -111,6 +111,19 @@ &mdss {
+ 	status = "disabled";
+ };
+ 
++&mmcc {
++	/*
++	 * Remove non-essential DSI PHY clocks to allow MMCC to probe
++	 * with MDSS disabled.
++	 */
++	clocks = <&xo_board>,
++		 <&gcc GCC_MMSS_NOC_CFG_AHB_CLK>,
++		 <&gcc GPLL0>;
++	clock-names = "xo",
++		      "gcc_mmss_noc_cfg_ahb_clk",
++		      "gpll0";
++};
++
+ &mss_pil {
+ 	firmware-name = "qcom/msm8996/scorpio/mba.mbn",
+ 			"qcom/msm8996/scorpio/modem.mbn";

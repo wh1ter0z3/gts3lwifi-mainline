@@ -33,7 +33,7 @@ Assisted-by: Claude:claude-opus-5-5
  3 files changed, 16 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/media/platform/qcom/venus/helpers.c b/drivers/media/platform/qcom/venus/helpers.c
-index 2e4363f82231..c0bb20e3f6dd 100644
+index 59eee3dd9e..1224485745 100644
 --- a/drivers/media/platform/qcom/venus/helpers.c
 +++ b/drivers/media/platform/qcom/venus/helpers.c
 @@ -535,7 +535,7 @@ session_process_buf(struct venus_inst *inst, struct vb2_v4l2_buffer *vbuf)
@@ -81,7 +81,7 @@ index 2e4363f82231..c0bb20e3f6dd 100644
  
  	mode.type = HFI_BUFFER_OUTPUT;
 diff --git a/drivers/media/platform/qcom/venus/helpers.h b/drivers/media/platform/qcom/venus/helpers.h
-index 358e4f39c9c0..e98f9dd7eadb 100644
+index 358e4f39c9..e98f9dd7ea 100644
 --- a/drivers/media/platform/qcom/venus/helpers.h
 +++ b/drivers/media/platform/qcom/venus/helpers.h
 @@ -44,6 +44,7 @@ int venus_helper_set_num_bufs(struct venus_inst *inst, unsigned int input_bufs,
@@ -93,10 +93,10 @@ index 358e4f39c9c0..e98f9dd7eadb 100644
  int venus_helper_set_bufsize(struct venus_inst *inst, u32 bufsize, u32 buftype);
  int venus_helper_set_multistream(struct venus_inst *inst, bool out_en,
 diff --git a/drivers/media/platform/qcom/venus/venc.c b/drivers/media/platform/qcom/venus/venc.c
-index 7e9068641412..511f29e7ec6a 100644
+index 627bc7ce5f..a67745ea0e 100644
 --- a/drivers/media/platform/qcom/venus/venc.c
 +++ b/drivers/media/platform/qcom/venus/venc.c
-@@ -1108,6 +1108,16 @@ static int venc_queue_setup(struct vb2_queue *q,
+@@ -1111,6 +1111,16 @@ static int venc_queue_setup(struct vb2_queue *q,
  		    sizes[0] < inst->output_buf_size)
  			return -EINVAL;
  
@@ -113,6 +113,3 @@ index 7e9068641412..511f29e7ec6a 100644
  		return 0;
  	}
  
--- 
-2.56.0
-

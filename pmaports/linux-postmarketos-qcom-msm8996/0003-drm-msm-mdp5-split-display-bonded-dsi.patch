@@ -1,4 +1,4 @@
-From a179bf52bd5b68aeb59cfb9973bc48cff2725890 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Mon, 28 Sep 2026 11:57:24 +0530
 Subject: [PATCH] drm/msm/mdp5: add split display support for bonded
@@ -40,7 +40,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
  8 files changed, 318 insertions(+), 34 deletions(-)
 
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_cmd_encoder.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_cmd_encoder.c
-index e5662412d..0c33af738 100644
+index e5662412db..0c33af7389 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_cmd_encoder.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_cmd_encoder.c
 @@ -17,6 +17,23 @@ static struct mdp5_kms *get_kms(struct drm_encoder *encoder)
@@ -220,7 +220,7 @@ index e5662412d..0c33af738 100644
  	mdp5_ctl_set_encoder_state(ctl, pipeline, true);
  
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c
-index 373ae7d9b..d13354191 100644
+index 4c4a897fc1..3f318c270e 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c
 @@ -5,6 +5,7 @@
@@ -282,7 +282,7 @@ index 373ae7d9b..d13354191 100644
  	ret = mdp5_crtc_setup_pipeline(crtc, crtc_state, need_right_mixer);
  	if (ret) {
  		DRM_DEV_ERROR(dev->dev, "couldn't assign mixers %d\n", ret);
-@@ -1214,6 +1240,54 @@ static void mdp5_crtc_pp_done_irq(struct mdp_irq *irq, uint32_t irqstatus)
+@@ -1213,6 +1239,54 @@ static void mdp5_crtc_pp_done_irq(struct mdp_irq *irq, uint32_t irqstatus)
  	complete_all(&mdp5_crtc->pp_completion);
  }
  
@@ -337,7 +337,7 @@ index 373ae7d9b..d13354191 100644
  static void mdp5_crtc_wait_for_pp_done(struct drm_crtc *crtc)
  {
  	struct drm_device *dev = crtc->dev;
-@@ -1226,6 +1300,8 @@ static void mdp5_crtc_wait_for_pp_done(struct drm_crtc *crtc)
+@@ -1225,6 +1299,8 @@ static void mdp5_crtc_wait_for_pp_done(struct drm_crtc *crtc)
  	if (ret == 0)
  		dev_warn_ratelimited(dev->dev, "pp done time out, lm=%d\n",
  				     mdp5_cstate->pipeline.mixer->lm);
@@ -347,7 +347,7 @@ index 373ae7d9b..d13354191 100644
  
  static void mdp5_crtc_wait_for_flush_done(struct drm_crtc *crtc)
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.c
-index fc183fe37..9f67608e0 100644
+index 1eca140616..b475c9c56f 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.c
 @@ -3,6 +3,7 @@
@@ -358,7 +358,7 @@ index fc183fe37..9f67608e0 100644
  #include <linux/string_choices.h>
  #include "mdp5_kms.h"
  #include "mdp5_ctl.h"
-@@ -157,7 +158,8 @@ static void set_ctl_op(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline)
+@@ -145,7 +146,8 @@ static void set_ctl_op(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline)
  		break;
  	}
  
@@ -368,7 +368,7 @@ index fc183fe37..9f67608e0 100644
  		ctl_op |= MDP5_CTL_OP_PACK_3D_ENABLE |
  			  MDP5_CTL_OP_PACK_3D(1);
  
-@@ -166,6 +168,62 @@ static void set_ctl_op(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline)
+@@ -154,6 +156,62 @@ static void set_ctl_op(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline)
  	spin_unlock_irqrestore(&ctl->hw_lock, flags);
  }
  
@@ -431,7 +431,7 @@ index fc183fe37..9f67608e0 100644
  int mdp5_ctl_set_pipeline(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline)
  {
  	struct mdp5_kms *mdp5_kms = get_kms(ctl->ctlm);
-@@ -177,6 +235,9 @@ int mdp5_ctl_set_pipeline(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline)
+@@ -165,6 +223,9 @@ int mdp5_ctl_set_pipeline(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline)
  
  	set_ctl_op(ctl, pipeline);
  
@@ -441,7 +441,7 @@ index fc183fe37..9f67608e0 100644
  	return 0;
  }
  
-@@ -205,6 +266,11 @@ static bool start_signal_needed(struct mdp5_ctl *ctl,
+@@ -193,6 +254,11 @@ static bool start_signal_needed(struct mdp5_ctl *ctl,
   * executed in order to kick off operation and activate all layers.
   * e.g.: DSI command mode, Writeback
   */
@@ -453,7 +453,7 @@ index fc183fe37..9f67608e0 100644
  static void send_start_signal(struct mdp5_ctl *ctl)
  {
  	unsigned long flags;
-@@ -214,6 +280,14 @@ static void send_start_signal(struct mdp5_ctl *ctl)
+@@ -202,6 +268,14 @@ static void send_start_signal(struct mdp5_ctl *ctl)
  	spin_unlock_irqrestore(&ctl->hw_lock, flags);
  }
  
@@ -468,7 +468,7 @@ index fc183fe37..9f67608e0 100644
  /**
   * mdp5_ctl_set_encoder_state() - set the encoder state
   *
-@@ -237,7 +311,7 @@ int mdp5_ctl_set_encoder_state(struct mdp5_ctl *ctl,
+@@ -225,7 +299,7 @@ int mdp5_ctl_set_encoder_state(struct mdp5_ctl *ctl,
  	DBG("intf_%d: %s", intf->num, str_on_off(enabled));
  
  	if (start_signal_needed(ctl, pipeline)) {
@@ -477,7 +477,7 @@ index fc183fe37..9f67608e0 100644
  	}
  
  	return 0;
-@@ -354,12 +428,16 @@ int mdp5_ctl_blend(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline,
+@@ -342,12 +416,16 @@ int mdp5_ctl_blend(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline,
  {
  	struct mdp5_hw_mixer *mixer = pipeline->mixer;
  	struct mdp5_hw_mixer *r_mixer = pipeline->r_mixer;
@@ -494,7 +494,7 @@ index fc183fe37..9f67608e0 100644
  
  	if (ctl_blend_op_flags & MDP5_CTL_BLEND_OP_FLAG_BORDER_OUT) {
  		start_stage = STAGE0;
-@@ -395,9 +473,9 @@ int mdp5_ctl_blend(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline,
+@@ -383,9 +461,9 @@ int mdp5_ctl_blend(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline,
  	ctl_write(ctl, REG_MDP5_CTL_LAYER_EXT_REG(ctl->id, mixer->lm),
  		  blend_ext_cfg);
  	if (r_mixer) {
@@ -506,7 +506,7 @@ index fc183fe37..9f67608e0 100644
  			  r_blend_ext_cfg);
  	}
  	spin_unlock_irqrestore(&ctl->hw_lock, flags);
-@@ -457,6 +535,17 @@ u32 mdp_ctl_flush_mask_pipe(enum mdp5_pipe pipe)
+@@ -445,6 +523,17 @@ u32 mdp_ctl_flush_mask_pipe(enum mdp5_pipe pipe)
  	}
  }
  
@@ -524,7 +524,7 @@ index fc183fe37..9f67608e0 100644
  u32 mdp_ctl_flush_mask_lm(int lm)
  {
  	switch (lm) {
-@@ -569,10 +658,20 @@ u32 mdp5_ctl_commit(struct mdp5_ctl *ctl,
+@@ -530,10 +619,20 @@ u32 mdp5_ctl_commit(struct mdp5_ctl *ctl,
  		spin_lock_irqsave(&ctl->hw_lock, flags);
  		ctl_write(ctl, REG_MDP5_CTL_FLUSH(flush_id), flush_mask);
  		spin_unlock_irqrestore(&ctl->hw_lock, flags);
@@ -547,10 +547,10 @@ index fc183fe37..9f67608e0 100644
  
  	return curr_ctl_flush_mask;
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.h b/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.h
-index 9020e8efc..85adef31b 100644
+index 0c45f7874c..2a2d7b8d76 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.h
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_ctl.h
-@@ -63,6 +63,7 @@ int mdp5_ctl_blend(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline,
+@@ -62,6 +62,7 @@ int mdp5_ctl_blend(struct mdp5_ctl *ctl, struct mdp5_pipeline *pipeline,
   * through @flush_mask parameter in mdp5_ctl_commit(.., flush_mask).
   */
  u32 mdp_ctl_flush_mask_lm(int lm);
@@ -559,7 +559,7 @@ index 9020e8efc..85adef31b 100644
  u32 mdp_ctl_flush_mask_cursor(int cursor_id);
  u32 mdp_ctl_flush_mask_encoder(struct mdp5_interface *intf);
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_encoder.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_encoder.c
-index eaba3b2d7..d9d87a8bc 100644
+index eaba3b2d73..d9d87a8bc2 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_encoder.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_encoder.c
 @@ -224,6 +224,13 @@ static int mdp5_encoder_atomic_check(struct drm_encoder *encoder,
@@ -595,10 +595,10 @@ index eaba3b2d7..d9d87a8bc 100644
  struct drm_encoder *mdp5_encoder_init(struct drm_device *dev,
  				      struct mdp5_interface *intf,
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
-index 61edf6864..024482659 100644
+index 3934cd060b..e8d1e81443 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
-@@ -358,9 +358,11 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
+@@ -361,9 +361,11 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
  		}
  
  		ret = msm_dsi_modeset_init(priv->kms->dsi[dsi_id], dev, encoder);
@@ -611,7 +611,7 @@ index 61edf6864..024482659 100644
  
  		break;
  	}
-@@ -376,6 +378,7 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
+@@ -379,6 +381,7 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
  static int modeset_init(struct mdp5_kms *mdp5_kms)
  {
  	struct drm_device *dev = mdp5_kms->dev;
@@ -619,7 +619,7 @@ index 61edf6864..024482659 100644
  	unsigned int num_crtcs;
  	int i, ret, pi = 0, ci = 0;
  	struct drm_plane *primary[MAX_BASES] = { NULL };
-@@ -393,6 +396,21 @@ static int modeset_init(struct mdp5_kms *mdp5_kms)
+@@ -396,6 +399,21 @@ static int modeset_init(struct mdp5_kms *mdp5_kms)
  			goto fail;
  	}
  
@@ -642,7 +642,7 @@ index 61edf6864..024482659 100644
  	drm_for_each_encoder(encoder, dev)
  		num_encoders++;
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h
-index 36b6842df..594a9932f 100644
+index 7bf2172fce..f787783f2f 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h
 @@ -33,6 +33,9 @@ struct mdp5_kms {
@@ -690,10 +690,10 @@ index 36b6842df..594a9932f 100644
  u32 mdp5_encoder_get_framecount(struct drm_encoder *encoder);
  
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_mixer.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_mixer.c
-index 2822b533f..5491ab723 100644
+index 253b29629e..597862f598 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_mixer.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_mixer.c
-@@ -68,6 +68,8 @@ int mdp5_mixer_assign(struct drm_atomic_state *s, struct drm_crtc *crtc,
+@@ -68,6 +68,8 @@ int mdp5_mixer_assign(struct drm_atomic_commit *s, struct drm_crtc *crtc,
  		if (caps & ~cur->caps)
  			continue;
  
@@ -702,7 +702,7 @@ index 2822b533f..5491ab723 100644
  		if (r_mixer) {
  			int pair_idx;
  
-@@ -78,11 +80,12 @@ int mdp5_mixer_assign(struct drm_atomic_state *s, struct drm_crtc *crtc,
+@@ -78,11 +80,12 @@ int mdp5_mixer_assign(struct drm_atomic_commit *s, struct drm_crtc *crtc,
  			if (new_state->hwmixer_to_crtc[pair_idx])
  				continue;
  
@@ -717,7 +717,7 @@ index 2822b533f..5491ab723 100644
  		 * switch the CRTC from Normal mode to Source Split mode
  		 * without requiring a full modeset if we had already
  		 * assigned this CRTC a pair-able LM.
-@@ -94,8 +97,13 @@ int mdp5_mixer_assign(struct drm_atomic_state *s, struct drm_crtc *crtc,
+@@ -94,8 +97,13 @@ int mdp5_mixer_assign(struct drm_atomic_commit *s, struct drm_crtc *crtc,
  		 * so easily. For now, ignore the possibility of requiring
  		 * a full modeset.
  		 */
@@ -732,7 +732,7 @@ index 2822b533f..5491ab723 100644
  	}
  
  	if (!(*mixer))
-@@ -105,6 +113,10 @@ int mdp5_mixer_assign(struct drm_atomic_state *s, struct drm_crtc *crtc,
+@@ -105,6 +113,10 @@ int mdp5_mixer_assign(struct drm_atomic_commit *s, struct drm_crtc *crtc,
  		return -ENOMEM;
  
  	DBG("assigning Layer Mixer %d to crtc %s", (*mixer)->lm, crtc->name);

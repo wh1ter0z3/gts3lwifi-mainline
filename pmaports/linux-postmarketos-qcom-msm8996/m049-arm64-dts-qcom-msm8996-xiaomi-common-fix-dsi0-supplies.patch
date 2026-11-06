@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Sun, 26 Sep 2021 13:51:15 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-common: Fix dsi0 supplies
+
+Rename vdd-supply to vdda-supply and add vcca-supply.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+index 398a8ab40d..bb7d6a14be 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+@@ -249,7 +249,8 @@ &mdss {
+ &mdss_dsi0 {
+ 	status = "okay";
+ 
+-	vdd-supply = <&vreg_l2a_1p25>;
++	vdda-supply = <&vreg_l2a_1p25>;
++	vcca-supply = <&vreg_l28a_0p925>;
+ 	vddio-supply = <&vreg_l14a_1p8>;
+ 
+ 	pinctrl-names = "default", "sleep";

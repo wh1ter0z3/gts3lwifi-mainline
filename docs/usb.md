@@ -38,10 +38,10 @@ new: `CONFIG_TYPEC_S2MM005`, `CONFIG_USB_DWC3_DUAL_ROLE`,
 - 0084: the charger lets a Type-C contract above 5.5 V decide the input
   limit even when the MUIC's BC1.2 limit is higher.
 - 0085 (`msm8996.dtsi`): the USB 3.0 controller reset, see below.
-- 0086-0087: upstream's fixes for the NCM gadget's network device across
-  role switches (ec35c1969650, e002e92e88e1, in 6.19.12), backported: the
-  6.19.5 gadget kept a freed dwc3 gadget as the parent of `usb0` and
-  oopsed after several hundred host/device switches.
+- Dropped with 7.3: 0086-0087, upstream's fixes for the NCM gadget's network
+  device across role switches (ec35c1969650, e002e92e88e1). The 6.19.5 gadget
+  kept a freed dwc3 gadget as the parent of `usb0` and oopsed after several
+  hundred host/device switches.
 - Board DT: the charger's `usb-otg-vbus` regulator; the connector as dual
   role with `vbus-supply`, `sink-pdos` (5 V / 3 A, 9 V / 1.65 A: the input
   limit Samsung uses for its 15 W chargers, `HV_MAINS` in

@@ -13,7 +13,7 @@ Signed-off-by: Jayden Milne <linux@jayd.ml>
  1 file changed, 23 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/media/i2c/imx258.c b/drivers/media/i2c/imx258.c
-index 61faa8daf5eb..6768c64fb620 100644
+index 9c3a6579df..0776960f6b 100644
 --- a/drivers/media/i2c/imx258.c
 +++ b/drivers/media/i2c/imx258.c
 @@ -9,6 +9,7 @@
@@ -32,7 +32,7 @@ index 61faa8daf5eb..6768c64fb620 100644
  };
  
  static inline struct imx258 *to_imx258(struct v4l2_subdev *_sd)
-@@ -1115,10 +1117,23 @@ static int imx258_power_on(struct device *dev)
+@@ -1127,10 +1129,23 @@ static int imx258_power_on(struct device *dev)
  	ret = clk_prepare_enable(imx258->clk);
  	if (ret) {
  		dev_err(dev, "failed to enable clock\n");
@@ -57,7 +57,7 @@ index 61faa8daf5eb..6768c64fb620 100644
  	return ret;
  }
  
-@@ -1127,6 +1142,7 @@ static int imx258_power_off(struct device *dev)
+@@ -1139,6 +1154,7 @@ static int imx258_power_off(struct device *dev)
  	struct v4l2_subdev *sd = dev_get_drvdata(dev);
  	struct imx258 *imx258 = to_imx258(sd);
  
@@ -65,7 +65,7 @@ index 61faa8daf5eb..6768c64fb620 100644
  	clk_disable_unprepare(imx258->clk);
  	regulator_bulk_disable(IMX258_NUM_SUPPLIES, imx258->supplies);
  
-@@ -1371,6 +1387,12 @@ static int imx258_probe(struct i2c_client *client)
+@@ -1383,6 +1399,12 @@ static int imx258_probe(struct i2c_client *client)
  		return ret;
  	}
  
@@ -78,6 +78,3 @@ index 61faa8daf5eb..6768c64fb620 100644
  	ret = imx258_get_regulators(imx258);
  	if (ret)
  		return dev_err_probe(imx258->dev, ret,
--- 
-2.56.0
-

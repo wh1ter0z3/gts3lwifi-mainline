@@ -34,7 +34,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 16 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/media/platform/qcom/camss/camss-ispif.c b/drivers/media/platform/qcom/camss/camss-ispif.c
-index 43d3b133f773..232b92308aa0 100644
+index 8ced6b7862..379d2f9f1e 100644
 --- a/drivers/media/platform/qcom/camss/camss-ispif.c
 +++ b/drivers/media/platform/qcom/camss/camss-ispif.c
 @@ -315,24 +315,33 @@ static int ispif_vfe_reset(struct ispif_device *ispif, u8 vfe_id)
@@ -78,6 +78,3 @@ index 43d3b133f773..232b92308aa0 100644
  
  	return ret;
  }
--- 
-2.56.0
-

@@ -18,15 +18,15 @@ with the parameter, at the first power-on and after blank and unblank.
 
 Assisted-by: Claude:claude-opus-5-5
 ---
- drivers/gpu/drm/msm/dsi/dsi_host.c    | 22 +++++-----------
- drivers/gpu/drm/msm/dsi/dsi_manager.c | 38 +++++++++++++++++++--------
- 2 files changed, 34 insertions(+), 26 deletions(-)
+ drivers/gpu/drm/msm/dsi/dsi_host.c    | 22 +++++----------
+ drivers/gpu/drm/msm/dsi/dsi_manager.c | 39 +++++++++++++++++++--------
+ 2 files changed, 35 insertions(+), 26 deletions(-)
 
 diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
-index de977c2c7f1e..b76b7cae985c 100644
+index 321ee62af6..1492f1a915 100644
 --- a/drivers/gpu/drm/msm/dsi/dsi_host.c
 +++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
-@@ -187,7 +187,7 @@ struct msm_dsi_host {
+@@ -188,7 +188,7 @@ struct msm_dsi_host {
  	bool registered;
  	bool power_on;
  	bool enabled;
@@ -35,7 +35,7 @@ index de977c2c7f1e..b76b7cae985c 100644
  	int irq;
  };
  
-@@ -775,16 +775,6 @@ bool msm_dsi_host_is_wide_bus_enabled(struct mipi_dsi_host *host)
+@@ -818,16 +818,6 @@ bool msm_dsi_host_is_wide_bus_enabled(struct mipi_dsi_host *host)
  }
  
  /* Bring-up aid: colour component order on the link (0 RGB, 1 RBG, 2 BGR, 3 BRG, 4 GRB, 5 GBR) */
@@ -52,7 +52,7 @@ index de977c2c7f1e..b76b7cae985c 100644
  static unsigned int rgb_swap = SWAP_RGB;
  module_param(rgb_swap, uint, 0444);
  MODULE_PARM_DESC(rgb_swap, "DSI RGB component order: 0 RGB (default), 1 RBG, 2 BGR, 3 BRG, 4 GRB, 5 GBR");
-@@ -896,12 +886,14 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
+@@ -939,12 +929,14 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
  		if (msm_dsi_phy_set_continuous_clock(phy, true))
  			lane_ctrl &= ~DSI_LANE_CTRL_HS_REQ_SEL_PHY;
  
@@ -69,7 +69,7 @@ index de977c2c7f1e..b76b7cae985c 100644
  			 */
  			lane_ctrl &= ~DSI_LANE_CTRL_CLKLN_HS_FORCE_REQUEST;
  			dsi_write(msm_host, REG_DSI_LANE_CTRL, lane_ctrl);
-@@ -2127,6 +2119,7 @@ void msm_dsi_host_unregister(struct mipi_dsi_host *host)
+@@ -2192,6 +2184,7 @@ void msm_dsi_host_unregister(struct mipi_dsi_host *host)
  	}
  }
  
@@ -77,7 +77,7 @@ index de977c2c7f1e..b76b7cae985c 100644
  void msm_dsi_host_start_deferred_hs_clk(struct mipi_dsi_host *host)
  {
  	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
-@@ -2139,8 +2132,7 @@ void msm_dsi_host_start_deferred_hs_clk(struct mipi_dsi_host *host)
+@@ -2204,8 +2197,7 @@ void msm_dsi_host_start_deferred_hs_clk(struct mipi_dsi_host *host)
  	dsi_write(msm_host, REG_DSI_LANE_CTRL,
  		  lane_ctrl | DSI_LANE_CTRL_CLKLN_HS_FORCE_REQUEST);
  	msm_host->hs_clk_pending = false;
@@ -88,7 +88,7 @@ index de977c2c7f1e..b76b7cae985c 100644
  
  int msm_dsi_host_xfer_prepare(struct mipi_dsi_host *host,
 diff --git a/drivers/gpu/drm/msm/dsi/dsi_manager.c b/drivers/gpu/drm/msm/dsi/dsi_manager.c
-index 48dd96f677d1..1b648d7b9eb0 100644
+index c1d28ff78d..df0df6efd7 100644
 --- a/drivers/gpu/drm/msm/dsi/dsi_manager.c
 +++ b/drivers/gpu/drm/msm/dsi/dsi_manager.c
 @@ -281,6 +281,23 @@ void dsi_mgr_power_off(struct msm_dsi *msm_dsi)
@@ -112,14 +112,15 @@ index 48dd96f677d1..1b648d7b9eb0 100644
 +		msm_dsi_host_start_deferred_hs_clk(msm_dsi1->host);
 +}
 +
- static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge)
+ static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge,
+ 				      struct drm_atomic_commit *commit)
  {
- 	int id = dsi_mgr_bridge_get_id(bridge);
-@@ -337,6 +354,14 @@ static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge)
+@@ -338,6 +355,15 @@ static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge,
  	pm_runtime_put_sync(&msm_dsi->pdev->dev);
  }
  
-+static void dsi_mgr_bridge_enable(struct drm_bridge *bridge)
++static void dsi_mgr_bridge_enable(struct drm_bridge *bridge,
++				  struct drm_atomic_commit *commit)
 +{
 +	int id = dsi_mgr_bridge_get_id(bridge);
 +
@@ -130,15 +131,15 @@ index 48dd96f677d1..1b648d7b9eb0 100644
  void msm_dsi_manager_tpg_enable(void)
  {
  	struct msm_dsi *m_dsi = dsi_mgr_get_dsi(DSI_0);
-@@ -447,6 +472,7 @@ static int dsi_mgr_bridge_attach(struct drm_bridge *bridge,
- static const struct drm_bridge_funcs dsi_mgr_bridge_funcs = {
+@@ -452,6 +478,7 @@ static const struct drm_bridge_funcs dsi_mgr_bridge_funcs = {
+ 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
  	.attach = dsi_mgr_bridge_attach,
- 	.pre_enable = dsi_mgr_bridge_pre_enable,
-+	.enable = dsi_mgr_bridge_enable,
- 	.post_disable = dsi_mgr_bridge_post_disable,
+ 	.atomic_pre_enable = dsi_mgr_bridge_pre_enable,
++	.atomic_enable = dsi_mgr_bridge_enable,
+ 	.atomic_post_disable = dsi_mgr_bridge_post_disable,
  	.mode_set = dsi_mgr_bridge_mode_set,
  	.mode_valid = dsi_mgr_bridge_mode_valid,
-@@ -526,17 +552,7 @@ int msm_dsi_manager_cmd_xfer(int id, const struct mipi_dsi_msg *msg)
+@@ -527,17 +554,7 @@ int msm_dsi_manager_cmd_xfer(int id, const struct mipi_dsi_msg *msg)
  		goto restore_host0;
  	}
  
@@ -157,6 +158,3 @@ index 48dd96f677d1..1b648d7b9eb0 100644
  
  	ret = is_read ? msm_dsi_host_cmd_rx(host, msg) :
  			msm_dsi_host_cmd_tx(host, msg);
--- 
-2.56.0
-

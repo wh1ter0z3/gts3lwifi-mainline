@@ -5,8 +5,9 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 - SoC: Qualcomm APQ8096 (SM-T820) / MSM8996 (SM-T825), Snapdragon 820; PMICs PM8994 + PM8004
 - Storage: eMMC (not UFS)
 - Boot chain: Samsung S-Boot -> lk2nd -> Linux
-- Kernel: [msm8996-mainline/linux](https://gitlab.com/msm8996-mainline/linux) `v6.19.5-msm8996`,
-  packaged as postmarketOS `linux-postmarketos-qcom-msm8996` with our patches (`pmaports/`)
+- Kernel: Linux 7.3.1 with the [msm8996-mainline](https://gitlab.com/msm8996-mainline/linux) patches rebased
+  (see [docs/kernel-7.3.md](docs/kernel-7.3.md)), packaged as postmarketOS `linux-postmarketos-qcom-msm8996`
+  with our patches (`pmaports/`)
 
 ## Models
 
@@ -19,7 +20,7 @@ only changes the SoC ID, the modem memory and the pins TrustZone may own.
 | Model | State |
 |---|---|
 | SM-T820 (Wi-Fi, `gts3lwifi`) | main target, everything below is tested on it |
-| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM, GPS) work in progress; top speakers left out until checked |
+| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM) work in progress, GPS off until tested; top speakers left out until checked |
 
 ## Status
 
@@ -50,7 +51,8 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | USB device mode | Works | network, serial, storage |
 | USB host / OTG, USB 3 | Works | 5 Gbit/s as a host ([usb](docs/usb.md)) |
 | USB-C power (PD) | Works | 5 V / 3 A or 9 V / 1.65 A sink, 5 V / 1.5 A source ([usb](docs/usb.md)) |
-| LTE modem, SIM, GPS (SM-T825) | WIP | the modem (MSS) bring-up needs the SM-T825's own modem firmware and memory layout |
+| GPS / GNSS | Works on the SM-T820 | through geoclue (modem DSP in the main DT, gnss-share `qmi_loc` driver), first fix 2.5-8 min after boot. Off on the SM-T825 until tested ([gnss](docs/gnss.md)) |
+| LTE modem, SIM (SM-T825) | WIP | the modem (MSS) bring-up needs the SM-T825's own modem firmware and memory layout |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
 | Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
@@ -73,10 +75,10 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 ## Layout
 
 - `dts/` - device trees for both models (the SM-T825 one includes the SM-T820 one), plus test variants; the panel temperature channel is still test-only
-- `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage), the kernel patches, libcamera with autofocus, KWin with rotation fixes, and iio-sensor-proxy with a restart fix
+- `pmaports/` - postmarketOS device package (with the optional Waydroid subpackage and GNSS), the kernel patches, libcamera with autofocus, KWin with rotation fixes, iio-sensor-proxy with a restart fix, and gnss-share with a QMI LOC driver
 - `lk2nd/` - lk2nd device entries for the Wi-Fi and LTE models
 - `scripts/` - regenerate the kernel patch, build tester packages
-- `tools/` - on-device debugging aids: MMIO and PMIC (SPMI) register access, manual PCIe link retrain, TLMM pin sampling, RT5508 amplifier probe
+- `tools/` - on-device debugging aids: MMIO and PMIC (SPMI) register access, manual PCIe link retrain, TLMM pin sampling, RT5508 amplifier probe, GNSS test helper and QMI LOC client
 - `kernel/` - out-of-tree kernel additions (panel, fuel gauge, charger and MUIC drivers, bindings, Kconfig snippet)
 - `docs/` - notes per subsystem, the postmarketOS install, tester instructions and boot logs
 

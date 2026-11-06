@@ -27,7 +27,7 @@ Assisted-by: Claude:claude-opus-5-5
  create mode 100644 drivers/i2c/muxes/i2c-hotplug-gpio.c
 
 diff --git a/drivers/i2c/muxes/Kconfig b/drivers/i2c/muxes/Kconfig
-index 6d2f66810cdc..0e410be5ce55 100644
+index 6d2f66810c..0e410be5ce 100644
 --- a/drivers/i2c/muxes/Kconfig
 +++ b/drivers/i2c/muxes/Kconfig
 @@ -19,6 +19,17 @@ config I2C_ARB_GPIO_CHALLENGE
@@ -49,7 +49,7 @@ index 6d2f66810cdc..0e410be5ce55 100644
  	tristate "GPIO-based I2C multiplexer"
  	depends on GPIOLIB
 diff --git a/drivers/i2c/muxes/Makefile b/drivers/i2c/muxes/Makefile
-index 4b24f49515a7..36df41c8cf05 100644
+index 4b24f49515..36df41c8cf 100644
 --- a/drivers/i2c/muxes/Makefile
 +++ b/drivers/i2c/muxes/Makefile
 @@ -6,6 +6,7 @@ obj-$(CONFIG_I2C_ARB_GPIO_CHALLENGE)	+= i2c-arb-gpio-challenge.o
@@ -62,7 +62,7 @@ index 4b24f49515a7..36df41c8cf05 100644
  obj-$(CONFIG_I2C_MUX_LTC4306)	+= i2c-mux-ltc4306.o
 diff --git a/drivers/i2c/muxes/i2c-hotplug-gpio.c b/drivers/i2c/muxes/i2c-hotplug-gpio.c
 new file mode 100644
-index 000000000000..7f56964e285e
+index 0000000000..7f56964e28
 --- /dev/null
 +++ b/drivers/i2c/muxes/i2c-hotplug-gpio.c
 @@ -0,0 +1,263 @@
@@ -329,6 +329,3 @@ index 000000000000..7f56964e285e
 +MODULE_DESCRIPTION("Hot-plugged I2C bus detected by GPIO");
 +MODULE_AUTHOR("Michał Mirosław <mirq-linux@rere.qmqm.pl>");
 +MODULE_LICENSE("GPL");
--- 
-2.56.0
-

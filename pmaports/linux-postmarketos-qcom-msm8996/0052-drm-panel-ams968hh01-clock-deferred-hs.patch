@@ -20,10 +20,10 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 13 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-index d32ad9f32522..9ff673427b29 100644
+index 6caf3260e3..75ac95cb4d 100644
 --- a/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
 +++ b/drivers/gpu/drm/panel/panel-samsung-ams968hh01.c
-@@ -711,7 +711,7 @@ static void ams968hh01_gamma_tables(struct ams968hh01 *ctx, const u8 *mtp)
+@@ -712,7 +712,7 @@ static void ams968hh01_gamma_tables(struct ams968hh01 *ctx, const u8 *mtp)
   * The panel's own gamma offsets (MTP): 33 bytes in register 0x83 order,
   * read the vendor way (B0 <offset>, then a generic read of D8) from
   * offset 0x5a. The DDI only answers reads before the init sequence when
@@ -32,7 +32,7 @@ index d32ad9f32522..9ff673427b29 100644
   * without the offsets the tables stay those of a panel with zero offsets.
   */
  static int ams968hh01_read_mtp(struct ams968hh01 *ctx)
-@@ -855,8 +855,9 @@ static int ams968hh01_prepare(struct drm_panel *panel)
+@@ -856,8 +856,9 @@ static int ams968hh01_prepare(struct drm_panel *panel)
  	msleep(10);
  
  	/*
@@ -62,6 +62,3 @@ index d32ad9f32522..9ff673427b29 100644
  
  		ret = mipi_dsi_attach(ctx->dsi[i]);
  		if (ret < 0) {
--- 
-2.56.0
-

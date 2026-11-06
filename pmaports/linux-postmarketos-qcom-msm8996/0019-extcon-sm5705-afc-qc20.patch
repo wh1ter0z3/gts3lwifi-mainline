@@ -26,7 +26,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 185 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/extcon/extcon-sm5705.c b/drivers/extcon/extcon-sm5705.c
-index e26dc3f1d..bba76f3e4 100644
+index e26dc3f1d8..bba76f3e4b 100644
 --- a/drivers/extcon/extcon-sm5705.c
 +++ b/drivers/extcon/extcon-sm5705.c
 @@ -8,11 +8,19 @@
@@ -289,6 +289,3 @@ index e26dc3f1d..bba76f3e4 100644
  	return 0;
  }
  
--- 
-2.53.0
-

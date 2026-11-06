@@ -38,7 +38,7 @@ Assisted-by: Claude:claude-opus-5-5
  2 files changed, 15 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
-index b4f016bdab50..9cadbc5d89a0 100644
+index b4f016bdab..9cadbc5d89 100644
 --- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
 +++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
 @@ -268,7 +268,7 @@ static void qcom_smgr_buffering_report_handler(struct qmi_handle *hdl,
@@ -81,7 +81,7 @@ index b4f016bdab50..9cadbc5d89a0 100644
  }
  
 diff --git a/include/linux/iio/common/qcom_smgr.h b/include/linux/iio/common/qcom_smgr.h
-index 25ee29a323c8..ce726b382dfa 100644
+index 25ee29a323..ce726b382d 100644
 --- a/include/linux/iio/common/qcom_smgr.h
 +++ b/include/linux/iio/common/qcom_smgr.h
 @@ -55,6 +55,9 @@ struct qcom_smgr_sensor {
@@ -94,6 +94,3 @@ index 25ee29a323c8..ce726b382dfa 100644
  	struct iio_dev *iio_dev;
  };
  
--- 
-2.56.0
-

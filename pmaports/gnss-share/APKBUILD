@@ -1,0 +1,79 @@
+# Forked from Alpine for temporary downstream patches
+# gts3: Alpine community/gnss-share 0.8.2-r21 plus a fix for clients that
+# connect at the same time (0001) and the qmi_loc driver (the GNSS engine of
+# a Qualcomm modem DSP through QMI LOC over QRTR, for the SM-T820's
+# GNSS-only modem), 0002-0004; docs/gnss.md. Not sent upstream:
+# postmarketOS doesn't take contributions made with generative AI tools.
+# Contributor: Clayton Craft <clayton@craftyguy.net>
+# Maintainer: Clayton Craft <clayton@craftyguy.net>
+pkgname=gnss-share
+_pkgver=0.8.2
+pkgver=9999$_pkgver
+pkgrel=0
+pkgdesc="GNSS location provider, supporting multiple concurrent clients"
+url="https://gitlab.postmarketos.org/postmarketOS/gnss-share"
+arch="all"
+license="GPL-3.0-or-later"
+makedepends="go scdoc"
+subpackages="
+	$pkgname-doc
+	$pkgname-geoclue::noarch
+	$pkgname-openrc
+	$pkgname-systemd
+	"
+source="
+	https://gitlab.postmarketos.org/postmarketOS/gnss-share/-/archive/$_pkgver/gnss-share-$_pkgver.tar.gz
+	0001-gnss-start-the-driver-once-when-clients-connect-at-t.patch
+	0002-qrtr-add-an-AF_QIPCRTR-socket-and-a-name-service-cli.patch
+	0003-qmi-add-QMI-message-encoding-for-QRTR.patch
+	0004-gnss-add-a-qmi_loc-driver-for-Qualcomm-modems.patch
+	geoclue.conf
+	"
+builddir="$srcdir/gnss-share-$_pkgver"
+options="net" # go
+
+build() {
+	go build -v -o gnss-share ./cmd/gnss-share
+	scdoc < doc/gnss-share.1.scd > gnss-share.1
+	scdoc < doc/gnss-share.conf.5.scd > gnss-share.conf.5
+}
+
+check() {
+	go test ./...
+}
+
+package() {
+	install -Dm755 "gnss-share" \
+		"$pkgdir/usr/bin/gnss-share"
+
+	install -Dm644 "gnss-share.conf" \
+		"$pkgdir/etc/gnss-share.conf"
+
+	install -Dm755 "openrc/gnss-share.initd" \
+		"$pkgdir/etc/init.d/gnss-share"
+	install -Dm755 "openrc/gnss-share.confd" \
+		"$pkgdir/etc/conf.d/gnss-share"
+	install -Dm644 "$srcdir"/geoclue.conf \
+		"$pkgdir"/etc/geoclue/conf.d/gnss-share.conf
+
+	install -Dm644 "systemd/gnss-share.service" \
+		"$pkgdir"/usr/lib/systemd/system/gnss-share.service
+
+	install -Dm644 gnss-share.1 -t "$pkgdir"/usr/share/man/man1/
+	install -Dm644 gnss-share.conf.5 -t "$pkgdir"/usr/share/man/man5/
+}
+
+geoclue() {
+	install_if="$pkgname=$pkgver-r$pkgrel geoclue"
+
+	amove etc/geoclue/conf.d/gnss-share.conf
+}
+
+sha512sums="
+796f5e9b7429013e0a67babcf7435aef156064cc60546c8256435b1a3696d8b354e4dd85ec403bdc8ea7dc896083bce68c58ac29a1cb7f9a74f4bc7340c5ce9c  gnss-share-0.8.2.tar.gz
+db5d6ca42ea8e3760f1f1c6ede4646dc493364e1981ff8f1040004e13f596dfbea5e08383d88771e2a099df945ba2231f533937022ba5fc4a25334279c1bf302  0001-gnss-start-the-driver-once-when-clients-connect-at-t.patch
+07b311b4432dad6d7015c5fcd829c135ba947ff6233d612e1b9d46658299d4e6e9e5ee406af8eb36131a4b501d0c607d53360cf5bf41928485147a04d14b7af2  0002-qrtr-add-an-AF_QIPCRTR-socket-and-a-name-service-cli.patch
+a41739db0847ebcbadac42a3daf0b0d83d04f9388809b1e49b78b0194867ed8af8bb7e3a98e00baf928f882e36c7fa2e6e1103f6e3455746df0634cb426cf51d  0003-qmi-add-QMI-message-encoding-for-QRTR.patch
+5c6ec605ca426246dc67df75971bdba72d0669765607c7594ea433ab51ca27e338e053de452d746b2372f3cd678c11d571280bc3c9ef3dbf1503f575c038ed41  0004-gnss-add-a-qmi_loc-driver-for-Qualcomm-modems.patch
+f1d1c391d7104dd079ee6c7c08b99f6a84749b59eb66f3ceb1994d36198840e81f011b573af455eff1231ddbaf0c786c77785f799355d6d82005317633bca1ed  geoclue.conf
+"

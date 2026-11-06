@@ -28,7 +28,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 232 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
-index f1cac69a8..6cc0f110a 100644
+index f1cac69a8a..6cc0f110a8 100644
 --- a/drivers/power/supply/sm5705_charger.c
 +++ b/drivers/power/supply/sm5705_charger.c
 @@ -29,6 +29,7 @@
@@ -353,6 +353,3 @@ index f1cac69a8..6cc0f110a 100644
  	if (client->irq) {
  		/* clear what the bootloader left, then unmask our events */
  		ret = regmap_bulk_read(chg->regmap, SM5705_REG_INT1, ints,
--- 
-2.53.0
-

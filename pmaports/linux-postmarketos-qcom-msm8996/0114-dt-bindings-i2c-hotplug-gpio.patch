@@ -18,7 +18,7 @@ Assisted-by: Claude:claude-opus-5-5
 
 diff --git a/Documentation/devicetree/bindings/i2c/i2c-hotplug-gpio.yaml b/Documentation/devicetree/bindings/i2c/i2c-hotplug-gpio.yaml
 new file mode 100644
-index 000000000000..d1d5d830c91b
+index 0000000000..d1d5d830c9
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/i2c/i2c-hotplug-gpio.yaml
 @@ -0,0 +1,65 @@
@@ -87,6 +87,3 @@ index 000000000000..d1d5d830c91b
 +        #size-cells = <0>;
 +    };
 +...
--- 
-2.56.0
-

@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Thu, 15 Jul 2021 09:28:34 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-*: Enable SMBCHG
+
+Enable pmi8994_smbchg, and set usb-psy-name in dwc3 to point
+to its USB charge path supply, allowing it to configure
+the input current limit when plugged into a SDP.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+Link: https://lore.kernel.org/linux-arm-msm/20220808073459.396278-1-y.oudjana@protonmail.com/T/#m50a27504be972ad0b6649b465c5dbc308271835a
+---
+ arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+index 5a6fdf2b13..6fa7a16790 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+@@ -338,6 +338,12 @@ led@3 {
+ 	};
+ };
+ 
++&pmi8994_smbchg {
++	status = "okay";
++
++	monitored-battery = <&battery>;
++};
++
+ &slim_msm {
+ 	status = "okay";
+ 
+@@ -404,6 +410,8 @@ &usb3_dwc3 {
+ 	phys = <&hsusb_phy1>;
+ 	phy-names = "usb2-phy";
+ 
++	usb-psy-name = "qcom-smbchg-usb";
++
+ 	maximum-speed = "high-speed";
+ 	snps,is-utmi-l1-suspend;
+ 	snps,usb2-gadget-lpm-disable;

@@ -1,0 +1,371 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Tue, 7 Oct 2025 11:03:09 +0300
+Subject: [PATCH] media: qcom: camss: Make ispif_reset go though VFE user
+ counting logic
+
+VFE users are counted on calls to vfe_get/put such that VFE remains
+enabled as long as it has a single user. ispif_reset overrides this
+and directly enables/disables VFE power domains and clocks through
+different functions, meaning if there are existing VFE users when
+ispif_reset is called, it will simply cut them off. Additionally,
+once the last of existing users calls vfe_put, it leads to calling
+device_link_del with a NULL vfe->genpd_link causing a NULL pointer
+dereference.
+
+To avoid this, make ispif_reset go through the same counting logic
+as regular consumers. Since resetting ISPIF does not need to fully
+power on VFE but rather only its power domain and clocks, separate
+handling those into new functions that can be called from both
+ispif_reset and vfe_get/put. The ispif_reset routine also enables/
+disables power domains and clocks of both VFE instances regardless
+of which one the reset is issued for, so now only power on/off the
+relevant resources. camss_pm_domain_on/off were only used here so
+remove them, as well as clock_for_reset in platform resource structs.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ .../media/platform/qcom/camss/camss-ispif.c   | 42 +--------
+ .../media/platform/qcom/camss/camss-ispif.h   |  2 -
+ drivers/media/platform/qcom/camss/camss-vfe.c | 85 ++++++++++++++-----
+ drivers/media/platform/qcom/camss/camss-vfe.h |  5 ++
+ drivers/media/platform/qcom/camss/camss.c     | 27 ------
+ drivers/media/platform/qcom/camss/camss.h     |  3 -
+ 6 files changed, 73 insertions(+), 91 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-ispif.c b/drivers/media/platform/qcom/camss/camss-ispif.c
+index 20ccd7b1f1..8ced6b7862 100644
+--- a/drivers/media/platform/qcom/camss/camss-ispif.c
++++ b/drivers/media/platform/qcom/camss/camss-ispif.c
+@@ -321,30 +321,18 @@ static int ispif_vfe_reset(struct ispif_device *ispif, u8 vfe_id)
+ static int ispif_reset(struct ispif_device *ispif, u8 vfe_id)
+ {
+ 	struct camss *camss = ispif->camss;
++	struct vfe_device *vfe = &camss->vfe[vfe_id];
+ 	int ret;
+ 
+-	ret = camss_pm_domain_on(camss, PM_DOMAIN_VFE0);
+-	if (ret < 0)
+-		return ret;
+-
+-	ret = camss_pm_domain_on(camss, PM_DOMAIN_VFE1);
+-	if (ret < 0)
+-		return ret;
+-
+-	ret = camss_enable_clocks(ispif->nclocks_for_reset,
+-				  ispif->clock_for_reset,
+-				  camss->dev);
+-	if (ret < 0)
++	ret = vfe_power_on(vfe);
++	if (ret)
+ 		return ret;
+ 
+ 	ret = ispif_vfe_reset(ispif, vfe_id);
+ 	if (ret)
+ 		dev_dbg(camss->dev, "ISPIF Reset failed\n");
+ 
+-	camss_disable_clocks(ispif->nclocks_for_reset, ispif->clock_for_reset);
+-
+-	camss_pm_domain_off(camss, PM_DOMAIN_VFE0);
+-	camss_pm_domain_off(camss, PM_DOMAIN_VFE1);
++	vfe_power_off(vfe);
+ 
+ 	return ret;
+ }
+@@ -1205,28 +1193,6 @@ int msm_ispif_subdev_init(struct camss *camss,
+ 		clock->nfreqs = 0;
+ 	}
+ 
+-	ispif->nclocks_for_reset = 0;
+-	while (res->clock_for_reset[ispif->nclocks_for_reset])
+-		ispif->nclocks_for_reset++;
+-
+-	ispif->clock_for_reset = devm_kcalloc(dev,
+-					      ispif->nclocks_for_reset,
+-					      sizeof(*ispif->clock_for_reset),
+-					      GFP_KERNEL);
+-	if (!ispif->clock_for_reset)
+-		return -ENOMEM;
+-
+-	for (i = 0; i < ispif->nclocks_for_reset; i++) {
+-		struct camss_clock *clock = &ispif->clock_for_reset[i];
+-
+-		clock->clk = devm_clk_get(dev, res->clock_for_reset[i]);
+-		if (IS_ERR(clock->clk))
+-			return PTR_ERR(clock->clk);
+-
+-		clock->freq = NULL;
+-		clock->nfreqs = 0;
+-	}
+-
+ 	mutex_init(&ispif->power_lock);
+ 	ispif->power_count = 0;
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-ispif.h b/drivers/media/platform/qcom/camss/camss-ispif.h
+index dff6d5b35c..f7b3368248 100644
+--- a/drivers/media/platform/qcom/camss/camss-ispif.h
++++ b/drivers/media/platform/qcom/camss/camss-ispif.h
+@@ -54,8 +54,6 @@ struct ispif_device {
+ 	char irq_name[30];
+ 	struct camss_clock *clock;
+ 	int nclocks;
+-	struct camss_clock  *clock_for_reset;
+-	int nclocks_for_reset;
+ 	struct completion reset_complete[MSM_ISPIF_VFE_NUM];
+ 	int power_count;
+ 	struct mutex power_lock;
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index 319d191589..0c58b19218 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -1076,13 +1076,14 @@ static int vfe_check_clock_rates(struct vfe_device *vfe)
+ 	return 0;
+ }
+ 
++
+ /*
+- * vfe_get - Power up and reset VFE module
++ * vfe_power_on - Power on VFE power resources
+  * @vfe: VFE Device
+  *
+  * Return 0 on success or a negative error code otherwise
+  */
+-int vfe_get(struct vfe_device *vfe)
++int vfe_power_on(struct vfe_device *vfe)
+ {
+ 	int ret;
+ 
+@@ -1105,16 +1106,6 @@ int vfe_get(struct vfe_device *vfe)
+ 					  vfe->camss->dev);
+ 		if (ret < 0)
+ 			goto error_pm_runtime_get;
+-
+-		ret = vfe_reset(vfe);
+-		if (ret < 0)
+-			goto error_reset;
+-
+-		vfe_reset_output_maps(vfe);
+-
+-		vfe_init_outputs(vfe);
+-
+-		vfe->res->hw_ops->hw_version(vfe);
+ 	} else {
+ 		ret = vfe_check_clock_rates(vfe);
+ 		if (ret < 0)
+@@ -1126,9 +1117,6 @@ int vfe_get(struct vfe_device *vfe)
+ 
+ 	return 0;
+ 
+-error_reset:
+-	camss_disable_clocks(vfe->nclocks, vfe->clock);
+-
+ error_pm_runtime_get:
+ 	pm_runtime_put_sync(vfe->camss->dev);
+ error_domain_off:
+@@ -1141,10 +1129,10 @@ int vfe_get(struct vfe_device *vfe)
+ }
+ 
+ /*
+- * vfe_put - Power down VFE module
++ * vfe_power_off - Power off VFE power resources
+  * @vfe: VFE Device
+  */
+-void vfe_put(struct vfe_device *vfe)
++void vfe_power_off(struct vfe_device *vfe)
+ {
+ 	mutex_lock(&vfe->power_lock);
+ 
+@@ -1152,10 +1140,6 @@ void vfe_put(struct vfe_device *vfe)
+ 		dev_err(vfe->camss->dev, "vfe power off on power_count == 0\n");
+ 		goto exit;
+ 	} else if (vfe->power_count == 1) {
+-		if (vfe->was_streaming) {
+-			vfe->was_streaming = 0;
+-			vfe->res->hw_ops->vfe_halt(vfe);
+-		}
+ 		camss_disable_clocks(vfe->nclocks, vfe->clock);
+ 		pm_runtime_put_sync(vfe->camss->dev);
+ 		vfe->res->hw_ops->pm_domain_off(vfe);
+@@ -1167,6 +1151,65 @@ void vfe_put(struct vfe_device *vfe)
+ 	mutex_unlock(&vfe->power_lock);
+ }
+ 
++/*
++ * vfe_get - Power up and reset VFE module
++ * @vfe: VFE Device
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++int vfe_get(struct vfe_device *vfe)
++{
++	int ret;
++
++	ret = vfe_power_on(vfe);
++	if (ret)
++		return ret;
++
++	mutex_lock(&vfe->enable_lock);
++
++	if (vfe->enable_count == 0) {
++		ret = vfe_reset(vfe);
++		if (ret < 0) {
++			vfe_power_off(vfe);
++			goto exit;
++		}
++
++		vfe_reset_output_maps(vfe);
++
++		vfe_init_outputs(vfe);
++
++		vfe->res->hw_ops->hw_version(vfe);
++	}
++	vfe->enable_count++;
++exit:
++	mutex_unlock(&vfe->enable_lock);
++
++	return 0;
++}
++
++/*
++ * vfe_put - Power down VFE module
++ * @vfe: VFE Device
++ */
++void vfe_put(struct vfe_device *vfe)
++{
++	mutex_lock(&vfe->enable_lock);
++
++	if (vfe->power_count == 0) {
++		dev_err(vfe->camss->dev, "vfe enable_count == 0\n");
++		goto exit;
++	} else if (vfe->enable_count == 1 && vfe->was_streaming) {
++		vfe->was_streaming = 0;
++		vfe->res->hw_ops->vfe_halt(vfe);
++	}
++	vfe->enable_count--;
++
++exit:
++	mutex_unlock(&vfe->enable_lock);
++
++	vfe_power_off(vfe);
++}
++
+ /*
+  * vfe_flush_buffers - Return all vb2 buffers
+  * @vid: Video device structure
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
+index ae9dad353a..a2188a81bc 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.h
++++ b/drivers/media/platform/qcom/camss/camss-vfe.h
+@@ -156,6 +156,8 @@ struct vfe_device {
+ 	struct completion halt_complete;
+ 	struct mutex power_lock;
+ 	int power_count;
++	struct mutex enable_lock;
++	int enable_count;
+ 	struct mutex stream_lock;
+ 	int stream_count;
+ 	spinlock_t output_lock;
+@@ -250,6 +252,9 @@ extern const struct vfe_hw_ops vfe_ops_480;
+ extern const struct vfe_hw_ops vfe_ops_680;
+ extern const struct vfe_hw_ops vfe_ops_gen3;
+ 
++int vfe_power_on(struct vfe_device *vfe);
++void vfe_power_off(struct vfe_device *vfe);
++
+ int vfe_get(struct vfe_device *vfe);
+ void vfe_put(struct vfe_device *vfe);
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 2123f6388e..f925f33b88 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -125,7 +125,6 @@ static const struct camss_subdev_resources ispif_res_8x16 = {
+ 	.clock = { "top_ahb", "ahb", "ispif_ahb",
+ 		   "csi0", "csi0_pix", "csi0_rdi",
+ 		   "csi1", "csi1_pix", "csi1_rdi" },
+-	.clock_for_reset = { "vfe0", "csi_vfe0" },
+ 	.reg = { "ispif", "csi_clk_mux" },
+ 	.interrupt = { "ispif" },
+ };
+@@ -272,7 +271,6 @@ static const struct camss_subdev_resources ispif_res_8x39 = {
+ 		   "csi0", "csi0_pix", "csi0_rdi",
+ 		   "csi1", "csi1_pix", "csi1_rdi",
+ 		   "csi2", "csi2_pix", "csi2_rdi" },
+-	.clock_for_reset = { "vfe0", "csi_vfe0" },
+ 	.reg = { "ispif", "csi_clk_mux" },
+ 	.interrupt = { "ispif" },
+ };
+@@ -388,7 +386,6 @@ static const struct camss_subdev_resources ispif_res_8x53 = {
+ 		   "csi0", "csi0_pix", "csi0_rdi",
+ 		   "csi1", "csi1_pix", "csi1_rdi",
+ 		   "csi2", "csi2_pix", "csi2_rdi" },
+-	.clock_for_reset = { "vfe0", "csi_vfe0", "vfe1", "csi_vfe1" },
+ 	.reg = { "ispif", "csi_clk_mux" },
+ 	.interrupt = { "ispif" },
+ };
+@@ -623,7 +620,6 @@ static const struct camss_subdev_resources ispif_res_8x96 = {
+ 		   "csi1", "csi1_pix", "csi1_rdi",
+ 		   "csi2", "csi2_pix", "csi2_rdi",
+ 		   "csi3", "csi3_pix", "csi3_rdi" },
+-	.clock_for_reset = { "vfe0", "csi_vfe0", "vfe1", "csi_vfe1" },
+ 	.reg = { "ispif", "csi_clk_mux" },
+ 	.interrupt = { "ispif" },
+ };
+@@ -1000,7 +996,6 @@ static const struct camss_subdev_resources ispif_res_660 = {
+ 		   "csi1", "csi1_pix", "csi1_rdi",
+ 		   "csi2", "csi2_pix", "csi2_rdi",
+ 		   "csi3", "csi3_pix", "csi3_rdi" },
+-	.clock_for_reset = { "vfe0", "csi_vfe0", "vfe1", "csi_vfe1" },
+ 	.reg = { "ispif", "csi_clk_mux" },
+ 	.interrupt = { "ispif" },
+ };
+@@ -4668,28 +4663,6 @@ int camss_get_pixel_clock(struct media_entity *entity, u64 *pixel_clock)
+ 	return 0;
+ }
+ 
+-int camss_pm_domain_on(struct camss *camss, int id)
+-{
+-	int ret = 0;
+-
+-	if (id < camss->res->vfe_num) {
+-		struct vfe_device *vfe = &camss->vfe[id];
+-
+-		ret = vfe->res->hw_ops->pm_domain_on(vfe);
+-	}
+-
+-	return ret;
+-}
+-
+-void camss_pm_domain_off(struct camss *camss, int id)
+-{
+-	if (id < camss->res->vfe_num) {
+-		struct vfe_device *vfe = &camss->vfe[id];
+-
+-		vfe->res->hw_ops->pm_domain_off(vfe);
+-	}
+-}
+-
+ static int vfe_parent_dev_ops_get(struct camss *camss, int id)
+ {
+ 	int ret = -EINVAL;
+diff --git a/drivers/media/platform/qcom/camss/camss.h b/drivers/media/platform/qcom/camss/camss.h
+index 93d691c8ac..d966a5d5b8 100644
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -47,7 +47,6 @@
+ struct camss_subdev_resources {
+ 	struct regulator_bulk_data regulators[CAMSS_RES_MAX];
+ 	char *clock[CAMSS_RES_MAX];
+-	char *clock_for_reset[CAMSS_RES_MAX];
+ 	u32 clock_rate[CAMSS_RES_MAX][CAMSS_RES_MAX];
+ 	char *reg[CAMSS_RES_MAX];
+ 	char *interrupt[CAMSS_RES_MAX];
+@@ -171,8 +170,6 @@ struct media_pad *camss_find_sensor_pad(struct media_entity *entity);
+ s64 camss_get_link_freq(struct media_entity *entity, unsigned int bpp,
+ 			unsigned int lanes);
+ int camss_get_pixel_clock(struct media_entity *entity, u64 *pixel_clock);
+-int camss_pm_domain_on(struct camss *camss, int id);
+-void camss_pm_domain_off(struct camss *camss, int id);
+ int camss_vfe_get(struct camss *camss, int id);
+ void camss_vfe_put(struct camss *camss, int id);
+ void camss_delete(struct camss *camss);

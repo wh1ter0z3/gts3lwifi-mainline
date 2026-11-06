@@ -24,10 +24,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 4 insertions(+)
 
 diff --git a/sound/soc/qcom/apq8096.c b/sound/soc/qcom/apq8096.c
-index 4f6594cc7..36038a66f 100644
+index cfd6438dbc..353f2fe69f 100644
 --- a/sound/soc/qcom/apq8096.c
 +++ b/sound/soc/qcom/apq8096.c
-@@ -7,6 +7,7 @@
+@@ -6,6 +6,7 @@
  #include <sound/soc.h>
  #include <sound/soc-dapm.h>
  #include <sound/pcm.h>
@@ -35,7 +35,7 @@ index 4f6594cc7..36038a66f 100644
  #include "common.h"
  
  #define SLIM_MAX_TX_PORTS 16
-@@ -20,9 +21,12 @@ static int apq8096_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+@@ -19,9 +20,12 @@ static int apq8096_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
  					SNDRV_PCM_HW_PARAM_RATE);
  	struct snd_interval *channels = hw_param_interval(params,
  					SNDRV_PCM_HW_PARAM_CHANNELS);

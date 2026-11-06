@@ -1,0 +1,168 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Tue, 2 Aug 2022 13:05:51 +0100
+Subject: [PATCH] soc: qcom: Add PMIC secure register write helpers
+
+Some peripheral blocks in Qualcomm PMICs such as some in the
+switch-mode battery charger and fuel gauge of PMI8994 and later
+have secure registers that need to be unlocked first before being
+written to. Add some helper functions to do what is needed to
+write to those registers.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ MAINTAINERS                       |  6 +++
+ drivers/soc/qcom/Kconfig          |  4 ++
+ drivers/soc/qcom/Makefile         |  1 +
+ drivers/soc/qcom/pmic-sec-write.c | 83 +++++++++++++++++++++++++++++++
+ include/soc/qcom/pmic-sec-write.h |  9 ++++
+ 5 files changed, 103 insertions(+)
+ create mode 100644 drivers/soc/qcom/pmic-sec-write.c
+ create mode 100644 include/soc/qcom/pmic-sec-write.h
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index c501de723e..64a64a77e3 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -22586,6 +22586,12 @@ F:	drivers/firmware/qcom/qcom_pas.h
+ F:	drivers/firmware/qcom/qcom_pas_tee.c
+ F:	include/linux/firmware/qcom/qcom_pas.h
+ 
++QUALCOMM PMIC SECURE WRITE HELPERS
++M:	Yassine Oudjana <y.oudjana@protonmail.com>
++L:	linux-arm-msm@vger.kernel.org
++S:	Maintained
++F:	drivers/soc/qcom/pmic-sec-write.c
++
+ QUALCOMM SMB CHARGER DRIVER
+ M:	Casey Connolly <casey.connolly@linaro.org>
+ L:	linux-arm-msm@vger.kernel.org
+diff --git a/drivers/soc/qcom/Kconfig b/drivers/soc/qcom/Kconfig
+index 2b524154d9..844c32d816 100644
+--- a/drivers/soc/qcom/Kconfig
++++ b/drivers/soc/qcom/Kconfig
+@@ -122,6 +122,10 @@ config QCOM_PMIC_GLINK
+ 	  Say yes here to support USB-C and battery status on modern Qualcomm
+ 	  platforms.
+ 
++config QCOM_PMIC_SEC_WRITE
++	tristate
++	depends on REGMAP
++
+ config QCOM_RAMP_CTRL
+ 	tristate "Qualcomm Ramp Controller driver"
+ 	help
+diff --git a/drivers/soc/qcom/Makefile b/drivers/soc/qcom/Makefile
+index 798643be35..658b65b12b 100644
+--- a/drivers/soc/qcom/Makefile
++++ b/drivers/soc/qcom/Makefile
+@@ -40,4 +40,5 @@ obj-$(CONFIG_QCOM_ICC_BWMON)	+= icc-bwmon.o
+ qcom_ice-objs			+= ice.o
+ obj-$(CONFIG_QCOM_INLINE_CRYPTO_ENGINE)	+= qcom_ice.o
+ obj-$(CONFIG_QCOM_PBS) +=	qcom-pbs.o
++obj-$(CONFIG_QCOM_PMIC_SEC_WRITE)	+= pmic-sec-write.o
+ obj-$(CONFIG_QCOM_UBWC_CONFIG) += ubwc_config.o
+diff --git a/drivers/soc/qcom/pmic-sec-write.c b/drivers/soc/qcom/pmic-sec-write.c
+new file mode 100644
+index 0000000000..a72400436b
+--- /dev/null
++++ b/drivers/soc/qcom/pmic-sec-write.c
+@@ -0,0 +1,83 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Helper functions for secure register writes on Qualcomm PMICs
++ */
++
++#include <linux/export.h>
++#include <linux/module.h>
++#include <linux/regmap.h>
++#include <linux/spinlock.h>
++#include <soc/qcom/pmic-sec-write.h>
++
++#define SEC_ACCESS_ADDR		0x00d0
++#define SEC_ACCESS_VALUE	0x00a5
++#define PERPH_BASE_MASK		0xff00
++
++static DEFINE_SPINLOCK(sec_access_lock);
++
++/**
++ * @brief qcom_pmic_sec_write() - Write to a secure register
++ *
++ * @param regmap Pointer to regmap
++ * @param addr   Address of register to write into
++ * @param val    Buffer to write bytes from
++ * @param len    Length of register in bytes
++ * @return 0 on success, -errno on failure
++ *
++ * @details: Some blocks have registers that need to be unlocked first before
++ * being written to. This function unlocks secure registers in the peripheral
++ * block of a given register then writes a given value to the register.
++ */
++int qcom_pmic_sec_write(struct regmap *regmap, u16 addr, u8 *val, int len)
++{
++	unsigned long flags;
++	unsigned int perph_base;
++	int ret;
++
++	spin_lock_irqsave(&sec_access_lock, flags);
++
++	/* Get peripheral base of given register */
++	perph_base = (addr & PERPH_BASE_MASK);
++
++	ret = regmap_write(regmap, perph_base + SEC_ACCESS_ADDR,
++			   SEC_ACCESS_VALUE);
++	if (ret)
++		goto out;
++
++	ret = regmap_bulk_write(regmap, addr, val, len);
++out:
++	spin_unlock_irqrestore(&sec_access_lock, flags);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_pmic_sec_write);
++
++/**
++ * @brief qcom_pmic_sec_masked_write() - Masked write to secure registers
++ *
++ * @param regmap Pointer to regmap
++ * @param addr   Address of register to write into
++ * @param mask   Mask to apply on value
++ * @param val    value to be written
++ * @return 0 on success, -errno on failure
++ *
++ * @details: Masked version of smbchg_sec_write().
++ */
++int qcom_pmic_sec_masked_write(struct regmap *regmap, u16 addr, u8 mask, u8 val)
++{
++	int reg;
++	int ret;
++
++	ret = regmap_read(regmap, addr, &reg);
++	if (ret)
++		return ret;
++
++	reg &= ~mask;
++	reg |= val & mask;
++
++	return qcom_pmic_sec_write(regmap, addr, (u8 *)&reg, 1);
++}
++EXPORT_SYMBOL_GPL(qcom_pmic_sec_masked_write);
++
++MODULE_AUTHOR("Yassine Oudjana <y.oudjana@protonmail.com>");
++MODULE_DESCRIPTION("Qualcomm PMIC secure write helpers");
++MODULE_LICENSE("GPL");
+diff --git a/include/soc/qcom/pmic-sec-write.h b/include/soc/qcom/pmic-sec-write.h
+new file mode 100644
+index 0000000000..cc2229620c
+--- /dev/null
++++ b/include/soc/qcom/pmic-sec-write.h
+@@ -0,0 +1,9 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++
++#ifndef __SOC_ARCH_QCOM_PMIC_SEC_WRITE_H__
++#define __SOC_ARCH_QCOM_PMIC_SEC_WRITE_H__
++
++int qcom_pmic_sec_write(struct regmap *regmap, u16 addr, u8 *val, int len);
++int qcom_pmic_sec_masked_write(struct regmap *regmap, u16 addr, u8 mask, u8 val);
++
++#endif

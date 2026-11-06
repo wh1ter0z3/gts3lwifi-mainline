@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Sat, 2 Jul 2022 12:10:10 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996pro-xiaomi-scorpio: Add rear camera
+ lens
+
+Add a node for the AK7375 VCM that moves the lens on the rear
+camera module.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+index 02c8c1709c..326e9b6b8f 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+@@ -147,6 +147,14 @@ &cci {
+ &cci_i2c0 {
+ 	clock-frequency = <1000000>;
+ 
++	ak7375: camera-lens@c {
++		compatible = "asahi-kasei,ak7375";
++		reg = <0x0c>;
++
++		vdd-supply = <&vreg_l23a_2p8>;
++		vio-supply = <&vreg_lvs1a_1p8>;
++	};
++
+ 	/* Rear camera */
+ 	camera-sensor@1a {
+ 		compatible = "sony,imx318";
+@@ -166,6 +174,8 @@ camera-sensor@1a {
+ 		pinctrl-0 = <&cam_sensor_rear_default>, <&mclk0_default>;
+ 		pinctrl-1 = <&cam_sensor_rear_sleep>, <&mclk0_sleep>;
+ 
++		lens-focus = <&ak7375>;
++
+ 		port {
+ 			imx318_ep: endpoint {
+ 				data-lanes = <0 1 2 3>;

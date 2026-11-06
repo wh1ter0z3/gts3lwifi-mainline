@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Thu, 10 Jul 2025 09:25:44 +0100
+Subject: [PATCH] net: qrtr: smd: Rename qdev to qsdev
+
+In preparation to turn QRTR into a bus, rename replace all current
+occurences of qdev in smd.c with qsdev in order to distinguish between the
+to-be-added QRTR device which represents a QRTR service with the existing
+QRTR SMD device which represents the endpoint through which services are
+provided.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ net/qrtr/smd.c | 34 ++++++++++++++++++----------------
+ 1 file changed, 18 insertions(+), 16 deletions(-)
+
+diff --git a/net/qrtr/smd.c b/net/qrtr/smd.c
+index c91bf030fb..940ee9349a 100644
+--- a/net/qrtr/smd.c
++++ b/net/qrtr/smd.c
+@@ -20,15 +20,15 @@ struct qrtr_smd_dev {
+ static int qcom_smd_qrtr_callback(struct rpmsg_device *rpdev,
+ 				  void *data, int len, void *priv, u32 addr)
+ {
+-	struct qrtr_smd_dev *qdev = dev_get_drvdata(&rpdev->dev);
++	struct qrtr_smd_dev *qsdev = dev_get_drvdata(&rpdev->dev);
+ 	int rc;
+ 
+-	if (!qdev)
++	if (!qsdev)
+ 		return -EAGAIN;
+ 
+-	rc = qrtr_endpoint_post(&qdev->ep, data, len);
++	rc = qrtr_endpoint_post(&qsdev->ep, data, len);
+ 	if (rc == -EINVAL) {
+-		dev_err(qdev->dev, "invalid ipcrouter packet\n");
++		dev_err(qsdev->dev, "invalid ipcrouter packet\n");
+ 		/* return 0 to let smd drop the packet */
+ 		rc = 0;
+ 	}
+@@ -39,14 +39,14 @@ static int qcom_smd_qrtr_callback(struct rpmsg_device *rpdev,
+ /* from qrtr to smd */
+ static int qcom_smd_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
+ {
+-	struct qrtr_smd_dev *qdev = container_of(ep, struct qrtr_smd_dev, ep);
++	struct qrtr_smd_dev *qsdev = container_of(ep, struct qrtr_smd_dev, ep);
+ 	int rc;
+ 
+ 	rc = skb_linearize(skb);
+ 	if (rc)
+ 		goto out;
+ 
+-	rc = rpmsg_send(qdev->channel, skb->data, skb->len);
++	rc = rpmsg_send(qsdev->channel, skb->data, skb->len);
+ 
+ out:
+ 	if (rc)
+@@ -58,22 +58,24 @@ static int qcom_smd_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
+ 
+ static int qcom_smd_qrtr_probe(struct rpmsg_device *rpdev)
+ {
+-	struct qrtr_smd_dev *qdev;
++	struct qrtr_smd_dev *qsdev;
+ 	int rc;
+ 
+-	qdev = devm_kzalloc(&rpdev->dev, sizeof(*qdev), GFP_KERNEL);
+-	if (!qdev)
++	qsdev = devm_kzalloc(&rpdev->dev, sizeof(*qsdev), GFP_KERNEL);
++	if (!qsdev)
+ 		return -ENOMEM;
+ 
+-	qdev->channel = rpdev->ept;
+-	qdev->dev = &rpdev->dev;
+-	qdev->ep.xmit = qcom_smd_qrtr_send;
++	qsdev->channel = rpdev->ept;
++	qsdev->dev = &rpdev->dev;
++	qsdev->ep.xmit = qcom_smd_qrtr_send;
++	qsdev->ep.add_device = qcom_smd_qrtr_add_device;
++	qsdev->ep.del_device = qcom_smd_qrtr_del_device;
+ 
+-	rc = qrtr_endpoint_register(&qdev->ep, QRTR_EP_NID_AUTO);
++	rc = qrtr_endpoint_register(&qsdev->ep, QRTR_EP_NID_AUTO);
+ 	if (rc)
+ 		return rc;
+ 
+-	dev_set_drvdata(&rpdev->dev, qdev);
++	dev_set_drvdata(&rpdev->dev, qsdev);
+ 
+ 	dev_dbg(&rpdev->dev, "Qualcomm SMD QRTR driver probed\n");
+ 
+@@ -82,9 +84,9 @@ static int qcom_smd_qrtr_probe(struct rpmsg_device *rpdev)
+ 
+ static void qcom_smd_qrtr_remove(struct rpmsg_device *rpdev)
+ {
+-	struct qrtr_smd_dev *qdev = dev_get_drvdata(&rpdev->dev);
++	struct qrtr_smd_dev *qsdev = dev_get_drvdata(&rpdev->dev);
+ 
+-	qrtr_endpoint_unregister(&qdev->ep);
++	qrtr_endpoint_unregister(&qsdev->ep);
+ 
+ 	dev_set_drvdata(&rpdev->dev, NULL);
+ }

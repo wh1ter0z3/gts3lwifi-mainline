@@ -23,10 +23,10 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 18 insertions(+), 14 deletions(-)
 
 diff --git a/drivers/gpu/drm/msm/msm_gem.c b/drivers/gpu/drm/msm/msm_gem.c
-index 017411a0bf45..89d4f12f6fe0 100644
+index c4cff3d53d..f90afffe34 100644
 --- a/drivers/gpu/drm/msm/msm_gem.c
 +++ b/drivers/gpu/drm/msm/msm_gem.c
-@@ -46,13 +46,23 @@ static int msm_gem_open(struct drm_gem_object *obj, struct drm_file *file)
+@@ -47,13 +47,23 @@ static int msm_gem_open(struct drm_gem_object *obj, struct drm_file *file)
  	return 0;
  }
  
@@ -52,7 +52,7 @@ index 017411a0bf45..89d4f12f6fe0 100644
  
  	update_ctx_mem(file, -obj->size);
  	msm_gem_vma_put(obj);
-@@ -80,9 +90,7 @@ static void msm_gem_close(struct drm_gem_object *obj, struct drm_file *file)
+@@ -81,9 +91,7 @@ static void msm_gem_close(struct drm_gem_object *obj, struct drm_file *file)
  	dma_resv_wait_timeout(obj->resv, DMA_RESV_USAGE_BOOKKEEP, false,
  			      MAX_SCHEDULE_TIMEOUT);
  
@@ -62,7 +62,7 @@ index 017411a0bf45..89d4f12f6fe0 100644
  }
  
  /*
-@@ -105,11 +113,7 @@ void msm_gem_vma_put(struct drm_gem_object *obj)
+@@ -106,11 +114,7 @@ void msm_gem_vma_put(struct drm_gem_object *obj)
  		return;
  
  #ifdef CONFIG_DRM_MSM_KMS
@@ -74,7 +74,7 @@ index 017411a0bf45..89d4f12f6fe0 100644
  #endif
  }
  
-@@ -436,8 +440,8 @@ static struct drm_gpuva *lookup_vma(struct drm_gem_object *obj,
+@@ -409,8 +413,8 @@ static struct drm_gpuva *lookup_vma(struct drm_gem_object *obj,
   * mapping.
   */
  static void
@@ -85,7 +85,7 @@ index 017411a0bf45..89d4f12f6fe0 100644
  {
  	struct drm_gpuvm_bo *vm_bo, *tmp;
  
-@@ -693,7 +697,7 @@ void msm_gem_unpin_iova(struct drm_gem_object *obj, struct drm_gpuvm *vm)
+@@ -669,7 +673,7 @@ void msm_gem_unpin_iova(struct drm_gem_object *obj, struct drm_gpuvm *vm)
  		msm_gem_unpin_locked(obj);
  	}
  	if (!is_kms_vm(vm))
@@ -94,7 +94,7 @@ index 017411a0bf45..89d4f12f6fe0 100644
  	drm_exec_fini(&exec);     /* drop locks */
  }
  
-@@ -877,7 +881,7 @@ void msm_gem_purge(struct drm_gem_object *obj)
+@@ -831,7 +835,7 @@ void msm_gem_purge(struct drm_gem_object *obj)
  	GEM_WARN_ON(!is_purgeable(msm_obj));
  
  	/* Get rid of any iommu mapping(s): */
@@ -103,7 +103,7 @@ index 017411a0bf45..89d4f12f6fe0 100644
  
  	msm_gem_vunmap(obj);
  
-@@ -915,7 +919,7 @@ void msm_gem_evict(struct drm_gem_object *obj)
+@@ -869,7 +873,7 @@ void msm_gem_evict(struct drm_gem_object *obj)
  	GEM_WARN_ON(is_unevictable(msm_obj));
  
  	/* Get rid of any iommu mapping(s): */
@@ -112,7 +112,7 @@ index 017411a0bf45..89d4f12f6fe0 100644
  
  	drm_vma_node_unmap(&obj->vma_node, dev->anon_inode->i_mapping);
  
-@@ -1128,7 +1132,7 @@ static void msm_gem_free_object(struct drm_gem_object *obj)
+@@ -1082,7 +1086,7 @@ static void msm_gem_free_object(struct drm_gem_object *obj)
  				drm_exec_retry_on_contention(&exec);
  			}
  		}
@@ -121,6 +121,3 @@ index 017411a0bf45..89d4f12f6fe0 100644
  		drm_exec_fini(&exec);     /* drop locks */
  	}
  
--- 
-2.56.0
-

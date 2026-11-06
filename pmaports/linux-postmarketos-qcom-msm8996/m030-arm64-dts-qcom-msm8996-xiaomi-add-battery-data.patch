@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Wed, 16 Feb 2022 19:13:30 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-*: Add battery data
+
+Add battery nodes needed for PMIC power supply blocks.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi    | 7 +++++++
+ arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts     | 5 +++++
+ arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts | 5 +++++
+ arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts | 5 +++++
+ 4 files changed, 22 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+index 3a74ae93be..5a6fdf2b13 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+@@ -11,6 +11,13 @@
+ #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+ 
+ / {
++	battery: battery {
++	compatible = "simple-battery";
++
++	voltage-min-design-microvolt = <3400000>;
++	voltage-max-design-microvolt = <4400000>;
++	};
++
+ 	divclk1_cdc: divclk1 {
+ 		compatible = "gpio-gate-clock";
+ 		clocks = <&rpmcc RPM_SMD_DIV_CLK1>;
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
+index ca22e2f9d2..2fadac0c09 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
+@@ -35,6 +35,11 @@ &adsp_pil {
+ 	firmware-name = "qcom/msm8996/gemini/adsp.mbn";
+ };
+ 
++&battery {
++	charge-full-design-microamp-hours = <3000000>;
++	constant-charge-current-max-microamp = <3000000>;
++};
++
+ &blsp2_i2c3 {
+ 	haptics: drv2604@5a {
+ 		compatible = "ti,drv2604";
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
+index 7e2ee9a4e9..13c613138b 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
+@@ -23,6 +23,11 @@ &adsp_pil {
+ 	firmware-name = "qcom/msm8996/natrium/adsp.mbn";
+ };
+ 
++&battery {
++	charge-full-design-microamp-hours = <3800000>;
++	constant-charge-current-max-microamp = <3200000>;
++};
++
+ &blsp2_i2c6 {
+ 	touchscreen@20 {
+ 		compatible = "syna,rmi4-i2c";
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+index 768eef5192..251a2b0e96 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+@@ -91,6 +91,11 @@ &adsp_pil {
+ 	firmware-name = "qcom/msm8996/scorpio/adsp.mbn";
+ };
+ 
++&battery {
++	charge-full-design-microamp-hours = <4070000>;
++	constant-charge-current-max-microamp = <3100000>;
++};
++
+ &blsp2_i2c6 {
+ 	touchkey: touchkey@28 {
+ 		compatible = "cypress,sf3155";

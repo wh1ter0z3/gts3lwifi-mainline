@@ -25,7 +25,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 61 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
-index c88e6d4bf..5e7715391 100644
+index c88e6d4bfe..5e7715391b 100644
 --- a/drivers/power/supply/sm5705_charger.c
 +++ b/drivers/power/supply/sm5705_charger.c
 @@ -64,6 +64,8 @@
@@ -161,6 +161,3 @@ index c88e6d4bf..5e7715391 100644
  		chg->extcon_nb.notifier_call = sm5705_chg_extcon_notifier;
  		ret = devm_extcon_register_notifier_all(dev, chg->edev,
  							&chg->extcon_nb);
--- 
-2.53.0
-

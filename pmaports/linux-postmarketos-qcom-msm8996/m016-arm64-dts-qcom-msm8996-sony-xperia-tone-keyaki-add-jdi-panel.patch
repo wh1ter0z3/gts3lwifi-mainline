@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raidro Manchester <raibo.quadrofus@gmail.com>
+Date: Tue, 3 Aug 2021 15:15:56 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996-sony-xperia-tone-keyaki: add jdi
+ panel
+
+---
+ arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-keyaki.dts | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-keyaki.dts b/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-keyaki.dts
+index b4ebeea4e2..417c46fcc5 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-keyaki.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996-sony-xperia-tone-keyaki.dts
+@@ -26,6 +26,10 @@ &pm8994_l30 {
+ 	regulator-pull-down;
+ };
+ 
++&panel {
++	compatible = "sony,synaptics-jdi-keyaki";
++};
++
+ &gpu {
+ 	zap-shader {
+ 		firmware-name = "qcom/msm8996/keyaki/a530_zap.mbn";

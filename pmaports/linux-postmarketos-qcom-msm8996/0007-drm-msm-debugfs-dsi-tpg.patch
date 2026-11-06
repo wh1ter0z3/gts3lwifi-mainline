@@ -1,4 +1,4 @@
-From 749ee058b72cb7d490d57a19d206d6d797b6fb75 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Mon, 19 Oct 2026 11:10:51 +0530
 Subject: [PATCH] drm/msm: add a debugfs trigger for the DSI test pattern
@@ -17,7 +17,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
  2 files changed, 28 insertions(+)
 
 diff --git a/drivers/gpu/drm/msm/msm_debugfs.c b/drivers/gpu/drm/msm/msm_debugfs.c
-index 97dc70876..932c1361f 100644
+index f12701e286..72fee71c0f 100644
 --- a/drivers/gpu/drm/msm/msm_debugfs.c
 +++ b/drivers/gpu/drm/msm/msm_debugfs.c
 @@ -210,6 +210,28 @@ static const struct file_operations msm_kms_fops = {
@@ -59,10 +59,10 @@ index 97dc70876..932c1361f 100644
  	if (priv->kms->funcs->debugfs_init)
  		priv->kms->funcs->debugfs_init(priv->kms, minor);
 diff --git a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
-index 6d847d593..59afde252 100644
+index eb4bbae855..dc131ea3ca 100644
 --- a/drivers/gpu/drm/msm/msm_drv.h
 +++ b/drivers/gpu/drm/msm/msm_drv.h
-@@ -302,6 +302,7 @@ int msm_dsi_modeset_init(struct msm_dsi *msm_dsi, struct drm_device *dev,
+@@ -299,6 +299,7 @@ int msm_dsi_modeset_init(struct msm_dsi *msm_dsi, struct drm_device *dev,
  void msm_dsi_snapshot(struct msm_disp_state *disp_state, struct msm_dsi *msm_dsi);
  bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi);
  bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi);
@@ -70,7 +70,7 @@ index 6d847d593..59afde252 100644
  bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi);
  bool msm_dsi_wide_bus_enabled(struct msm_dsi *msm_dsi);
  struct drm_dsc_config *msm_dsi_get_dsc_config(struct msm_dsi *msm_dsi);
-@@ -326,6 +327,9 @@ static inline bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi)
+@@ -323,6 +324,9 @@ static inline bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi)
  {
  	return false;
  }

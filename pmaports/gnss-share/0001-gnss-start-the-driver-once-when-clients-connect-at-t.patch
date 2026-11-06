@@ -1,0 +1,177 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <gnss-share@jayd.ml>
+Date: Sun, 1 Nov 2026 16:21:59 -0700
+Subject: [PATCH 1/4] gnss: start the driver once when clients connect at the
+ same time
+
+Subscribe counted the subscriptions after adding its own, without a lock:
+when two clients connected at the same time, both saw two subscribers and
+neither started the driver, so neither got any data. In the same way a
+client that connected while the last one left could see the driver stop
+after its own Subscribe had found it running.
+
+Take g.mu around adding a subscription and counting, and around removing
+one and counting, so that exactly one Subscribe starts the driver and the
+Unsubscribe that leaves no subscriber stops it.
+
+The new test connects and disconnects eight clients at once, 50 times.
+---
+ internal/gnss/gnss.go      |  13 +++--
+ internal/gnss/gnss_test.go | 101 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 110 insertions(+), 4 deletions(-)
+ create mode 100644 internal/gnss/gnss_test.go
+
+diff --git a/internal/gnss/gnss.go b/internal/gnss/gnss.go
+index 1d6ccbb..7403b1a 100644
+--- a/internal/gnss/gnss.go
++++ b/internal/gnss/gnss.go
+@@ -59,6 +59,13 @@ func (g *Gnss) Write(p []byte) (int, error) {
+ }
+ 
+ func (g *Gnss) Subscribe() (*pubsub.Subscription, error) {
++	// Subscribing and counting the subscriptions happen under g.mu, so
++	// that of two clients that connect at the same time one starts the
++	// driver, and a client that connects while the last one leaves
++	// starts it again
++	g.mu.Lock()
++	defer g.mu.Unlock()
++
+ 	sub, err := g.bus.Subscribe(g.dataTopic)
+ 	if err != nil {
+ 		return nil, err
+@@ -68,14 +75,14 @@ func (g *Gnss) Subscribe() (*pubsub.Subscription, error) {
+ 	// any active subscriptions
+ 	defaultUnsub := sub.Unsubscribe
+ 	sub.Unsubscribe = func() error {
++		g.mu.Lock()
++		defer g.mu.Unlock()
+ 		if err := defaultUnsub(); err != nil {
+ 			return err
+ 		}
+ 		// Stop driver if there are no active subscriptions for our topic
+ 		if g.bus.Subscribers(g.dataTopic) == 0 {
+ 			fmt.Println("Stopping device")
+-			g.mu.Lock()
+-			defer g.mu.Unlock()
+ 			if g.driverStop != nil {
+ 				close(g.driverStop)
+ 			}
+@@ -92,8 +99,6 @@ func (g *Gnss) Subscribe() (*pubsub.Subscription, error) {
+ 	// Start the driver if this is the first subscription
+ 	if g.bus.Subscribers(g.dataTopic) == 1 {
+ 		fmt.Println("Starting device")
+-		g.mu.Lock()
+-		defer g.mu.Unlock()
+ 		g.driverStop = make(chan struct{})
+ 		// This abstracts publishing to the pubsub topic so that drivers don't
+ 		// have to deal with pubsub if they don't want to.
+diff --git a/internal/gnss/gnss_test.go b/internal/gnss/gnss_test.go
+new file mode 100644
+index 0000000..6320e17
+--- /dev/null
++++ b/internal/gnss/gnss_test.go
+@@ -0,0 +1,101 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++package gnss
++
++import (
++	"sync"
++	"testing"
++)
++
++// countingDriver counts how often it is started and stopped
++type countingDriver struct {
++	mu      sync.Mutex
++	starts  int
++	stops   int
++	running int
++}
++
++func (d *countingDriver) Load(dir string) error { return nil }
++func (d *countingDriver) Save(dir string) error { return nil }
++
++func (d *countingDriver) Start(send func(data []byte), write <-chan []byte, stop <-chan struct{}) error {
++	d.mu.Lock()
++	d.starts++
++	d.running++
++	d.mu.Unlock()
++	go func() {
++		<-stop
++		d.mu.Lock()
++		d.stops++
++		d.running--
++		d.mu.Unlock()
++	}()
++	return nil
++}
++
++func (d *countingDriver) counts() (int, int) {
++	d.mu.Lock()
++	defer d.mu.Unlock()
++	return d.starts, d.running
++}
++
++// Clients that connect and leave at the same time start the driver once
++// and stop it once
++func TestConcurrentSubscribers(t *testing.T) {
++	for round := 0; round < 50; round++ {
++		d := &countingDriver{}
++		g, err := New(d)
++		if err != nil {
++			t.Fatal(err)
++		}
++
++		const clients = 8
++		subs := make(chan func() error, clients)
++		var wg sync.WaitGroup
++		begin := make(chan struct{})
++		for i := 0; i < clients; i++ {
++			wg.Add(1)
++			go func() {
++				defer wg.Done()
++				<-begin
++				sub, err := g.Subscribe()
++				if err != nil {
++					t.Error(err)
++					return
++				}
++				subs <- sub.Unsubscribe
++			}()
++		}
++		close(begin)
++		wg.Wait()
++		close(subs)
++		if starts, running := d.counts(); starts != 1 || running != 1 {
++			t.Fatalf("round %d: %d clients: driver started %d times, %d running, want 1 and 1",
++				round, clients, starts, running)
++		}
++
++		for unsub := range subs {
++			wg.Add(1)
++			go func(unsub func() error) {
++				defer wg.Done()
++				if err := unsub(); err != nil {
++					t.Error(err)
++				}
++			}(unsub)
++		}
++		wg.Wait()
++
++		// A new client starts the driver again
++		sub, err := g.Subscribe()
++		if err != nil {
++			t.Fatal(err)
++		}
++		if starts, _ := d.counts(); starts != 2 {
++			t.Fatalf("round %d: driver started %d times after a new client, want 2", round, starts)
++		}
++		if err := sub.Unsubscribe(); err != nil {
++			t.Fatal(err)
++		}
++	}
++}
+-- 
+2.56.0
+

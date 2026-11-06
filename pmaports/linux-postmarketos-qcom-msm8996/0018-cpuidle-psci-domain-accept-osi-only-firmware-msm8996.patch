@@ -28,7 +28,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 27 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/cpuidle/cpuidle-psci-domain.c b/drivers/cpuidle/cpuidle-psci-domain.c
-index 37c41209e..99fb93930 100644
+index b9e4ad7d43..0b9e807c24 100644
 --- a/drivers/cpuidle/cpuidle-psci-domain.c
 +++ b/drivers/cpuidle/cpuidle-psci-domain.c
 @@ -12,6 +12,7 @@
@@ -80,6 +80,3 @@ index 37c41209e..99fb93930 100644
  	if (ret)
  		goto remove_pd;
  
--- 
-2.53.0
-

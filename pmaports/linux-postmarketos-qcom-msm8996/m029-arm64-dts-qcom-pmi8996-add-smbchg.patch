@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Tue, 25 Jan 2022 17:39:17 +0400
+Subject: [PATCH] arm64: dts: qcom: pmi8996: Add SMBCHG
+
+The SMBCHG block on PMI8996 is slightly different from the one
+on PMI8994, making a different compatible string required.
+Change the label and compatible of pmi8994_smbchg to match PMI8996.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+Link: https://lore.kernel.org/linux-arm-msm/20220808073459.396278-1-y.oudjana@protonmail.com/T/#m457a44300e743e33a98876ee83e80f9e7237a769
+---
+ arch/arm64/boot/dts/qcom/pmi8996.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/pmi8996.dtsi b/arch/arm64/boot/dts/qcom/pmi8996.dtsi
+index 31b47209e2..ea8d86d12b 100644
+--- a/arch/arm64/boot/dts/qcom/pmi8996.dtsi
++++ b/arch/arm64/boot/dts/qcom/pmi8996.dtsi
+@@ -13,3 +13,7 @@
+ / {
+ 	qcom,pmic-id = <0x20009 0x10013 0 0>;
+ };
++
++pmi8996_smbchg: &pmi8994_smbchg {
++	compatible = "qcom,pmi8996-smbchg";
++};

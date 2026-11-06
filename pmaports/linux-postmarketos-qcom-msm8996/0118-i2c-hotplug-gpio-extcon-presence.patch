@@ -27,7 +27,7 @@ Assisted-by: Claude:claude-opus-5-5
  2 files changed, 87 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/i2c/muxes/Kconfig b/drivers/i2c/muxes/Kconfig
-index 0e410be5ce55..e15713a4cc5c 100644
+index 0e410be5ce..e15713a4cc 100644
 --- a/drivers/i2c/muxes/Kconfig
 +++ b/drivers/i2c/muxes/Kconfig
 @@ -20,12 +20,14 @@ config I2C_ARB_GPIO_CHALLENGE
@@ -48,7 +48,7 @@ index 0e410be5ce55..e15713a4cc5c 100644
  	  This driver can also be built as a module. If so, the module
  	  will be called i2c-hotplug-gpio.
 diff --git a/drivers/i2c/muxes/i2c-hotplug-gpio.c b/drivers/i2c/muxes/i2c-hotplug-gpio.c
-index 9688d1be9242..ae6f0de7e888 100644
+index 9688d1be92..ae6f0de7e8 100644
 --- a/drivers/i2c/muxes/i2c-hotplug-gpio.c
 +++ b/drivers/i2c/muxes/i2c-hotplug-gpio.c
 @@ -1,12 +1,20 @@
@@ -195,6 +195,3 @@ index 9688d1be9242..ae6f0de7e888 100644
 +MODULE_DESCRIPTION("Hot-plugged I2C bus detected by GPIO or extcon");
  MODULE_AUTHOR("Michał Mirosław <mirq-linux@rere.qmqm.pl>");
  MODULE_LICENSE("GPL");
--- 
-2.56.0
-

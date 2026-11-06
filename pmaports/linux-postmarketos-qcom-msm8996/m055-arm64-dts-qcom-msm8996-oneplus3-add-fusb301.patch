@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xhivat Hoxhiq <xhivo97@gmail.com>
+Date: Tue, 1 Mar 2022 15:24:41 +0000
+Subject: [PATCH] arm64: dts: qcom: msm8996-oneplus3: Add FUSB301
+
+This enables support for the FUSB301 driver on the OnePlus 3 and OnePlus 3T.
+
+Signed-off-by: Xhivat Hoxhiq <xhivo97@gmail.com>
+Acked-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ .../boot/dts/qcom/msm8996-oneplus-common.dtsi | 30 +++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+index 4c6a2504dd..2adb3d5bcb 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+@@ -101,6 +101,19 @@ bq27541: fuel-gauge@55 {
+ 	};
+ };
+ 
++&blsp2_i2c1 {
++	status = "okay";
++
++	fusb301: fusb301@21 {
++		compatible = "onnn,fusb301";
++		reg = <0x21>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&fusb301_gpios>;
++		interrupt-parent = <&pmi8994_gpios>;
++		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
++	};
++};
++
+ &blsp1_uart2 {
+ 	label = "BT-UART";
+ 	uart-has-rtscts;
+@@ -314,6 +327,19 @@ s11 {
+ 	};
+ };
+ 
++&pmi8994_gpios {
++	fusb301_gpios: fusb301-state {
++		pinconf {
++			pins = "gpio5", "gpio6";
++			function = PMIC_GPIO_FUNC_NORMAL;
++			input-enable;
++			bias-pull-up;
++			qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
++			power-source = <PM8994_GPIO_S4>; // 1.8V
++		};
++	};
++};
++
+ &pmi8994_spmi_regulators {
+ 	vdd_gfx: s2 {
+ 		regulator-name = "vdd-gfx";
+@@ -833,6 +859,8 @@ &ufshc {
+ };
+ 
+ &usb3 {
++	extcon = <&fusb301>;
++
+ 	status = "okay";
+ };
+ 
+@@ -845,4 +873,6 @@ &usb3_dwc3 {
+ 	vbus-supply = <&chg_otg>;
+ 
+ 	usb-psy-name = "qcom-smbchg-usb";
++
++	extcon = <&fusb301>;
+ };

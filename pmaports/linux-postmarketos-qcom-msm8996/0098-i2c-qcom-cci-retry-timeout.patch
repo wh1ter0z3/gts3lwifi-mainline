@@ -32,14 +32,14 @@ the retries did; 40 camera stream starts without an error.
 Signed-off-by: Jayden Milne <linux@jayd.ml>
 Assisted-by: Claude:claude-opus-5-5
 ---
- drivers/i2c/busses/i2c-qcom-cci.c | 34 ++++++++++++++++++++++---------
- 1 file changed, 24 insertions(+), 10 deletions(-)
+ drivers/i2c/busses/i2c-qcom-cci.c | 36 +++++++++++++++++++++----------
+ 1 file changed, 25 insertions(+), 11 deletions(-)
 
 diff --git a/drivers/i2c/busses/i2c-qcom-cci.c b/drivers/i2c/busses/i2c-qcom-cci.c
-index 884055df1560..47a6f085ebef 100644
+index bd70c6bae5..9ab8b5c247 100644
 --- a/drivers/i2c/busses/i2c-qcom-cci.c
 +++ b/drivers/i2c/busses/i2c-qcom-cci.c
-@@ -304,7 +304,7 @@ static int cci_run_queue(struct cci *cci, u8 master, u8 queue)
+@@ -301,7 +301,7 @@ static int cci_run_queue(struct cci *cci, u8 master, u8 queue)
  
  	if (!wait_for_completion_timeout(&cci->master[master].irq_complete,
  					 CCI_TIMEOUT)) {
@@ -47,8 +47,8 @@ index 884055df1560..47a6f085ebef 100644
 +		dev_dbg(cci->dev, "master %d queue %d timeout\n",
  			master, queue);
  		cci_reset(cci);
- 		cci_init(cci);
-@@ -422,6 +422,14 @@ static int cci_i2c_write(struct cci *cci, u16 master,
+ 		return -ETIMEDOUT;
+@@ -418,6 +418,14 @@ static int cci_i2c_write(struct cci *cci, u16 master,
  	return cci_run_queue(cci, master, queue);
  }
  
@@ -63,7 +63,7 @@ index 884055df1560..47a6f085ebef 100644
  static int cci_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
  {
  	struct cci_master *cci_master = i2c_get_adapdata(adap);
-@@ -433,17 +441,23 @@ static int cci_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
+@@ -429,17 +437,23 @@ static int cci_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
  		goto err;
  
  	for (i = 0; i < num; i++) {
@@ -75,6 +75,8 @@ index 884055df1560..47a6f085ebef 100644
 -			ret = cci_i2c_write(cci, cci_master->master,
 -					    msgs[i].addr, msgs[i].buf,
 -					    msgs[i].len);
+-
+-		if (ret < 0)
 +		ret = cci_xfer_msg(cci, cci_master->master, &msgs[i]);
 +
 +		/*
@@ -85,8 +87,7 @@ index 884055df1560..47a6f085ebef 100644
 +		 */
 +		if (ret == -ETIMEDOUT)
 +			ret = cci_xfer_msg(cci, cci_master->master, &msgs[i]);
- 
--		if (ret < 0)
++
 +		if (ret < 0) {
 +			if (ret == -ETIMEDOUT)
 +				dev_err(cci->dev, "master %d timeout\n",
@@ -96,6 +97,3 @@ index 884055df1560..47a6f085ebef 100644
  	}
  
  	if (!ret)
--- 
-2.56.0
-

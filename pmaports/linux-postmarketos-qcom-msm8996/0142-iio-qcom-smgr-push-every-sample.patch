@@ -31,7 +31,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 54 insertions(+), 33 deletions(-)
 
 diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
-index 9cadbc5d89a0..e3bc6c272ddd 100644
+index 9cadbc5d89..e3bc6c272d 100644
 --- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
 +++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
 @@ -257,45 +257,22 @@ static int qcom_smgr_request_buffering(struct qcom_smgr *smgr,
@@ -142,6 +142,3 @@ index 9cadbc5d89a0..e3bc6c272ddd 100644
  }
  
  static const struct qmi_msg_handler qcom_smgr_msg_handlers[] = {
--- 
-2.56.0
-

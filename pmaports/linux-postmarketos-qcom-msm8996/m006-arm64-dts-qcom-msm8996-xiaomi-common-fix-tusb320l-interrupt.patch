@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Tue, 10 Sep 2024 20:03:17 +0100
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-common: Fix TUSB320l
+ interrupt polarity
+
+The polarity of the TUSB320l interrupt was incorrectly set to rising edge
+instead of falling edge. This didn't cause any issues until the driver started
+reading the interrupt polarity from DT in commit
+d03a7005d968 ("extcon: usbc-tusb320: Set interrupt polarity based on device-tree")
+
+Change the interrupt flags to fix TUSB320l.
+
+Fixes: 46680fe9ba61 ("arm64: dts: qcom: msm8996: Add support for the Xiaomi MSM8996 platform")
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+index 77ad613590..3a74ae93be 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+@@ -210,7 +210,7 @@ typec: typec@47 {
+ 		compatible = "ti,tusb320l";
+ 		reg = <0x47>;
+ 		interrupt-parent = <&tlmm>;
+-		interrupts = <63 IRQ_TYPE_EDGE_RISING>;
++		interrupts = <63 IRQ_TYPE_EDGE_FALLING>;
+ 	};
+ };
+ 

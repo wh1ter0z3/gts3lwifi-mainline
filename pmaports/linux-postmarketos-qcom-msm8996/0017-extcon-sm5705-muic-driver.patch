@@ -27,10 +27,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 drivers/extcon/extcon-sm5705.c
 
 diff --git a/drivers/extcon/Kconfig b/drivers/extcon/Kconfig
-index 80d8f7d26..3ab75c776 100644
+index 5a6f65f157..06f3499ce7 100644
 --- a/drivers/extcon/Kconfig
 +++ b/drivers/extcon/Kconfig
-@@ -193,6 +193,15 @@ config EXTCON_SM5502
+@@ -194,6 +194,15 @@ config EXTCON_SM5502
  	  Silicon Mitus SM5502. The SM5502 is a USB port accessory
  	  detector and switch.
  
@@ -47,7 +47,7 @@ index 80d8f7d26..3ab75c776 100644
  	tristate "USB GPIO extcon support"
  	depends on GPIOLIB || COMPILE_TEST
 diff --git a/drivers/extcon/Makefile b/drivers/extcon/Makefile
-index 42abd724e..964148909 100644
+index 42abd724e1..9641489092 100644
 --- a/drivers/extcon/Makefile
 +++ b/drivers/extcon/Makefile
 @@ -24,6 +24,7 @@ obj-$(CONFIG_EXTCON_PTN5150)	+= extcon-ptn5150.o
@@ -60,7 +60,7 @@ index 42abd724e..964148909 100644
  obj-$(CONFIG_EXTCON_USBC_TUSB320) += extcon-usbc-tusb320.o
 diff --git a/drivers/extcon/extcon-sm5705.c b/drivers/extcon/extcon-sm5705.c
 new file mode 100644
-index 000000000..e26dc3f1d
+index 0000000000..e26dc3f1d8
 --- /dev/null
 +++ b/drivers/extcon/extcon-sm5705.c
 @@ -0,0 +1,213 @@
@@ -277,6 +277,3 @@ index 000000000..e26dc3f1d
 +
 +MODULE_DESCRIPTION("Silicon Mitus SM5705 MUIC extcon driver");
 +MODULE_LICENSE("GPL");
--- 
-2.53.0
-

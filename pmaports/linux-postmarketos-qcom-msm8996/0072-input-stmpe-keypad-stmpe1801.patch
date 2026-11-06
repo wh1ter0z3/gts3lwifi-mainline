@@ -28,7 +28,7 @@ Assisted-by: Claude:claude-opus-5-5
  create mode 100644 drivers/input/keyboard/stmpe-keypad.h
 
 diff --git a/drivers/input/keyboard/stmpe-keypad.c b/drivers/input/keyboard/stmpe-keypad.c
-index 0acded4fb9c9..988fd4045bce 100644
+index 0acded4fb9..988fd4045b 100644
 --- a/drivers/input/keyboard/stmpe-keypad.c
 +++ b/drivers/input/keyboard/stmpe-keypad.c
 @@ -13,8 +13,11 @@
@@ -644,7 +644,7 @@ index 0acded4fb9c9..988fd4045bce 100644
  static struct platform_driver stmpe_keypad_driver = {
 diff --git a/drivers/input/keyboard/stmpe-keypad.h b/drivers/input/keyboard/stmpe-keypad.h
 new file mode 100644
-index 000000000000..ed73f12e7f0a
+index 0000000000..ed73f12e7f
 --- /dev/null
 +++ b/drivers/input/keyboard/stmpe-keypad.h
 @@ -0,0 +1,54 @@
@@ -702,6 +702,3 @@ index 000000000000..ed73f12e7f0a
 +#endif
 +
 +#endif
--- 
-2.56.0
-

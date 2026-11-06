@@ -44,7 +44,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 17 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/mfd/stmpe.c b/drivers/mfd/stmpe.c
-index 2fc28708d2c7..974108cf9384 100644
+index 2fc28708d2..974108cf93 100644
 --- a/drivers/mfd/stmpe.c
 +++ b/drivers/mfd/stmpe.c
 @@ -1219,6 +1219,17 @@ static const struct irq_domain_ops stmpe_irq_ops = {
@@ -89,6 +89,3 @@ index 2fc28708d2c7..974108cf9384 100644
  	__stmpe_disable(stmpe, STMPE_BLOCK_ADC);
  
  	mfd_remove_devices(stmpe->dev);
--- 
-2.56.0
-

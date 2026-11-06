@@ -26,7 +26,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 99 insertions(+)
 
 diff --git a/drivers/media/i2c/imx258.c b/drivers/media/i2c/imx258.c
-index 6768c64fb620..ba8ca7faf5f9 100644
+index 0776960f6b..c3024e928e 100644
 --- a/drivers/media/i2c/imx258.c
 +++ b/drivers/media/i2c/imx258.c
 @@ -87,6 +87,19 @@
@@ -177,6 +177,3 @@ index 6768c64fb620..ba8ca7faf5f9 100644
  	},
  };
  
--- 
-2.56.0
-

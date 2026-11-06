@@ -29,10 +29,10 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 12 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c
-index d133541915f3..71f4dd04335f 100644
+index 3f318c270e..e40f01b955 100644
 --- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c
 +++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_crtc.c
-@@ -1384,12 +1384,21 @@ struct mdp5_pipeline *mdp5_crtc_get_pipeline(struct drm_crtc *crtc)
+@@ -1383,12 +1383,21 @@ struct mdp5_pipeline *mdp5_crtc_get_pipeline(struct drm_crtc *crtc)
  
  void mdp5_crtc_wait_for_commit_done(struct drm_crtc *crtc)
  {
@@ -57,6 +57,3 @@ index d133541915f3..71f4dd04335f 100644
  }
  
  /* initialize crtc */
--- 
-2.56.0
-

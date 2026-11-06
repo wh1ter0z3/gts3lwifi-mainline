@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Mon, 7 Nov 2022 20:16:33 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996-oneplus-common: Add VBUS power
+ supply to DWC3
+
+Add charger OTG regulator as VBUS supply for DWC3.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+index 52a615040b..4c6a2504dd 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+@@ -842,5 +842,7 @@ &usb3_dwc3 {
+ 
+ 	maximum-speed = "high-speed";
+ 
++	vbus-supply = <&chg_otg>;
++
+ 	usb-psy-name = "qcom-smbchg-usb";
+ };

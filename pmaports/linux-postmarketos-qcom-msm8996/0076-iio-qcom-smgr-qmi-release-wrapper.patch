@@ -1,4 +1,4 @@
-From 513dc8c03768f699c0faae79aa6003a5699e97ed Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Fri, 30 Oct 2026 13:05:17 +0530
 Subject: [PATCH] iio: qcom_smgr: release the QMI handle through a void *
@@ -22,7 +22,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
-index 1d5753bd2..b2cebf9af 100644
+index 1d5753bd2b..b2cebf9af0 100644
 --- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
 +++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
 @@ -732,6 +732,11 @@ static int qcom_smgr_register_sensor(struct qcom_smgr *smgr,

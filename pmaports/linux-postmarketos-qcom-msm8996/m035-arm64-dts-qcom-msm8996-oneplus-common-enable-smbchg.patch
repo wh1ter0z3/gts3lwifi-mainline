@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Mon, 7 Nov 2022 20:14:20 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996-oneplus-common: Enable SMBCHG
+
+Enable the PMIC charger on OnePlus devices.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+index 05965d0cc7..52a615040b 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-oneplus-common.dtsi
+@@ -322,6 +322,12 @@ vdd_gfx: s2 {
+ 	};
+ };
+ 
++&pmi8996_smbchg {
++	monitored-battery = <&battery>;
++
++	status = "okay";
++};
++
+ &q6asmdai {
+ 	#address-cells = <1>;
+ 	#size-cells = <0>;
+@@ -835,4 +841,6 @@ &usb3_dwc3 {
+ 	phy-names = "usb2-phy";
+ 
+ 	maximum-speed = "high-speed";
++
++	usb-psy-name = "qcom-smbchg-usb";
+ };

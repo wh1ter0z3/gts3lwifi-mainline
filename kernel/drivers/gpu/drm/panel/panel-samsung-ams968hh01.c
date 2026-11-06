@@ -30,6 +30,7 @@
 
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
+#include <drm/drm_of.h>
 #include <drm/drm_panel.h>
 #include <drm/drm_probe_helper.h>
 #include <video/mipi_display.h>
@@ -1187,9 +1188,10 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
 	struct ams968hh01 *ctx;
 	int ret, i;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_panel_alloc(dev, struct ams968hh01, panel, &ams968hh01_panel_funcs,
+				   DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	ctx->vdd = devm_regulator_get(dev, "vdd");
 	if (IS_ERR(ctx->vdd))
@@ -1204,7 +1206,7 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
 	if (IS_ERR(ctx->tcon_ready_gpio))
 		return dev_err_probe(dev, PTR_ERR(ctx->tcon_ready_gpio), "failed to get tcon-ready gpio\n");
 
-	ret = of_drm_get_panel_orientation(dev->of_node, &ctx->orientation);
+	ret = drm_of_get_panel_orientation(dev->of_node, &ctx->orientation);
 	if (ret)
 		return dev_err_probe(dev, ret, "invalid rotation\n");
 
@@ -1243,8 +1245,6 @@ static int ams968hh01_probe(struct mipi_dsi_device *dsi)
 	/* Until the MTP is read: the tables of a panel with zero offsets */
 	ams968hh01_gamma_tables(ctx, no_mtp);
 
-	drm_panel_init(&ctx->panel, dev, &ams968hh01_panel_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
 	ctx->panel.prepare_prev_first = true;
 	ctx->panel.backlight = ctx->bl;
 	drm_panel_add(&ctx->panel);
@@ -1341,4 +1341,5 @@ static struct mipi_dsi_driver ams968hh01_driver = {
 module_mipi_dsi_driver(ams968hh01_driver);
 
 MODULE_DESCRIPTION("Samsung AMS968HH01 (ANA38401) dual-DSI command mode panel");
+MODULE_IMPORT_NS("IIO_CONSUMER");
 MODULE_LICENSE("GPL");

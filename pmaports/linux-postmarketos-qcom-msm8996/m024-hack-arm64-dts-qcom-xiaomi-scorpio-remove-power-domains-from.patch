@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Tue, 11 May 2021 19:21:11 +0400
+Subject: [PATCH] HACK: arm64: dts: qcom: xiaomi-scorpio: Remove power-domains
+ from MDP SMMU
+
+Letting the SMMU have power domains allows PM runtime to be enabled and it
+to be suspended and reset as a result. This must not happen to allow simplefb
+to continue working until DRM takes over.
+---
+ arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+index 44407e6bcf..e370839746 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+@@ -99,6 +99,13 @@ &mdp_smmu {
+ 	 */
+ 	qcom,no-smr-check;
+ 	qcom,skip-init;
++
++	/*
++	 * HACK: Remove power-domains to stop SMMU from being suspended
++	 * and losing simplefb as a result. MMAGIC_MDSS_GDSC is flagged
++	 * always-on so it does not need any consumers to stay on.
++	 */
++	 /delete-property/ power-domains;
+ };
+ 
+ &mdss {

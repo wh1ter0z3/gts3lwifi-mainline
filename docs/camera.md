@@ -127,12 +127,12 @@ at about 17 fps there), 2568x1932 (front).
   pixel rate / (line length x fps)).
 - With sound, a GStreamer pipeline runs on the microphone's clock, and
   libcamerasrc maps the frame timestamps onto it. When the microphone
-  started late (the q6asm close timeout, fixed by kernel patch 0113, see
+  started late (the q6asm close timeout, fixed by 8a066a81ee0c, see
   [audio.md](audio.md)), the video froze after a
   second or two, which looked like a 120 fps problem. Ocellus records on
   the monotonic system clock: since then, 18 of 20 test recordings at
   120 fps were clean. In the other two, the video kept running but
-  dropped frames until the sound started. With patch 0113, all were
+  dropped frames until the sound started. With that fix, all were
   clean.
 
 ## Kernel fixes found on the way

@@ -1,0 +1,554 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Vladimir Lypak <vladimir.lypak@gmail.com>
+Date: Mon, 13 May 2024 19:43:48 +0300
+Subject: [PATCH] drm/msm/dsi: improve power management
+
+Currently DSI host can only perform message transfers only when dsi host
+was enabled by using drm_bridge power callbacks. For this reason it is
+impossible to send DCS commands before bridge is enabled or after it was
+disabled (from panel prepare/unprepare callbacks).
+
+This patch implements a way to perform DSI transfers independent of
+drm_bridge enable status. All because drm_bridge entity is focused on
+video link but power aspect is out of its scope.
+
+Signed-off-by: Vladimir Lypak <vladimir.lypak@gmail.com>
+---
+ drivers/gpu/drm/msm/dsi/dsi.c         |   1 +
+ drivers/gpu/drm/msm/dsi/dsi.h         |   5 +
+ drivers/gpu/drm/msm/dsi/dsi_host.c    |  47 ++++---
+ drivers/gpu/drm/msm/dsi/dsi_manager.c | 188 +++++++++++++-------------
+ 4 files changed, 127 insertions(+), 114 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dsi/dsi.c b/drivers/gpu/drm/msm/dsi/dsi.c
+index 3c9f01ed62..297fda63e4 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi.c
++++ b/drivers/gpu/drm/msm/dsi/dsi.c
+@@ -89,6 +89,7 @@ static struct msm_dsi *dsi_init(struct platform_device *pdev)
+ 		return ERR_PTR(-ENOMEM);
+ 	DBG("dsi probed=%p", msm_dsi);
+ 
++	mutex_init(&msm_dsi->phy_lock);
+ 	msm_dsi->id = -1;
+ 	msm_dsi->pdev = pdev;
+ 	platform_set_drvdata(pdev, msm_dsi);
+diff --git a/drivers/gpu/drm/msm/dsi/dsi.h b/drivers/gpu/drm/msm/dsi/dsi.h
+index 93c028a122..2283a460b3 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi.h
++++ b/drivers/gpu/drm/msm/dsi/dsi.h
+@@ -8,6 +8,7 @@
+ 
+ #include <linux/of_platform.h>
+ #include <linux/platform_device.h>
++#include <linux/mutex.h>
+ 
+ #include <drm/drm_bridge.h>
+ #include <drm/drm_crtc.h>
+@@ -43,6 +44,7 @@ struct msm_dsi {
+ 
+ 	struct device *phy_dev;
+ 	bool phy_enabled;
++	struct mutex phy_lock;
+ 
+ 	int id;
+ };
+@@ -56,6 +58,9 @@ int msm_dsi_manager_register(struct msm_dsi *msm_dsi);
+ void msm_dsi_manager_unregister(struct msm_dsi *msm_dsi);
+ void msm_dsi_manager_tpg_enable(void);
+ 
++int dsi_mgr_power_on(struct msm_dsi *msm_dsi);
++void dsi_mgr_power_off(struct msm_dsi *msm_dsi);
++
+ /* dsi host */
+ struct msm_dsi_host;
+ int msm_dsi_host_xfer_prepare(struct mipi_dsi_host *host,
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
+index b292dfd266..5e76c6b2fe 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -14,6 +14,7 @@
+ #include <linux/of_irq.h>
+ #include <linux/pinctrl/consumer.h>
+ #include <linux/pm_opp.h>
++#include <linux/pm_runtime.h>
+ #include <linux/regmap.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/spinlock.h>
+@@ -215,12 +216,10 @@ dsi_get_config(struct msm_dsi_host *msm_host)
+ 		goto exit;
+ 	}
+ 
+-	pm_runtime_get_sync(dev);
+-
+ 	ret = clk_prepare_enable(ahb_clk);
+ 	if (ret) {
+ 		dev_err_probe(dev, ret, "%s: unable to enable ahb_clk\n", __func__);
+-		goto runtime_put;
++		goto exit;
+ 	}
+ 
+ 	ret = dsi_get_version(msm_host->ctrl_base, &major, &minor);
+@@ -235,8 +234,6 @@ dsi_get_config(struct msm_dsi_host *msm_host)
+ 
+ disable_clks:
+ 	clk_disable_unprepare(ahb_clk);
+-runtime_put:
+-	pm_runtime_put_sync(dev);
+ exit:
+ 	return cfg_hnd;
+ }
+@@ -362,6 +359,7 @@ int msm_dsi_runtime_suspend(struct device *dev)
+ 	if (!msm_host->cfg_hnd)
+ 		return 0;
+ 
++	dsi_mgr_power_off(msm_dsi);
+ 	clk_bulk_disable_unprepare(msm_host->num_bus_clks, msm_host->bus_clks);
+ 
+ 	return 0;
+@@ -1777,7 +1775,8 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
+ 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+ 	int ret;
+ 
+-	if (!msg || !msm_host->power_on)
++	/* Clock calculation relies on mode_set */
++	if (!msg || !msm_host->mode)
+ 		return -EINVAL;
+ 
+ 	mutex_lock(&msm_host->cmd_mutex);
+@@ -2026,12 +2025,15 @@ int msm_dsi_host_init(struct msm_dsi *msm_dsi)
+ 		return dev_err_probe(&pdev->dev, PTR_ERR(msm_host->ctrl_base),
+ 				     "%s: unable to map Dsi ctrl base\n", __func__);
+ 
+-	pm_runtime_enable(&pdev->dev);
+-
+ 	msm_host->cfg_hnd = dsi_get_config(msm_host);
+ 	if (!msm_host->cfg_hnd)
+ 		return dev_err_probe(&pdev->dev, -EINVAL,
+ 				     "%s: get config failed\n", __func__);
++
++	pm_runtime_set_autosuspend_delay(&msm_host->pdev->dev, 200);
++	pm_runtime_use_autosuspend(&msm_host->pdev->dev);
++	pm_runtime_enable(&pdev->dev);
++
+ 	cfg = msm_host->cfg_hnd->cfg;
+ 
+ 	msm_host->id = dsi_host_get_id(msm_host);
+@@ -2110,6 +2112,7 @@ void msm_dsi_host_destroy(struct mipi_dsi_host *host)
+ 	mutex_destroy(&msm_host->cmd_mutex);
+ 	mutex_destroy(&msm_host->dev_mutex);
+ 
++	pm_runtime_dont_use_autosuspend(&msm_host->pdev->dev);
+ 	pm_runtime_disable(&msm_host->pdev->dev);
+ }
+ 
+@@ -2166,7 +2169,8 @@ int msm_dsi_host_xfer_prepare(struct mipi_dsi_host *host,
+ 				const struct mipi_dsi_msg *msg)
+ {
+ 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+-	const struct msm_dsi_cfg_handler *cfg_hnd = msm_host->cfg_hnd;
++	struct msm_dsi *msm_dsi = platform_get_drvdata(msm_host->pdev);
++	int ret;
+ 
+ 	/* TODO: make sure dsi_cmd_mdp is idle.
+ 	 * Since DSI6G v1.2.0, we can set DSI_TRIG_CTRL.BLOCK_DMA_WITHIN_FRAME
+@@ -2177,13 +2181,19 @@ int msm_dsi_host_xfer_prepare(struct mipi_dsi_host *host,
+ 	/*
+ 	 * mdss interrupt is generated in mdp core clock domain
+ 	 * mdp clock need to be enabled to receive dsi interrupt
++	 * also we need to power on phys and host
+ 	 */
+-	pm_runtime_get_sync(&msm_host->pdev->dev);
+-	cfg_hnd->ops->link_clk_set_rate(msm_host);
+-	cfg_hnd->ops->link_clk_enable(msm_host);
++	ret = pm_runtime_resume_and_get(&msm_host->pdev->dev);
++	if (ret)
++		return ret;
+ 
+-	/* TODO: vote for bus bandwidth */
++	ret = dsi_mgr_power_on(msm_dsi);
++	if (ret) {
++		pm_runtime_put_sync(&msm_host->pdev->dev);
++		return ret;
++	}
+ 
++	/* TODO: vote for bus bandwidth */
+ 	if (!(msg->flags & MIPI_DSI_MSG_USE_LPM))
+ 		dsi_set_tx_power_mode(0, msm_host);
+ 
+@@ -2201,7 +2211,6 @@ void msm_dsi_host_xfer_restore(struct mipi_dsi_host *host,
+ 				const struct mipi_dsi_msg *msg)
+ {
+ 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+-	const struct msm_dsi_cfg_handler *cfg_hnd = msm_host->cfg_hnd;
+ 
+ 	dsi_intr_ctrl(msm_host, DSI_IRQ_MASK_CMD_DMA_DONE, 0);
+ 	dsi_write(msm_host, REG_DSI_CTRL, msm_host->dma_cmd_ctrl_restore);
+@@ -2210,9 +2219,7 @@ void msm_dsi_host_xfer_restore(struct mipi_dsi_host *host,
+ 		dsi_set_tx_power_mode(1, msm_host);
+ 
+ 	/* TODO: unvote for bus bandwidth */
+-
+-	cfg_hnd->ops->link_clk_disable(msm_host);
+-	pm_runtime_put(&msm_host->pdev->dev);
++	pm_runtime_put_autosuspend(&msm_host->pdev->dev);
+ }
+ 
+ int msm_dsi_host_cmd_tx(struct mipi_dsi_host *host,
+@@ -2511,7 +2518,6 @@ int msm_dsi_host_power_on(struct mipi_dsi_host *host,
+ 		goto unlock_ret;
+ 	}
+ 
+-	pm_runtime_get_sync(&msm_host->pdev->dev);
+ 	ret = cfg_hnd->ops->link_clk_set_rate(msm_host);
+ 	if (!ret)
+ 		ret = cfg_hnd->ops->link_clk_enable(msm_host);
+@@ -2533,13 +2539,14 @@ int msm_dsi_host_power_on(struct mipi_dsi_host *host,
+ 	dsi_ctrl_enable(msm_host, phy_shared_timings, phy);
+ 
+ 	msm_host->power_on = true;
++	msm_dsi_host_enable_irq(host);
++
+ 	mutex_unlock(&msm_host->dev_mutex);
+ 
+ 	return 0;
+ 
+ fail_disable_clk:
+ 	cfg_hnd->ops->link_clk_disable(msm_host);
+-	pm_runtime_put(&msm_host->pdev->dev);
+ fail_disable_reg:
+ 	regulator_bulk_disable(msm_host->cfg_hnd->cfg->num_regulators,
+ 			       msm_host->supplies);
+@@ -2559,12 +2566,12 @@ int msm_dsi_host_power_off(struct mipi_dsi_host *host)
+ 		goto unlock_ret;
+ 	}
+ 
++	msm_dsi_host_disable_irq(host);
+ 	dsi_ctrl_disable(msm_host);
+ 
+ 	pinctrl_pm_select_sleep_state(&msm_host->pdev->dev);
+ 
+ 	cfg_hnd->ops->link_clk_disable(msm_host);
+-	pm_runtime_put(&msm_host->pdev->dev);
+ 
+ 	regulator_bulk_disable(msm_host->cfg_hnd->cfg->num_regulators,
+ 			       msm_host->supplies);
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_manager.c b/drivers/gpu/drm/msm/dsi/dsi_manager.c
+index 959daa88b1..1a37edff07 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi_manager.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_manager.c
+@@ -139,39 +139,46 @@ dsi_mgr_phy_enable(int id,
+ 	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
+ 	struct msm_dsi *mdsi = dsi_mgr_get_dsi(DSI_CLOCK_MASTER);
+ 	struct msm_dsi *sdsi = dsi_mgr_get_dsi(DSI_CLOCK_SLAVE);
+-	int ret;
++	int ret = 0;
++
++	if (IS_BONDED_DSI() && mdsi && sdsi)
++		msm_dsi = mdsi;
++	else
++		sdsi = NULL;
++
++	mutex_lock(&msm_dsi->phy_lock);
++
++	if (msm_dsi->phy_enabled)
++		goto out_unlock;
++
+ 
+ 	/* In case of bonded DSI, some registers in PHY1 have been programmed
+ 	 * during PLL0 clock's set_rate. The PHY1 reset called by host1 here
+ 	 * will silently reset those PHY1 registers. Therefore we need to reset
+ 	 * and enable both PHYs before any PLL clock operation.
+ 	 */
+-	if (IS_BONDED_DSI() && mdsi && sdsi) {
+-		if (!mdsi->phy_enabled && !sdsi->phy_enabled) {
+-			msm_dsi_host_reset_phy(mdsi->host);
+-			msm_dsi_host_reset_phy(sdsi->host);
+-
+-			ret = enable_phy(mdsi,
+-					 &shared_timings[DSI_CLOCK_MASTER]);
+-			if (ret)
+-				return ret;
+-			ret = enable_phy(sdsi,
+-					 &shared_timings[DSI_CLOCK_SLAVE]);
+-			if (ret) {
+-				msm_dsi_phy_disable(mdsi->phy);
+-				return ret;
+-			}
++	msm_dsi_host_reset_phy(msm_dsi->host);
++	if (sdsi)
++		msm_dsi_host_reset_phy(sdsi->host);
++
++	ret = enable_phy(msm_dsi, &shared_timings[DSI_CLOCK_MASTER]);
++	if (ret)
++		goto out_unlock;
++
++	if (sdsi)  {
++		ret = enable_phy(sdsi, &shared_timings[DSI_CLOCK_SLAVE]);
++		if (ret) {
++			msm_dsi_phy_disable(msm_dsi->phy);
++			goto out_unlock;
+ 		}
+-	} else {
+-		msm_dsi_host_reset_phy(msm_dsi->host);
+-		ret = enable_phy(msm_dsi, &shared_timings[id]);
+-		if (ret)
+-			return ret;
+ 	}
+ 
+ 	msm_dsi->phy_enabled = true;
+ 
+-	return 0;
++out_unlock:
++	mutex_unlock(&msm_dsi->phy_lock);
++
++	return ret;
+ }
+ 
+ static void dsi_mgr_phy_disable(int id)
+@@ -180,23 +187,35 @@ static void dsi_mgr_phy_disable(int id)
+ 	struct msm_dsi *mdsi = dsi_mgr_get_dsi(DSI_CLOCK_MASTER);
+ 	struct msm_dsi *sdsi = dsi_mgr_get_dsi(DSI_CLOCK_SLAVE);
+ 
+-	/* disable DSI phy
+-	 * In bonded dsi configuration, the phy should be disabled for the
+-	 * first controller only when the second controller is disabled.
+-	 */
+-	msm_dsi->phy_enabled = false;
+-	if (IS_BONDED_DSI() && mdsi && sdsi) {
+-		if (!mdsi->phy_enabled && !sdsi->phy_enabled) {
++	if (IS_BONDED_DSI() && mdsi && sdsi)
++		msm_dsi = mdsi;
++	else
++		sdsi = NULL;
++
++	mutex_lock(&msm_dsi->phy_lock);
++
++	if (msm_dsi->phy_enabled) {
++		/* Save PHY status if it is a clock source */
++		msm_dsi_phy_pll_save_state(msm_dsi->phy);
++
++		/*
++		 * In bonded dsi configuration, the phy should be disabled
++		 * for the main controller only when the second controller
++		 * is disabled.
++		 */
++		if (sdsi)
+ 			msm_dsi_phy_disable(sdsi->phy);
+-			msm_dsi_phy_disable(mdsi->phy);
+-		}
+-	} else {
+ 		msm_dsi_phy_disable(msm_dsi->phy);
+ 	}
++
++	msm_dsi->phy_enabled = false;
++
++	mutex_unlock(&msm_dsi->phy_lock);
+ }
+ 
+ struct dsi_bridge {
+ 	struct drm_bridge base;
++	bool is_powered;
+ 	int id;
+ };
+ 
+@@ -208,10 +227,9 @@ static int dsi_mgr_bridge_get_id(struct drm_bridge *bridge)
+ 	return dsi_bridge->id;
+ }
+ 
+-static int dsi_mgr_bridge_power_on(struct drm_bridge *bridge)
++int dsi_mgr_power_on(struct msm_dsi *msm_dsi)
+ {
+-	int id = dsi_mgr_bridge_get_id(bridge);
+-	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
++	int id = msm_dsi->id;
+ 	struct msm_dsi *msm_dsi1 = dsi_mgr_get_dsi(DSI_1);
+ 	struct mipi_dsi_host *host = msm_dsi->host;
+ 	struct msm_dsi_phy_shared_timings phy_shared_timings[DSI_MAX];
+@@ -220,14 +238,17 @@ static int dsi_mgr_bridge_power_on(struct drm_bridge *bridge)
+ 
+ 	DBG("id=%d", id);
+ 
++	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
++		return 0;
++
+ 	ret = dsi_mgr_phy_enable(id, phy_shared_timings);
+ 	if (ret)
+-		goto phy_en_fail;
++		return ret;
+ 
+ 	ret = msm_dsi_host_power_on(host, &phy_shared_timings[id], is_bonded_dsi, msm_dsi->phy);
+ 	if (ret) {
+ 		pr_err("%s: power on host %d failed, %d\n", __func__, id, ret);
+-		goto host_on_fail;
++		return ret;
+ 	}
+ 
+ 	if (is_bonded_dsi && msm_dsi1) {
+@@ -236,42 +257,27 @@ static int dsi_mgr_bridge_power_on(struct drm_bridge *bridge)
+ 		if (ret) {
+ 			pr_err("%s: power on host1 failed, %d\n",
+ 							__func__, ret);
+-			goto host1_on_fail;
++			return ret;
+ 		}
+ 	}
+ 
+-	/*
+-	 * Enable before preparing the panel, disable after unpreparing, so
+-	 * that the panel can communicate over the DSI link.
+-	 */
+-	msm_dsi_host_enable_irq(host);
+-	if (is_bonded_dsi && msm_dsi1)
+-		msm_dsi_host_enable_irq(msm_dsi1->host);
+-
+ 	return 0;
+-
+-host1_on_fail:
+-	msm_dsi_host_power_off(host);
+-host_on_fail:
+-	dsi_mgr_phy_disable(id);
+-phy_en_fail:
+-	return ret;
+ }
+ 
+-static void dsi_mgr_bridge_power_off(struct drm_bridge *bridge)
++void dsi_mgr_power_off(struct msm_dsi *msm_dsi)
+ {
+-	int id = dsi_mgr_bridge_get_id(bridge);
+-	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
++	int id = msm_dsi->id;
+ 	struct msm_dsi *msm_dsi1 = dsi_mgr_get_dsi(DSI_1);
+ 	struct mipi_dsi_host *host = msm_dsi->host;
+ 	bool is_bonded_dsi = IS_BONDED_DSI();
+ 
+-	msm_dsi_host_disable_irq(host);
+-	if (is_bonded_dsi && msm_dsi1) {
+-		msm_dsi_host_disable_irq(msm_dsi1->host);
+-		msm_dsi_host_power_off(msm_dsi1->host);
+-	}
++	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
++		return;
++
+ 	msm_dsi_host_power_off(host);
++	if (is_bonded_dsi && msm_dsi1)
++		msm_dsi_host_power_off(msm_dsi1->host);
++
+ 	dsi_mgr_phy_disable(id);
+ }
+ 
+@@ -279,6 +285,7 @@ static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge,
+ 				      struct drm_atomic_commit *commit)
+ {
+ 	int id = dsi_mgr_bridge_get_id(bridge);
++	struct dsi_bridge *dsi_bridge = to_dsi_bridge(bridge);
+ 	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
+ 	struct msm_dsi *msm_dsi1 = dsi_mgr_get_dsi(DSI_1);
+ 	struct mipi_dsi_host *host = msm_dsi->host;
+@@ -287,20 +294,31 @@ static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge,
+ 
+ 	DBG("id=%d", id);
+ 
+-	/* Do nothing with the host if it is slave-DSI in case of bonded DSI */
+-	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
++	/* Do nothing with the host if it is slave-DSI in case of bonded DSI.
++	 * Although we never register drm_bridge for slave dsi so we shouldn't
++	 * hit this.
++	 */
++	if (WARN_ON_ONCE(is_bonded_dsi && !IS_MASTER_DSI_LINK(id)))
+ 		return;
+ 
+-	ret = dsi_mgr_bridge_power_on(bridge);
++	if (!dsi_bridge->is_powered) {
++		ret = pm_runtime_resume_and_get(&msm_dsi->pdev->dev);
++		if (ret < 0) {
++			dev_err(&msm_dsi->pdev->dev, "Failed to get runtime PM: %d\n", ret);
++			return;
++		}
++	}
++
++	ret = dsi_mgr_power_on(msm_dsi);
+ 	if (ret) {
+ 		dev_err(&msm_dsi->pdev->dev, "Power on failed: %d\n", ret);
+-		return;
++		goto put_pm;
+ 	}
+ 
+ 	ret = msm_dsi_host_enable(host);
+ 	if (ret) {
+ 		pr_err("%s: enable host %d failed, %d\n", __func__, id, ret);
+-		goto host_en_fail;
++		goto put_pm;
+ 	}
+ 
+ 	if (is_bonded_dsi && msm_dsi1) {
+@@ -311,12 +329,13 @@ static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge,
+ 		}
+ 	}
+ 
++	dsi_bridge->is_powered = true;
+ 	return;
+ 
+ host1_en_fail:
+ 	msm_dsi_host_disable(host);
+-host_en_fail:
+-	dsi_mgr_bridge_power_off(bridge);
++put_pm:
++	pm_runtime_put_sync(&msm_dsi->pdev->dev);
+ }
+ 
+ void msm_dsi_manager_tpg_enable(void)
+@@ -335,6 +354,7 @@ void msm_dsi_manager_tpg_enable(void)
+ static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge,
+ 					struct drm_atomic_commit *commit)
+ {
++	struct dsi_bridge *dsi_bridge = to_dsi_bridge(bridge);
+ 	int id = dsi_mgr_bridge_get_id(bridge);
+ 	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
+ 	struct msm_dsi *msm_dsi1 = dsi_mgr_get_dsi(DSI_1);
+@@ -344,13 +364,11 @@ static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge,
+ 
+ 	DBG("id=%d", id);
+ 
+-	/*
+-	 * Do nothing with the host if it is slave-DSI in case of bonded DSI.
+-	 * It is safe to call dsi_mgr_phy_disable() here because a single PHY
+-	 * won't be diabled until both PHYs request disable.
+-	 */
+ 	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
+-		goto disable_phy;
++		return;
++
++	if (!dsi_bridge->is_powered)
++		return;
+ 
+ 	ret = msm_dsi_host_disable(host);
+ 	if (ret)
+@@ -362,26 +380,8 @@ static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge,
+ 			pr_err("%s: host1 disable failed, %d\n", __func__, ret);
+ 	}
+ 
+-	msm_dsi_host_disable_irq(host);
+-	if (is_bonded_dsi && msm_dsi1)
+-		msm_dsi_host_disable_irq(msm_dsi1->host);
+-
+-	/* Save PHY status if it is a clock source */
+-	msm_dsi_phy_pll_save_state(msm_dsi->phy);
+-
+-	ret = msm_dsi_host_power_off(host);
+-	if (ret)
+-		pr_err("%s: host %d power off failed,%d\n", __func__, id, ret);
+-
+-	if (is_bonded_dsi && msm_dsi1) {
+-		ret = msm_dsi_host_power_off(msm_dsi1->host);
+-		if (ret)
+-			pr_err("%s: host1 power off failed, %d\n",
+-								__func__, ret);
+-	}
+-
+-disable_phy:
+-	dsi_mgr_phy_disable(id);
++	pm_runtime_put_autosuspend(&msm_dsi->pdev->dev);
++	dsi_bridge->is_powered = false;
+ }
+ 
+ static void dsi_mgr_bridge_mode_set(struct drm_bridge *bridge,

@@ -1,0 +1,628 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <gnss-share@jayd.ml>
+Date: Sun, 1 Nov 2026 16:11:14 -0700
+Subject: [PATCH 2/4] qrtr: add an AF_QIPCRTR socket and a name service client
+
+QRTR is the IPC router that Qualcomm SoCs use to reach services on their
+remote processors (modem, audio and sensor DSPs). Go's syscall package
+has no sockaddr for AF_QIPCRTR, so the socket uses the raw socket system
+calls (numbers from golang.org/x/sys/unix, which every Linux architecture
+has) on a non-blocking descriptor registered with Go's poller: Close
+interrupts a blocked read, and a send that QRTR flow control holds back
+times out.
+
+The control packet layout and constants are those of Linux's
+include/uapi/linux/qrtr.h. A lookup goes to the kernel's name service
+(net/qrtr/ns.c), which lists the matching servers, ends the listing with
+an empty NEW_SERVER, and then reports servers that appear and disappear
+for as long as the socket is open.
+
+The Linux tests publish and look up a service number that no remote
+processor offers, and skip where AF_QIPCRTR is not available.
+---
+ go.mod                           |   2 +-
+ internal/qrtr/conn_linux.go      | 191 +++++++++++++++++++++++++++++++
+ internal/qrtr/conn_linux_test.go | 117 +++++++++++++++++++
+ internal/qrtr/conn_other.go      |  22 ++++
+ internal/qrtr/qrtr.go            | 132 +++++++++++++++++++++
+ internal/qrtr/qrtr_test.go       |  88 ++++++++++++++
+ 6 files changed, 551 insertions(+), 1 deletion(-)
+ create mode 100644 internal/qrtr/conn_linux.go
+ create mode 100644 internal/qrtr/conn_linux_test.go
+ create mode 100644 internal/qrtr/conn_other.go
+ create mode 100644 internal/qrtr/qrtr.go
+ create mode 100644 internal/qrtr/qrtr_test.go
+
+diff --git a/go.mod b/go.mod
+index e46459c..45ceca3 100644
+--- a/go.mod
++++ b/go.mod
+@@ -9,4 +9,4 @@ require (
+ 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
+ )
+ 
+-require golang.org/x/sys v0.1.0 // indirect
++require golang.org/x/sys v0.1.0
+diff --git a/internal/qrtr/conn_linux.go b/internal/qrtr/conn_linux.go
+new file mode 100644
+index 0000000..27268af
+--- /dev/null
++++ b/internal/qrtr/conn_linux.go
+@@ -0,0 +1,191 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++//go:build linux
++// +build linux
++
++package qrtr
++
++import (
++	"fmt"
++	"os"
++	"sync/atomic"
++	"syscall"
++	"time"
++	"unsafe"
++
++	"golang.org/x/sys/unix"
++)
++
++// rawSockaddr is struct sockaddr_qrtr
++type rawSockaddr struct {
++	Family uint16
++	_      uint16
++	Node   uint32
++	Port   uint32
++}
++
++// writeTimeout bounds a send that QRTR flow control holds back
++const writeTimeout = 5 * time.Second
++
++// Conn is an AF_QIPCRTR datagram socket. It is non-blocking and registered
++// with Go's poller, so Close interrupts a blocked ReadFrom.
++type Conn struct {
++	f      *os.File
++	rc     syscall.RawConn
++	local  Addr
++	closed int32
++}
++
++// Open creates a socket bound to a free port of the local node
++func Open() (*Conn, error) {
++	fd, err := unix.Socket(unix.AF_QIPCRTR, unix.SOCK_DGRAM|unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC, 0)
++	if err != nil {
++		return nil, fmt.Errorf("qrtr: socket: %w", err)
++	}
++
++	// An unbound socket has the local node and port 0 as its address.
++	// Binding to port 0 picks a free port; until then the socket can't be
++	// read (EADDRNOTAVAIL).
++	sa, err := getsockname(uintptr(fd))
++	if err == nil {
++		sa.Port = 0
++		_, _, e := syscall.Syscall(unix.SYS_BIND, uintptr(fd),
++			uintptr(unsafe.Pointer(&sa)), unsafe.Sizeof(sa))
++		if e != 0 {
++			err = fmt.Errorf("qrtr: bind: %w", e)
++		} else {
++			sa, err = getsockname(uintptr(fd))
++		}
++	}
++	if err != nil {
++		unix.Close(fd)
++		return nil, err
++	}
++
++	f := os.NewFile(uintptr(fd), "qrtr")
++	rc, err := f.SyscallConn()
++	if err != nil {
++		f.Close()
++		return nil, fmt.Errorf("qrtr: %w", err)
++	}
++
++	return &Conn{f: f, rc: rc, local: Addr{Node: sa.Node, Port: sa.Port}}, nil
++}
++
++func getsockname(fd uintptr) (rawSockaddr, error) {
++	var sa rawSockaddr
++	l := uint32(unsafe.Sizeof(sa))
++	_, _, e := syscall.Syscall(unix.SYS_GETSOCKNAME, fd,
++		uintptr(unsafe.Pointer(&sa)), uintptr(unsafe.Pointer(&l)))
++	if e != 0 {
++		return sa, fmt.Errorf("qrtr: getsockname: %w", e)
++	}
++	return sa, nil
++}
++
++// LocalAddr returns the socket's node and port
++func (c *Conn) LocalAddr() Addr {
++	return c.local
++}
++
++// ReadFrom reads one datagram. It blocks until one arrives, the read
++// deadline passes or the socket is closed.
++func (c *Conn) ReadFrom(b []byte) (int, Addr, error) {
++	var (
++		n    int
++		from Addr
++		serr error
++	)
++	err := c.rc.Read(func(fd uintptr) bool {
++		var sa rawSockaddr
++		l := uint32(unsafe.Sizeof(sa))
++		var p unsafe.Pointer
++		if len(b) > 0 {
++			p = unsafe.Pointer(&b[0])
++		}
++		for {
++			r, _, e := syscall.Syscall6(unix.SYS_RECVFROM, fd, uintptr(p), uintptr(len(b)), 0,
++				uintptr(unsafe.Pointer(&sa)), uintptr(unsafe.Pointer(&l)))
++			switch e {
++			case syscall.EINTR:
++				continue
++			case syscall.EAGAIN:
++				return false
++			case 0:
++				n, from = int(r), Addr{Node: sa.Node, Port: sa.Port}
++			default:
++				serr = e
++			}
++			return true
++		}
++	})
++	if err != nil {
++		return 0, Addr{}, c.wrapErr(err)
++	}
++	if serr != nil {
++		return 0, Addr{}, fmt.Errorf("qrtr: recvfrom: %w", serr)
++	}
++	return n, from, nil
++}
++
++// WriteTo sends b as one datagram to the address to
++func (c *Conn) WriteTo(b []byte, to Addr) error {
++	sa := rawSockaddr{Family: unix.AF_QIPCRTR, Node: to.Node, Port: to.Port}
++	var p unsafe.Pointer
++	if len(b) > 0 {
++		p = unsafe.Pointer(&b[0])
++	}
++
++	if err := c.f.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
++		return fmt.Errorf("qrtr: %w", err)
++	}
++
++	var serr error
++	err := c.rc.Write(func(fd uintptr) bool {
++		for {
++			_, _, e := syscall.Syscall6(unix.SYS_SENDTO, fd, uintptr(p), uintptr(len(b)), 0,
++				uintptr(unsafe.Pointer(&sa)), unsafe.Sizeof(sa))
++			switch e {
++			case syscall.EINTR:
++				continue
++			case syscall.EAGAIN:
++				return false
++			case 0:
++			default:
++				serr = e
++			}
++			return true
++		}
++	})
++	if err != nil {
++		return fmt.Errorf("qrtr: sendto: %w", c.wrapErr(err))
++	}
++	if serr != nil {
++		return fmt.Errorf("qrtr: sendto %d:%d: %w", to.Node, to.Port, serr)
++	}
++
++	return nil
++}
++
++// SetReadDeadline sets the deadline for ReadFrom
++func (c *Conn) SetReadDeadline(t time.Time) error {
++	return c.f.SetReadDeadline(t)
++}
++
++// Close closes the socket. The kernel tells every node that the port is
++// gone (DEL_CLIENT), so remote services drop the client's state, and the
++// name service drops the socket's lookups.
++func (c *Conn) Close() error {
++	atomic.StoreInt32(&c.closed, 1)
++	return c.f.Close()
++}
++
++// wrapErr turns the poller's error for a closed file into os.ErrClosed, as
++// os.File's own methods do
++func (c *Conn) wrapErr(err error) error {
++	if atomic.LoadInt32(&c.closed) != 0 {
++		return os.ErrClosed
++	}
++	return err
++}
+diff --git a/internal/qrtr/conn_linux_test.go b/internal/qrtr/conn_linux_test.go
+new file mode 100644
+index 0000000..79d1679
+--- /dev/null
++++ b/internal/qrtr/conn_linux_test.go
+@@ -0,0 +1,117 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++//go:build linux
++// +build linux
++
++package qrtr
++
++import (
++	"bytes"
++	"errors"
++	"os"
++	"testing"
++	"time"
++)
++
++// A service number no remote processor offers, so the test never talks to
++// a real one
++const testService = 0x7f00
++
++func openOrSkip(t *testing.T) *Conn {
++	t.Helper()
++	c, err := Open()
++	if err != nil {
++		t.Skipf("no AF_QIPCRTR sockets here: %s", err)
++	}
++	return c
++}
++
++func readCtrl(t *testing.T, c *Conn) Ctrl {
++	t.Helper()
++	buf := make([]byte, 64)
++	if err := c.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
++		t.Fatal(err)
++	}
++	n, from, err := c.ReadFrom(buf)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if from != (Addr{Node: c.LocalAddr().Node, Port: PortCtrl}) {
++		t.Fatalf("control packet from %+v", from)
++	}
++	ctrl, err := ParseCtrl(buf[:n])
++	if err != nil {
++		t.Fatal(err)
++	}
++	return ctrl
++}
++
++// Publish a service on one socket, find it from another through the
++// kernel's name service, exchange datagrams, and see it go away when its
++// socket closes.
++func TestConnNameServiceRoundTrip(t *testing.T) {
++	client := openOrSkip(t)
++	defer client.Close()
++	server := openOrSkip(t)
++	defer server.Close()
++
++	if err := server.WriteTo(NewServer(testService, 1), Addr{Node: server.LocalAddr().Node, Port: PortCtrl}); err != nil {
++		t.Fatal(err)
++	}
++	if server.LocalAddr().Port == 0 {
++		t.Fatal("no port after the first send")
++	}
++	if err := Lookup(client, testService, 0); err != nil {
++		t.Fatal(err)
++	}
++
++	c := readCtrl(t, client)
++	want := Server{Service: testService, Instance: 1, Addr: server.LocalAddr()}
++	if c.Cmd != TypeNewServer || c.Server != want {
++		t.Fatalf("got %+v, want NEW_SERVER %+v", c, want)
++	}
++	if c = readCtrl(t, client); !c.EndOfListing() {
++		t.Fatalf("got %+v, want the end of the listing", c)
++	}
++
++	msg := []byte("hello")
++	if err := client.WriteTo(msg, want.Addr); err != nil {
++		t.Fatal(err)
++	}
++	buf := make([]byte, 64)
++	if err := server.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
++		t.Fatal(err)
++	}
++	n, from, err := server.ReadFrom(buf)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if !bytes.Equal(buf[:n], msg) || from != client.LocalAddr() {
++		t.Fatalf("got %q from %+v, want %q from %+v", buf[:n], from, msg, client.LocalAddr())
++	}
++
++	server.Close()
++	if c = readCtrl(t, client); c.Cmd != TypeDelServer || c.Server != want {
++		t.Fatalf("got %+v, want DEL_SERVER %+v", c, want)
++	}
++}
++
++func TestConnCloseEndsRead(t *testing.T) {
++	c := openOrSkip(t)
++	errc := make(chan error, 1)
++	go func() {
++		_, _, err := c.ReadFrom(make([]byte, 16))
++		errc <- err
++	}()
++	time.Sleep(50 * time.Millisecond)
++	c.Close()
++	select {
++	case err := <-errc:
++		if !errors.Is(err, os.ErrClosed) {
++			t.Errorf("got %v, want os.ErrClosed", err)
++		}
++	case <-time.After(2 * time.Second):
++		t.Fatal("ReadFrom still blocked after Close")
++	}
++}
+diff --git a/internal/qrtr/conn_other.go b/internal/qrtr/conn_other.go
+new file mode 100644
+index 0000000..fad4026
+--- /dev/null
++++ b/internal/qrtr/conn_other.go
+@@ -0,0 +1,22 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++//go:build !linux
++// +build !linux
++
++package qrtr
++
++import "errors"
++
++// Conn is an AF_QIPCRTR socket, which only Linux has
++type Conn struct{}
++
++// Open fails: QRTR sockets are Linux only
++func Open() (*Conn, error) {
++	return nil, errors.New("qrtr: not supported on this system")
++}
++
++func (c *Conn) ReadFrom(b []byte) (int, Addr, error) { return 0, Addr{}, errors.New("qrtr: closed") }
++func (c *Conn) WriteTo(b []byte, to Addr) error      { return errors.New("qrtr: closed") }
++func (c *Conn) LocalAddr() Addr                      { return Addr{} }
++func (c *Conn) Close() error                         { return nil }
+diff --git a/internal/qrtr/qrtr.go b/internal/qrtr/qrtr.go
+new file mode 100644
+index 0000000..fa44380
+--- /dev/null
++++ b/internal/qrtr/qrtr.go
+@@ -0,0 +1,132 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++// Package qrtr talks to services on Qualcomm remote processors (modem,
++// audio and sensor DSPs) over AF_QIPCRTR datagram sockets, and to the QRTR
++// name service that lists those services.
++//
++// The constants and the control packet layout are those of Linux's
++// include/uapi/linux/qrtr.h. The name service is the kernel's
++// (net/qrtr/ns.c): it answers a NEW_LOOKUP with one NEW_SERVER packet per
++// matching service and an empty NEW_SERVER that ends the listing, and keeps
++// the lookup open until the socket is closed. Later NEW_SERVER and
++// DEL_SERVER packets report services that appear and disappear, e.g. when a
++// remote processor boots, crashes or is stopped.
++package qrtr
++
++import (
++	"encoding/binary"
++	"errors"
++)
++
++const (
++	// NodeBroadcast is QRTR_NODE_BCAST
++	NodeBroadcast uint32 = 0xffffffff
++	// PortCtrl is QRTR_PORT_CTRL, the port of the name service
++	PortCtrl uint32 = 0xfffffffe
++)
++
++// Control packet types (enum qrtr_pkt_type)
++const (
++	TypeNewServer uint32 = 4
++	TypeDelServer uint32 = 5
++	TypeNewLookup uint32 = 10
++	TypeDelLookup uint32 = 11
++)
++
++// Addr is a QRTR address (struct sockaddr_qrtr without the family)
++type Addr struct {
++	Node uint32
++	Port uint32
++}
++
++// Server is a service as the name service reports it
++type Server struct {
++	Service uint32
++	// Instance is the QMI service version in bits 0-7 and the instance ID
++	// above them
++	Instance uint32
++	Addr     Addr
++}
++
++// Version returns the QMI service version of s
++func (s Server) Version() uint32 {
++	return s.Instance & 0xff
++}
++
++// Ctrl is a decoded control packet (struct qrtr_ctrl_pkt, server variant)
++type Ctrl struct {
++	Cmd    uint32
++	Server Server
++}
++
++// EndOfListing reports whether c is the empty NEW_SERVER packet that ends
++// the name service's answer to a lookup
++func (c Ctrl) EndOfListing() bool {
++	return c.Cmd == TypeNewServer && c.Server == (Server{})
++}
++
++// ctrlLen is sizeof(struct qrtr_ctrl_pkt): a le32 command and four le32
++// fields
++const ctrlLen = 20
++
++var errShortCtrl = errors.New("qrtr: control packet too short")
++
++// NewLookup returns the control packet that asks the name service for the
++// servers of service and instance, and to report changes to them. Zero
++// matches any service or instance.
++func NewLookup(service, instance uint32) []byte {
++	b := make([]byte, ctrlLen)
++	binary.LittleEndian.PutUint32(b[0:], TypeNewLookup)
++	binary.LittleEndian.PutUint32(b[4:], service)
++	binary.LittleEndian.PutUint32(b[8:], instance)
++	return b
++}
++
++// NewServer returns the control packet that publishes a service on the
++// sending socket. The name service takes the node and port of a local
++// server from the socket, not from the packet.
++func NewServer(service, instance uint32) []byte {
++	b := make([]byte, ctrlLen)
++	binary.LittleEndian.PutUint32(b[0:], TypeNewServer)
++	binary.LittleEndian.PutUint32(b[4:], service)
++	binary.LittleEndian.PutUint32(b[8:], instance)
++	return b
++}
++
++// ParseCtrl decodes a control packet
++func ParseCtrl(b []byte) (Ctrl, error) {
++	if len(b) < ctrlLen {
++		return Ctrl{}, errShortCtrl
++	}
++	le := binary.LittleEndian
++	return Ctrl{
++		Cmd: le.Uint32(b[0:]),
++		Server: Server{
++			Service:  le.Uint32(b[4:]),
++			Instance: le.Uint32(b[8:]),
++			Addr: Addr{
++				Node: le.Uint32(b[12:]),
++				Port: le.Uint32(b[16:]),
++			},
++		},
++	}, nil
++}
++
++// Socket is the part of Conn that users need; tests can replace it
++type Socket interface {
++	// ReadFrom reads one datagram into b and returns its length and source
++	ReadFrom(b []byte) (int, Addr, error)
++	// WriteTo sends b as one datagram to the address to
++	WriteTo(b []byte, to Addr) error
++	// LocalAddr returns the socket's address; the node is the local node,
++	// where the name service runs
++	LocalAddr() Addr
++	Close() error
++}
++
++// Lookup sends a NEW_LOOKUP for service and instance to the name service of
++// the local node. The answers arrive on s from Addr{local node, PortCtrl}.
++func Lookup(s Socket, service, instance uint32) error {
++	return s.WriteTo(NewLookup(service, instance), Addr{Node: s.LocalAddr().Node, Port: PortCtrl})
++}
+diff --git a/internal/qrtr/qrtr_test.go b/internal/qrtr/qrtr_test.go
+new file mode 100644
+index 0000000..80b53b2
+--- /dev/null
++++ b/internal/qrtr/qrtr_test.go
+@@ -0,0 +1,88 @@
++// Copyright 2026 Jayden Milne <gnss-share@jayd.ml>
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++package qrtr
++
++import (
++	"bytes"
++	"testing"
++)
++
++func TestNewLookup(t *testing.T) {
++	want := []byte{
++		10, 0, 0, 0, // QRTR_TYPE_NEW_LOOKUP
++		0x10, 0, 0, 0, // service
++		2, 0, 0, 0, // instance
++		0, 0, 0, 0,
++		0, 0, 0, 0,
++	}
++	if got := NewLookup(0x10, 2); !bytes.Equal(got, want) {
++		t.Errorf("NewLookup: got % x, want % x", got, want)
++	}
++}
++
++func TestParseCtrl(t *testing.T) {
++	b := []byte{
++		4, 0, 0, 0, // QRTR_TYPE_NEW_SERVER
++		0x10, 0, 0, 0,
++		0x02, 0x01, 0, 0, // version 2, instance 1
++		3, 0, 0, 0,
++		0x26, 0, 0, 0,
++	}
++	c, err := ParseCtrl(b)
++	if err != nil {
++		t.Fatal(err)
++	}
++	want := Ctrl{Cmd: TypeNewServer, Server: Server{Service: 0x10, Instance: 0x102, Addr: Addr{Node: 3, Port: 0x26}}}
++	if c != want {
++		t.Errorf("got %+v, want %+v", c, want)
++	}
++	if c.Server.Version() != 2 {
++		t.Errorf("version %d, want 2", c.Server.Version())
++	}
++	if c.EndOfListing() {
++		t.Error("a server is not the end of the listing")
++	}
++
++	end, err := ParseCtrl(make([]byte, ctrlLen))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if end.EndOfListing() {
++		t.Error("command 0 is not the end of the listing")
++	}
++	end.Cmd = TypeNewServer
++	if !end.EndOfListing() {
++		t.Error("an empty NEW_SERVER is the end of the listing")
++	}
++
++	if _, err := ParseCtrl(b[:ctrlLen-1]); err == nil {
++		t.Error("short packet accepted")
++	}
++}
++
++type recordSocket struct {
++	to  Addr
++	buf []byte
++}
++
++func (r *recordSocket) ReadFrom(b []byte) (int, Addr, error) { return 0, Addr{}, nil }
++func (r *recordSocket) WriteTo(b []byte, to Addr) error {
++	r.to, r.buf = to, append([]byte{}, b...)
++	return nil
++}
++func (r *recordSocket) LocalAddr() Addr { return Addr{Node: 7, Port: 0x4001} }
++func (r *recordSocket) Close() error    { return nil }
++
++func TestLookupGoesToLocalNameService(t *testing.T) {
++	r := &recordSocket{}
++	if err := Lookup(r, 0x10, 0); err != nil {
++		t.Fatal(err)
++	}
++	if r.to != (Addr{Node: 7, Port: PortCtrl}) {
++		t.Errorf("lookup sent to %+v", r.to)
++	}
++	if !bytes.Equal(r.buf, NewLookup(0x10, 0)) {
++		t.Errorf("lookup packet % x", r.buf)
++	}
++}
+-- 
+2.56.0
+

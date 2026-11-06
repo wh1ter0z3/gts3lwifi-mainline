@@ -30,7 +30,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 138 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
-index 5e7715391..c54dc2479 100644
+index 5e7715391b..c54dc24796 100644
 --- a/drivers/power/supply/sm5705_charger.c
 +++ b/drivers/power/supply/sm5705_charger.c
 @@ -19,9 +19,11 @@
@@ -307,6 +307,3 @@ index 5e7715391..c54dc2479 100644
  };
  module_i2c_driver(sm5705_chg_driver);
  
--- 
-2.53.0
-

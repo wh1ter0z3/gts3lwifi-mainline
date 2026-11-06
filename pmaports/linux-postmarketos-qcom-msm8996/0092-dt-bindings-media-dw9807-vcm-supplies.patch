@@ -19,7 +19,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 8 insertions(+)
 
 diff --git a/Documentation/devicetree/bindings/media/i2c/dongwoon,dw9807-vcm.yaml b/Documentation/devicetree/bindings/media/i2c/dongwoon,dw9807-vcm.yaml
-index aae246ca3fcf..3ae491224f42 100644
+index aae246ca3f..3ae491224f 100644
 --- a/Documentation/devicetree/bindings/media/i2c/dongwoon,dw9807-vcm.yaml
 +++ b/Documentation/devicetree/bindings/media/i2c/dongwoon,dw9807-vcm.yaml
 @@ -21,6 +21,12 @@ properties:
@@ -44,6 +44,3 @@ index aae246ca3fcf..3ae491224f42 100644
          };
      };
  ...
--- 
-2.56.0
-

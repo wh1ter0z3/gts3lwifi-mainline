@@ -1,0 +1,491 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Thu, 9 Jun 2022 14:31:00 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-*: Commonize and expand
+ sound setup
+
+Move the common sound card and q6asmdai nodes to msm8996-xiaomi-common,
+and expand them to support all sound inputs and outputs going through
+WCD9335.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ .../boot/dts/qcom/msm8996-xiaomi-common.dtsi  | 170 ++++++++++++++++++
+ .../boot/dts/qcom/msm8996-xiaomi-gemini.dts   |  70 --------
+ .../dts/qcom/msm8996pro-xiaomi-natrium.dts    |  69 +------
+ .../dts/qcom/msm8996pro-xiaomi-scorpio.dts    |  70 +-------
+ 4 files changed, 174 insertions(+), 205 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+index db5f97518a..e880d85501 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-common.dtsi
+@@ -9,6 +9,9 @@
+ #include <dt-bindings/gpio/gpio.h>
+ #include <dt-bindings/leds/common.h>
+ #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
++#include <dt-bindings/sound/qcom,q6afe.h>
++#include <dt-bindings/sound/qcom,q6asm.h>
++#include <dt-bindings/sound/qcom,wcd9335.h>
+ 
+ / {
+ 	battery: battery {
+@@ -755,6 +758,173 @@ divclk4_pin_a: divclk4-state {
+ 	};
+ };
+ 
++&q6asmdai {
++	dai@0 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
++	};
++
++	dai@1 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
++	};
++
++	dai@2 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
++	};
++
++	dai@3 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA4>;
++	};
++
++	dai@4 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA5>;
++	};
++
++	dai@5 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA6>;
++	};
++};
++
++&sound {
++	compatible = "qcom,apq8096-sndcard";
++	audio-routing =	"RX_BIAS", "MCLK",
++			"AMIC1", "MIC BIAS1",
++			"AMIC2", "MIC BIAS2",
++			"AMIC3", "MIC BIAS4",
++			"AMIC4", "MIC BIAS4";
++
++	mm1-dai-link {
++		link-name = "MultiMedia1";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
++		};
++	};
++
++	mm2-dai-link {
++		link-name = "MultiMedia2";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
++		};
++	};
++
++	mm3-dai-link {
++		link-name = "MultiMedia3";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA3>;
++		};
++	};
++
++	mm4-dai-link {
++		link-name = "MultiMedia4";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA4>;
++		};
++	};
++
++	mm5-dai-link {
++		link-name = "MultiMedia5";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA5>;
++		};
++	};
++
++	mm6-dai-link {
++		link-name = "MultiMedia6";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA6>;
++		};
++	};
++
++	wcd-aif1-pb-dai-link {
++		link-name = "AIF1_PB";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_4_RX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9335 AIF1_PB>;
++		};
++	};
++
++	wcd-aif4-pb-dai-link {
++		link-name = "AIF4_PB";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_6_RX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9335 AIF4_PB>;
++		};
++	};
++
++	wcd-aif1-cap-dai-link {
++		link-name = "AIF1_CAP";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_0_TX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9335 AIF1_CAP>;
++		};
++	};
++
++	wcd-aif2-cap-dai-link {
++		link-name = "AIF2_CAP";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_1_TX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9335 AIF2_CAP>;
++		};
++	};
++
++	wcd-aif3-cap-dai-link {
++		link-name = "AIF3_CAP";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_2_TX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9335 AIF3_CAP>;
++		};
++	};
++
++	wcd-aif4-cap-dai-link {
++		link-name = "AIF4_CAP";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_3_TX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9335 AIF4_CAP>;
++		};
++	};
++};
++
+ &tlmm {
+ 	cam_sensor_rear_default: cam-sensor-rear-default-state {
+ 		pins = "gpio30";
+diff --git a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
+index 42770619ed..65ba04e727 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996-xiaomi-gemini.dts
+@@ -7,9 +7,6 @@
+ 
+ #include "msm8996.dtsi"
+ #include "msm8996-xiaomi-common.dtsi"
+-#include <dt-bindings/sound/qcom,q6afe.h>
+-#include <dt-bindings/sound/qcom,q6asm.h>
+-#include <dt-bindings/sound/qcom,wcd9335.h>
+ #include <dt-bindings/input/ti-drv260x.h>
+ 
+ / {
+@@ -138,79 +135,12 @@ &mss_pil {
+ 			"qcom/msm8996/gemini/modem.mbn";
+ };
+ 
+-&q6asmdai {
+-	dai@0 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+-	};
+-
+-	dai@1 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
+-	};
+-
+-	dai@2 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
+-	};
+-};
+-
+ &slpi_pil {
+ 	firmware-name = "qcom/msm8996/gemini/slpi.mbn";
+ };
+ 
+ &sound {
+-	compatible = "qcom,apq8096-sndcard";
+ 	model = "gemini";
+-	audio-routing = "RX_BIAS", "MCLK";
+-
+-	mm1-dai-link {
+-		link-name = "MultiMedia1";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
+-		};
+-	};
+-
+-	mm2-dai-link {
+-		link-name = "MultiMedia2";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
+-		};
+-	};
+-
+-	mm3-dai-link {
+-		link-name = "MultiMedia3";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA3>;
+-		};
+-	};
+-
+-	slim-dai-link {
+-		link-name = "SLIM Playback";
+-		cpu {
+-			sound-dai = <&q6afedai SLIMBUS_6_RX>;
+-		};
+-
+-		platform {
+-			sound-dai = <&q6routing>;
+-		};
+-
+-		codec {
+-			sound-dai = <&wcd9335 AIF4_PB>;
+-		};
+-	};
+-
+-	slimcap-dai-link {
+-		link-name = "SLIM Capture";
+-		cpu {
+-			sound-dai = <&q6afedai SLIMBUS_0_TX>;
+-		};
+-
+-		platform {
+-			sound-dai = <&q6routing>;
+-		};
+-
+-		codec {
+-			sound-dai = <&wcd9335 AIF1_CAP>;
+-		};
+-	};
+ };
+ 
+ &venus {
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
+index 70731468dd..0029e98e9d 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
+@@ -8,8 +8,6 @@
+ #include "msm8996pro.dtsi"
+ #include "msm8996-xiaomi-common.dtsi"
+ #include "pmi8996.dtsi"
+-#include <dt-bindings/sound/qcom,q6afe.h>
+-#include <dt-bindings/sound/qcom,q6asm.h>
+ 
+ / {
+ 	model = "Xiaomi Mi 5s Plus";
+@@ -97,18 +95,8 @@ &pmi8994_wled {
+ 	qcom,switching-freq = <600>;
+ };
+ 
+-&q6asmdai {
+-	dai@0 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+-	};
+-
+-	dai@1 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
+-	};
+-
+-	dai@2 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
+-	};
++&pmi8996_smbchg {
++	monitored-battery = <&battery>;
+ };
+ 
+ &slpi_pil {
+@@ -116,60 +104,7 @@ &slpi_pil {
+ };
+ 
+ &sound {
+-	compatible = "qcom,apq8096-sndcard";
+ 	model = "natrium";
+-	audio-routing = "RX_BIAS", "MCLK";
+-
+-	mm1-dai-link {
+-		link-name = "MultiMedia1";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
+-		};
+-	};
+-
+-	mm2-dai-link {
+-		link-name = "MultiMedia2";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
+-		};
+-	};
+-
+-	mm3-dai-link {
+-		link-name = "MultiMedia3";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA3>;
+-		};
+-	};
+-
+-	slim-dai-link {
+-		link-name = "SLIM Playback";
+-		cpu {
+-			sound-dai = <&q6afedai SLIMBUS_6_RX>;
+-		};
+-
+-		platform {
+-			sound-dai = <&q6routing>;
+-		};
+-
+-		codec {
+-			sound-dai = <&wcd9335 6>;
+-		};
+-	};
+-
+-	slimcap-dai-link {
+-		link-name = "SLIM Capture";
+-		cpu {
+-			sound-dai = <&q6afedai SLIMBUS_0_TX>;
+-		};
+-
+-		platform {
+-			sound-dai = <&q6routing>;
+-		};
+-
+-		codec {
+-			sound-dai = <&wcd9335 1>;
+-		};
+-	};
+ };
+ 
+ &venus {
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+index 1c9edc7f49..02c8c1709c 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+@@ -8,9 +8,6 @@
+ #include "msm8996pro.dtsi"
+ #include "msm8996-xiaomi-common.dtsi"
+ #include "pmi8996.dtsi"
+-#include <dt-bindings/sound/qcom,q6afe.h>
+-#include <dt-bindings/sound/qcom,q6asm.h>
+-#include <dt-bindings/sound/qcom,wcd9335.h>
+ 
+ / {
+ 	model = "Xiaomi Mi Note 2";
+@@ -262,18 +259,8 @@ &pmi8994_haptics {
+ 	qcom,vmax-mv = <2830>;
+ };
+ 
+-&q6asmdai {
+-	dai@0 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+-	};
+-
+-	dai@1 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
+-	};
+-
+-	dai@2 {
+-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
+-	};
++&pmi8996_smbchg {
++	monitored-battery = <&battery>;
+ };
+ 
+ &slpi_pil {
+@@ -281,60 +268,7 @@ &slpi_pil {
+ };
+ 
+ &sound {
+-	compatible = "qcom,apq8096-sndcard";
+ 	model = "scorpio";
+-	audio-routing = "RX_BIAS", "MCLK";
+-
+-	mm1-dai-link {
+-		link-name = "MultiMedia1";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
+-		};
+-	};
+-
+-	mm2-dai-link {
+-		link-name = "MultiMedia2";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
+-		};
+-	};
+-
+-	mm3-dai-link {
+-		link-name = "MultiMedia3";
+-		cpu {
+-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA3>;
+-		};
+-	};
+-
+-	slim-dai-link {
+-		link-name = "SLIM Playback";
+-		cpu {
+-			sound-dai = <&q6afedai SLIMBUS_6_RX>;
+-		};
+-
+-		platform {
+-			sound-dai = <&q6routing>;
+-		};
+-
+-		codec {
+-			sound-dai = <&wcd9335 AIF4_PB>;
+-		};
+-	};
+-
+-	slimcap-dai-link {
+-		link-name = "SLIM Capture";
+-		cpu {
+-			sound-dai = <&q6afedai SLIMBUS_0_TX>;
+-		};
+-
+-		platform {
+-			sound-dai = <&q6routing>;
+-		};
+-
+-		codec {
+-			sound-dai = <&wcd9335 AIF1_CAP>;
+-		};
+-	};
+ };
+ 
+ &venus {

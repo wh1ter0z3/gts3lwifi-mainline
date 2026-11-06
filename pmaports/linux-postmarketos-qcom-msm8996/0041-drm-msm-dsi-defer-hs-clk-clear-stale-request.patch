@@ -36,10 +36,10 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 7 insertions(+)
 
 diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
-index 945b91dd220b..de977c2c7f1e 100644
+index d8abe17ab3..321ee62af6 100644
 --- a/drivers/gpu/drm/msm/dsi/dsi_host.c
 +++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
-@@ -897,6 +897,13 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
+@@ -940,6 +940,13 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
  			lane_ctrl &= ~DSI_LANE_CTRL_HS_REQ_SEL_PHY;
  
  		if (defer_hs_clk) {
@@ -53,6 +53,3 @@ index 945b91dd220b..de977c2c7f1e 100644
  			dsi_write(msm_host, REG_DSI_LANE_CTRL, lane_ctrl);
  			msm_host->hs_clk_pending = true;
  		} else {
--- 
-2.56.0
-

@@ -39,7 +39,7 @@ Assisted-by: Claude:claude-opus-5-5
  2 files changed, 14 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/media/platform/qcom/camss/camss-vfe-gen1.c b/drivers/media/platform/qcom/camss/camss-vfe-gen1.c
-index d84a375e3318..a9e41f88e4ec 100644
+index d84a375e33..a9e41f88e4 100644
 --- a/drivers/media/platform/qcom/camss/camss-vfe-gen1.c
 +++ b/drivers/media/platform/qcom/camss/camss-vfe-gen1.c
 @@ -152,9 +152,17 @@ static void vfe_output_frame_drop(struct vfe_device *vfe,
@@ -80,7 +80,7 @@ index d84a375e3318..a9e41f88e4ec 100644
  	if (output->wait_reg_update) {
  		output->wait_reg_update = 0;
 diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
-index a2188a81bcfc..d5b79baa01df 100644
+index a2188a81bc..d5b79baa01 100644
 --- a/drivers/media/platform/qcom/camss/camss-vfe.h
 +++ b/drivers/media/platform/qcom/camss/camss-vfe.h
 @@ -70,6 +70,7 @@ struct vfe_output {
@@ -91,6 +91,3 @@ index a2188a81bcfc..d5b79baa01df 100644
  		} gen1;
  		struct {
  			int active_num;
--- 
-2.56.0
-

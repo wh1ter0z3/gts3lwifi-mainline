@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 28 Oct 2026 11:48:02 +0530
+Subject: [PATCH] ASoC: qcom: q6asm-dai: reset queue_ptr when preparing a
+ stream
+
+snd_pcm_prepare() rewinds appl_ptr, and the stale queue_ptr made the
+unsigned (appl_ptr - queue_ptr) in q6asm_dai_ack() wrap around after a
+re-prepare.
+
+On 6.19 this patch also closed a stopped stream before opening it again.
+Mainline does that since cee3e63e71, "ASoC: qcom: q6asm-dai: do not set
+stream state in event and trigger callbacks".
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ sound/soc/qcom/qdsp6/q6asm-dai.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/sound/soc/qcom/qdsp6/q6asm-dai.c b/sound/soc/qcom/qdsp6/q6asm-dai.c
+index 4f09fdd409..d2f415e930 100644
+--- a/sound/soc/qcom/qdsp6/q6asm-dai.c
++++ b/sound/soc/qcom/qdsp6/q6asm-dai.c
+@@ -222,6 +222,7 @@ static int q6asm_dai_prepare(struct snd_soc_component *component,
+ 	}
+ 
+ 	prtd->pcm_count = snd_pcm_lib_period_bytes(substream);
++	prtd->queue_ptr = 0;
+ 	/* rate and channels are sent to audio driver */
+ 	if (prtd->state == Q6ASM_STREAM_RUNNING) {
+ 		/* clear the previous setup if any  */

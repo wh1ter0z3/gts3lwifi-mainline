@@ -61,7 +61,8 @@ sensor as a buffer-only IIO device (`qcom-smgr-accel`, `-gyro`, `-mag`,
 
 - **Firmware:** Samsung-signed `slpi.mdt` + `slpi.b00`-`b14` from the
   `apnhlos` partition (`image/`). Relocatable, exactly the 10 MiB of
-  `slpi_mem` (0x91700000).
+  `slpi_mem` (0x8f400000, where the stock kernel loads it; docs/gnss.md
+  has the layout).
 - **Sensor registry (`sns.reg`):** Samsung keeps it on the **efs**
   partition, `/efs/FactoryApp/sensors/sns.reg`, not on `/persist` as other
   devices do. It has this unit's factory calibration, so a wiped userdata

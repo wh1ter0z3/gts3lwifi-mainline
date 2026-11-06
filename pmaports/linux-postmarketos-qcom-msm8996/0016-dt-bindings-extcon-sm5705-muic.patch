@@ -16,7 +16,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 diff --git a/Documentation/devicetree/bindings/extcon/siliconmitus,sm5705-muic.yaml b/Documentation/devicetree/bindings/extcon/siliconmitus,sm5705-muic.yaml
 new file mode 100644
-index 000000000..41b23f9ca
+index 0000000000..41b23f9cac
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/extcon/siliconmitus,sm5705-muic.yaml
 @@ -0,0 +1,48 @@
@@ -68,6 +68,3 @@ index 000000000..41b23f9ca
 +        interrupts-extended = <&pm8994_gpios 4 IRQ_TYPE_LEVEL_LOW>;
 +      };
 +    };
--- 
-2.53.0
-

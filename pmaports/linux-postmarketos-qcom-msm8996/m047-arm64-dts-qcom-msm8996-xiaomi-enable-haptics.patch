@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Fri, 3 Sep 2021 17:54:22 +0400
+Subject: [PATCH] arm64: dts: qcom: msm8996-xiaomi-*: Enable haptics
+
+Enable PMIC haptics and add LRA properties on msm8996-xiaomi-scorpio
+and msm8996-xiaomi-natrium.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts |  9 +++++++++
+ arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts | 10 ++++++++++
+ 2 files changed, 19 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
+index 13c613138b..70731468dd 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-natrium.dts
+@@ -81,6 +81,15 @@ &mss_pil {
+ 			"qcom/msm8996/natrium/modem.mbn";
+ };
+ 
++&pmi8994_haptics {
++	status = "okay";
++
++	qcom,wave-play-rate-us = <4166>;
++	qcom,actuator-type = <HAP_TYPE_LRA>;
++	qcom,wave-shape = <HAP_WAVE_SINE>;
++	qcom,brake-pattern = [03 03 03 02];
++};
++
+ &pmi8994_wled {
+ 	status = "okay";
+ 
+diff --git a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+index 251a2b0e96..5ed2c87de4 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
++++ b/arch/arm64/boot/dts/qcom/msm8996pro-xiaomi-scorpio.dts
+@@ -193,6 +193,16 @@ led@6 {
+ 	};
+ };
+ 
++&pmi8994_haptics {
++	status = "okay";
++
++	qcom,actuator-type = <HAP_TYPE_LRA>;
++	qcom,brake-pattern = <0x3 0x3 0x2 0x2>;
++	qcom,wave-shape = <HAP_WAVE_SINE>;
++	qcom,wave-play-rate-us = <5000>;
++	qcom,vmax-mv = <2830>;
++};
++
+ &q6asmdai {
+ 	dai@0 {
+ 		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;

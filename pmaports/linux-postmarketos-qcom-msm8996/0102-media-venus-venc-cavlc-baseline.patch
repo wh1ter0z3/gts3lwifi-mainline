@@ -25,10 +25,10 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 4 insertions(+)
 
 diff --git a/drivers/media/platform/qcom/venus/venc.c b/drivers/media/platform/qcom/venus/venc.c
-index 9d0fb8a630c6..bb36433fe26e 100644
+index 7760f56534..ea87b0f432 100644
 --- a/drivers/media/platform/qcom/venus/venc.c
 +++ b/drivers/media/platform/qcom/venus/venc.c
-@@ -732,6 +732,10 @@ static int venc_set_properties(struct venus_inst *inst)
+@@ -735,6 +735,10 @@ static int venc_set_properties(struct venus_inst *inst)
  		entropy.entropy_mode = venc_v4l2_to_hfi(
  					  V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE,
  					  ctr->h264_entropy_mode);
@@ -39,6 +39,3 @@ index 9d0fb8a630c6..bb36433fe26e 100644
  		entropy.cabac_model = HFI_H264_CABAC_MODEL_0;
  
  		ret = hfi_session_set_property(inst, ptype, &entropy);
--- 
-2.56.0
-

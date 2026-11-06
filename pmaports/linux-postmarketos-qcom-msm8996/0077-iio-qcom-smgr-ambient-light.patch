@@ -1,4 +1,4 @@
-From a2d783763dc96d8d1a794e53fcf94bbc93d83a94 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Fri, 30 Oct 2026 16:46:20 +0530
 Subject: [PATCH] iio: qcom_smgr: stream ambient light from a light-only
@@ -29,7 +29,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  2 files changed, 111 insertions(+), 24 deletions(-)
 
 diff --git a/drivers/iio/common/qcom_smgr/qcom_smgr.c b/drivers/iio/common/qcom_smgr/qcom_smgr.c
-index b2cebf9af..253e15090 100644
+index b2cebf9af0..253e150903 100644
 --- a/drivers/iio/common/qcom_smgr/qcom_smgr.c
 +++ b/drivers/iio/common/qcom_smgr/qcom_smgr.c
 @@ -132,6 +132,7 @@ static int qcom_smgr_request_single_sensor_info(struct qcom_smgr *smgr,
@@ -257,7 +257,7 @@ index b2cebf9af..253e15090 100644
  		if (smgr->sensors[i].type == SNS_SMGR_SENSOR_TYPE_UNKNOWN ||
  		    !qcom_smgr_sensor_type_iio_channels[smgr->sensors[i].type])
 diff --git a/include/linux/iio/common/qcom_smgr.h b/include/linux/iio/common/qcom_smgr.h
-index fdd3de12b..0dad50846 100644
+index fdd3de12bb..0dad50846e 100644
 --- a/include/linux/iio/common/qcom_smgr.h
 +++ b/include/linux/iio/common/qcom_smgr.h
 @@ -28,6 +28,8 @@ enum qcom_smgr_data_type {

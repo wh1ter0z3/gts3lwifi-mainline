@@ -18,7 +18,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 diff --git a/Documentation/devicetree/bindings/usb/samsung,s2mm005.yaml b/Documentation/devicetree/bindings/usb/samsung,s2mm005.yaml
 new file mode 100644
-index 000000000..16e446fbd
+index 0000000000..16e446fbd9
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/usb/samsung,s2mm005.yaml
 @@ -0,0 +1,61 @@
@@ -83,6 +83,3 @@ index 000000000..16e446fbd
 +            };
 +        };
 +    };
--- 
-2.53.0
-

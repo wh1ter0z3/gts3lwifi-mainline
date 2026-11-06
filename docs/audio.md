@@ -27,7 +27,7 @@ Not done yet:
 | | |
 |---|---|
 | ADSP firmware | Samsung-signed `image/adsp.mdt` + `.b00`-`.b09` from the **modem** partition (`ADSP.8996.2.7.1.C1-00013`; the `dsp` partition only holds ADSP modules). Copy to `/lib/firmware/qcom/msm8996/samsung/gts3/`; not in this repo |
-| ADSP memory | the image spans 0x2100000 bytes, more than msm8996.dtsi's 27 MB `adsp_mem`. The test DT grows it to 0x8ea00000-0x90f00000 and moves the unused `slpi_mem` to 0x91700000, inside the stock `peripheral_region` |
+| ADSP memory | the image spans 0x2100000 bytes, more than msm8996.dtsi's 27 MB `adsp_mem`. The main DT gives it 0x8fe00000-0x91f00000, where the stock kernel loads it, inside the stock `peripheral_region` (layout in docs/gnss.md) |
 | Codec | WCD9335 v2.0 on SLIMbus (NGD at 0x91c0000), PGD `1,0`, IFD `0,0` |
 | Codec reset | TLMM 74 (stock `wcd_gpio_ctrl`). The Xiaomi boards use 64 |
 | Codec interrupt | TLMM 79, one line (`intr1`). The Xiaomi boards use 54/53 |
@@ -61,8 +61,9 @@ the mix volume left at 0 dB and the compander off, the tone was distorted.
 3. **Re-prepare left a stream open in the DSP.** `q6asm_dai_prepare()` only
    closed RUNNING streams. After a STOP the next prepare opened the stream a
    second time (DSP error 9, EALREADY), then freed the audio client, and audio
-   stayed dead until reboot. It also never reset `queue_ptr`. Patch 0011 fixes
-   both. PipeWire hits this constantly, `aplay`/`arecord` never.
+   stayed dead until reboot. PipeWire hits this constantly, `aplay`/`arecord`
+   never. Mainline fixed it in cee3e63e71. It also never reset `queue_ptr`,
+   which patch 0011 still does.
 4. **Capture periods.** q6asm-dai allows at most 4096-byte capture periods
    (1024 frames of S16 stereo). postmarketOS' generic `soc-qcom` 51-qcom.conf
    asks for 4096-frame periods, so every capture open fails with EINVAL. The
@@ -78,10 +79,10 @@ the mix volume left at 0 dB and the compander off, the tone was distorted.
    dereferenced a NULL pointer. The PDR and SSR callbacks that queue the
    worker were registered before the NGD device existed. The oops left
    logind hanging, so ssh logins timed out (`CreateSession ... Device
-   timeout`) while ping worked, and shutdown hung. Patches 0105-0112
-   backport the mainline (7.1) fixes by Bjorn Andersson and Bartosz
-   Golaszewski; 0109 is the one that registers the callbacks after
-   creating the NGD. 11 boots in a row were clean with them.
+   timeout`) while ping worked, and shutdown hung. Fixed in mainline 7.1 by
+   Bjorn Andersson and Bartosz Golaszewski; 2a9d50e9ea is the commit that
+   registers the callbacks after creating the NGD. 11 boots in a row were
+   clean with these backported to 6.19.
 7. **Closing a stream in the DSP timed out** (`q6asm-dai ... CMD 10bcd
    timeout`, 5 s): at the PipeWire start in 6 of 24 boots, while
    WirePlumber probed the PCMs, and before the sound of about one camera
@@ -91,10 +92,9 @@ the mix volume left at 0 dB and the compander off, the tone was distorted.
    stored the rejections in `ac->result` like any other response. One that
    landed after the close's own response hid it from
    `q6asm_ac_send_cmd_sync()`, which waited out its 5 s, or which read the
-   rejection's status instead (`DSP returned error[a]`, seen once). Patch
-   0113 backports the upstream fix, 8a066a81ee0c ("ASoC: qcom: q6asm: drop
-   DSP responses for closed data streams", in v7.0 and the 6.12, 6.18 and
-   6.19 stable branches, after our v6.19.5 base), which drops the `EOS`,
+   rejection's status instead (`DSP returned error[a]`, seen once). The
+   upstream fix is 8a066a81ee0c ("ASoC: qcom: q6asm: drop DSP responses for
+   closed data streams", in v7.0), which drops the `EOS`,
    `READ_V2` and `WRITE_V2` responses without touching `ac->result`. We had
    written the same change for `EOS` and `READ_V2` before finding it. With
    a debug print in that version, a rejection arrived after the close's

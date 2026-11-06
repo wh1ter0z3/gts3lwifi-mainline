@@ -23,7 +23,7 @@ Assisted-by: Claude:claude-opus-5-5
  1 file changed, 19 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/extcon/extcon-sm5705.c b/drivers/extcon/extcon-sm5705.c
-index e299bbc694c7..9d0d24318b6d 100644
+index e299bbc694..9d0d24318b 100644
 --- a/drivers/extcon/extcon-sm5705.c
 +++ b/drivers/extcon/extcon-sm5705.c
 @@ -16,8 +16,9 @@
@@ -99,6 +99,3 @@ index e299bbc694c7..9d0d24318b6d 100644
  
  	/* charger type first, so consumers of EXTCON_USB see it */
  	extcon_set_state_sync(muic->edev, EXTCON_CHG_USB_FAST,
--- 
-2.56.0
-

@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yassine Oudjana <y.oudjana@protonmail.com>
+Date: Mon, 1 May 2023 14:53:50 +0300
+Subject: [PATCH] arm64: dts: qcom: msm8996: Add CAMSS power domain and
+ power-domain-names to CAMSS
+
+Add the CAMSS power domain which powers CAMSS and is needed to enable its
+clocks, as well as power-domain-names for all CAMSS power domains to make
+fetching them easier.
+
+Signed-off-by: Yassine Oudjana <y.oudjana@protonmail.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Link: https://lore.kernel.org/linux-arm-msm/20230526180712.8481-3-y.oudjana@protonmail.com/
+---
+ arch/arm64/boot/dts/qcom/msm8996.dtsi | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996.dtsi b/arch/arm64/boot/dts/qcom/msm8996.dtsi
+index 818e5660df..95355b8b70 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996.dtsi
+@@ -2256,7 +2256,9 @@ camss: camss@a34000 {
+ 				"vfe0",
+ 				"vfe1";
+ 			power-domains = <&mmcc VFE0_GDSC>,
+-					<&mmcc VFE1_GDSC>;
++					<&mmcc VFE1_GDSC>,
++					<&mmcc CAMSS_GDSC>;
++			power-domain-names = "vfe0", "vfe1", "camss";
+ 			clocks = <&mmcc CAMSS_TOP_AHB_CLK>,
+ 				<&mmcc CAMSS_ISPIF_AHB_CLK>,
+ 				<&mmcc CAMSS_CSI0PHYTIMER_CLK>,

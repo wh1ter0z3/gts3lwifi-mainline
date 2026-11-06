@@ -1,4 +1,4 @@
-From 1e151cc77b47771bfd355d8c5901dd497264a075 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Fri, 16 Oct 2026 11:00:45 +0530
 Subject: [PATCH] drm/msm/dsi: bring-up aids: rgb_swap and defer_hs_clk
@@ -22,7 +22,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  3 files changed, 57 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/msm/dsi/dsi.h b/drivers/gpu/drm/msm/dsi/dsi.h
-index 2283a460b..d3c15e5f3 100644
+index 2283a460b3..d3c15e5f39 100644
 --- a/drivers/gpu/drm/msm/dsi/dsi.h
 +++ b/drivers/gpu/drm/msm/dsi/dsi.h
 @@ -63,6 +63,7 @@ void dsi_mgr_power_off(struct msm_dsi *msm_dsi);
@@ -34,7 +34,7 @@ index 2283a460b..d3c15e5f3 100644
  					const struct mipi_dsi_msg *msg);
  void msm_dsi_host_xfer_restore(struct mipi_dsi_host *host,
 diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
-index b3d8b06ba..945b91dd2 100644
+index 5e76c6b2fe..d8abe17ab3 100644
 --- a/drivers/gpu/drm/msm/dsi/dsi_host.c
 +++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
 @@ -4,6 +4,7 @@
@@ -45,7 +45,7 @@ index b3d8b06ba..945b91dd2 100644
  #include <linux/delay.h>
  #include <linux/dma-mapping.h>
  #include <linux/err.h>
-@@ -186,6 +187,7 @@ struct msm_dsi_host {
+@@ -187,6 +188,7 @@ struct msm_dsi_host {
  	bool registered;
  	bool power_on;
  	bool enabled;
@@ -53,8 +53,8 @@ index b3d8b06ba..945b91dd2 100644
  	int irq;
  };
  
-@@ -772,6 +774,21 @@ bool msm_dsi_host_is_wide_bus_enabled(struct mipi_dsi_host *host)
- 		 msm_host->cfg_hnd->minor >= MSM_DSI_6G_VER_MINOR_V2_5_0);
+@@ -815,6 +817,21 @@ bool msm_dsi_host_is_wide_bus_enabled(struct mipi_dsi_host *host)
+ 					MSM_DSI_6G_VER_MINOR_V2_5_0);
  }
  
 +/* Bring-up aid: colour component order on the link (0 RGB, 1 RBG, 2 BGR, 3 BRG, 4 GRB, 5 GBR) */
@@ -75,7 +75,7 @@ index b3d8b06ba..945b91dd2 100644
  static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
  			struct msm_dsi_phy_shared_timings *phy_shared_timings, struct msm_dsi_phy *phy)
  {
-@@ -801,12 +818,10 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
+@@ -844,12 +861,10 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
  			data |= DSI_VID_CFG0_DATABUS_WIDEN;
  		dsi_write(msm_host, REG_DSI_VID_CFG0, data);
  
@@ -91,7 +91,7 @@ index b3d8b06ba..945b91dd2 100644
  		data |= DSI_CMD_CFG0_DST_FORMAT(dsi_get_cmd_fmt(mipi_fmt));
  		dsi_write(msm_host, REG_DSI_CMD_CFG0, data);
  
-@@ -881,8 +896,13 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
+@@ -924,8 +939,13 @@ static void dsi_ctrl_enable(struct msm_dsi_host *msm_host,
  		if (msm_dsi_phy_set_continuous_clock(phy, true))
  			lane_ctrl &= ~DSI_LANE_CTRL_HS_REQ_SEL_PHY;
  
@@ -107,7 +107,7 @@ index b3d8b06ba..945b91dd2 100644
  	}
  
  	data |= DSI_CTRL_ENABLE;
-@@ -2100,6 +2120,22 @@ void msm_dsi_host_unregister(struct mipi_dsi_host *host)
+@@ -2165,6 +2185,22 @@ void msm_dsi_host_unregister(struct mipi_dsi_host *host)
  	}
  }
  
@@ -130,7 +130,7 @@ index b3d8b06ba..945b91dd2 100644
  int msm_dsi_host_xfer_prepare(struct mipi_dsi_host *host,
  				const struct mipi_dsi_msg *msg)
  {
-@@ -2518,6 +2554,7 @@ int msm_dsi_host_power_off(struct mipi_dsi_host *host)
+@@ -2581,6 +2617,7 @@ int msm_dsi_host_power_off(struct mipi_dsi_host *host)
  	DBG("-");
  
  	msm_host->power_on = false;
@@ -139,10 +139,10 @@ index b3d8b06ba..945b91dd2 100644
  unlock_ret:
  	mutex_unlock(&msm_host->dev_mutex);
 diff --git a/drivers/gpu/drm/msm/dsi/dsi_manager.c b/drivers/gpu/drm/msm/dsi/dsi_manager.c
-index c62fe325b..48dd96f67 100644
+index 1a37edff07..c1d28ff78d 100644
 --- a/drivers/gpu/drm/msm/dsi/dsi_manager.c
 +++ b/drivers/gpu/drm/msm/dsi/dsi_manager.c
-@@ -526,6 +526,18 @@ int msm_dsi_manager_cmd_xfer(int id, const struct mipi_dsi_msg *msg)
+@@ -527,6 +527,18 @@ int msm_dsi_manager_cmd_xfer(int id, const struct mipi_dsi_msg *msg)
  		goto restore_host0;
  	}
  

@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Mon, 2 Nov 2026 02:04:03 -0700
+Subject: [PATCH] net: qrtr: Send a pending HELLO before other packets
+
+Since 544d85de4dc2 ("net: qrtr: Send HELLO message on endpoint register"),
+a packet other than HELLO fails with -EAGAIN until our HELLO has gone out,
+and a work item sends that HELLO. The name server answers a remote's HELLO
+by announcing the local services. If the remote's HELLO reaches it before
+the work item has run, the announcement fails and is never retried:
+
+  failed to announce new service
+  failed while handling packet from 0:-2
+
+The remote then never learns about the local services. Run the work item
+before giving up on the packet.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ net/qrtr/af_qrtr.c | 27 +++++++++++++++++++++------
+ 1 file changed, 21 insertions(+), 6 deletions(-)
+
+diff --git a/net/qrtr/af_qrtr.c b/net/qrtr/af_qrtr.c
+index 20460489f2..c6a965b3e6 100644
+--- a/net/qrtr/af_qrtr.c
++++ b/net/qrtr/af_qrtr.c
+@@ -340,6 +340,17 @@ static void qrtr_tx_flow_failed(struct qrtr_node *node, int dest_node,
+ 	}
+ }
+ 
++static bool qrtr_node_hello_sent(struct qrtr_node *node)
++{
++	bool sent;
++
++	mutex_lock(&node->ep_lock);
++	sent = node->hello_sent;
++	mutex_unlock(&node->ep_lock);
++
++	return sent;
++}
++
+ /* Pass an outgoing packet socket buffer to the endpoint driver. */
+ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
+ 			     int type, struct sockaddr_qrtr *from,
+@@ -349,13 +360,17 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
+ 	size_t len = skb->len;
+ 	int rc, confirm_rx;
+ 
+-	mutex_lock(&node->ep_lock);
+-	if (!node->hello_sent && type != QRTR_TYPE_HELLO) {
+-		mutex_unlock(&node->ep_lock);
+-		kfree_skb(skb);
+-		return -EAGAIN;
++	if (type != QRTR_TYPE_HELLO && !qrtr_node_hello_sent(node)) {
++		/*
++		 * The remote's HELLO can reach the name server before our HELLO
++		 * work has run, and the name server's reply is not retried.
++		 */
++		flush_delayed_work(&node->say_hello);
++		if (!qrtr_node_hello_sent(node)) {
++			kfree_skb(skb);
++			return -EAGAIN;
++		}
+ 	}
+-	mutex_unlock(&node->ep_lock);
+ 
+ 	confirm_rx = qrtr_tx_wait(node, to->sq_node, to->sq_port, type);
+ 	if (confirm_rx < 0) {

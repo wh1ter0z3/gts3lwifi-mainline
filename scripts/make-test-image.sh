@@ -11,7 +11,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 BOOT=${BOOT:-$HOME/.local/var/pmbootstrap/chroot_rootfs_samsung-gts3lwifi/boot/boot.img}
 MKBOOTIMG=${MKBOOTIMG:-$HOME/Projects/samsung-tab-s3/lk2nd/lk2nd/scripts/mkbootimg}
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
-mkdir "$W/k"; tar -xzf "$HERE/base/kernel-dts-v6.19.5-msm8996.tar.gz" -C "$W/k"
+mkdir "$W/k"; tar -xzf "$HERE/base/kernel-dts-v7.3.1.tar.gz" -C "$W/k"
 Q=$W/k/arch/arm64/boot/dts/qcom
 cpp -nostdinc -I "$W/k/include" -I "$Q" -I "$W/k/scripts/dtc/include-prefixes" -undef -D__DTS__ \
 	-x assembler-with-cpp "$DTS" | dtc -q -I dts -O dtb -o "$W/board.dtb" -

@@ -26,7 +26,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 include/linux/extcon/sm5705-muic.h
 
 diff --git a/drivers/extcon/extcon-sm5705.c b/drivers/extcon/extcon-sm5705.c
-index bba76f3e4..e299bbc69 100644
+index bba76f3e4b..e299bbc694 100644
 --- a/drivers/extcon/extcon-sm5705.c
 +++ b/drivers/extcon/extcon-sm5705.c
 @@ -12,8 +12,9 @@
@@ -197,7 +197,7 @@ index bba76f3e4..e299bbc69 100644
  	if (ret)
 diff --git a/include/linux/extcon/sm5705-muic.h b/include/linux/extcon/sm5705-muic.h
 new file mode 100644
-index 000000000..3266ac4e9
+index 0000000000..3266ac4e9e
 --- /dev/null
 +++ b/include/linux/extcon/sm5705-muic.h
 @@ -0,0 +1,23 @@
@@ -224,6 +224,3 @@ index 000000000..3266ac4e9
 +#endif
 +
 +#endif /* __LINUX_EXTCON_SM5705_MUIC_H */
--- 
-2.53.0
-

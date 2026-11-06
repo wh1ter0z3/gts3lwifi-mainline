@@ -39,8 +39,8 @@ The input device's resolution was 13 and 7 units per mm: `rmi_f12`
 overwrote `touchscreen-x-mm`/`-y-mm` with its own estimate, pitch times
 electrode count, which pairs the 49 RX electrodes (4 mm pitch) with x
 while on this sensor they run along y (it read 196 x 148 mm for a
-1535 x 2047 sensor). Patch 0064 is the upstream fix (Linux commit
-9a29ee801f52: platform data first), and `dts/test/test-touch.dts` gives
+1535 x 2047 sensor). The upstream fix is 9a29ee801f52 (platform
+data first), and `dts/test/test-touch.dts` gives
 the panel's active area in the sensor's frame, 147 x 196 mm: 10 units
 per mm on both axes (seen 2026-10-29).
 
@@ -68,9 +68,8 @@ version, big endian), and each interrupt has a 14-byte packet to read:
 | 12 | bit 7: soft key event instead of a pen sample |
 
 Linux 7.3 has a driver for this protocol family, `wacom_w9000`
-(W9002, W9007A; Hendrik Noack, Ferass El Hafidi).  Patches 0056-0057 are
-its two upstream commits, verbatim (185cd1d8cb7f binding, acaefbacc997
-driver).  Patches 0058-0062 add the W9019 to it: compatible
+(W9002, W9007A; Hendrik Noack, Ferass El Hafidi).  It came in as
+185cd1d8cb7f (binding) and acaefbacc997 (driver).  Patches 0058-0062 add the W9019 to it: compatible
 `wacom,w9019`, which requires `vdd-supply` and an active-high
 `flash-mode-gpios` held low; the split query (send 0x2a, wait 100 ms,
 read 15 bytes, three tries 100 ms apart, as `wacom_i2c_query()`); the
