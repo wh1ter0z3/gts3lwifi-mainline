@@ -46,14 +46,52 @@ Limits:
 - **4K isn't real time.** The clip takes 7.7 s for 150 frames, with Venus already at
   490 MHz. An extra 2 or 6 GB/s vote on its memory path changed nothing. Same
   suspects as H.264 encode at 4K below.
-- **The stream's crop isn't applied.** 854x480 comes out 856 wide, 1366x768 comes out
-  1368 wide, and 1080p from our encoder comes out 1088 high. As far as we can tell, the
-  firmware gives no usable crop for HEVC, so the driver reports the coded size. Without the extra rows
-  and columns, every frame matches. Any encoder that rounds 1080 up to 1088 gets 8
-  extra lines at the bottom. x265 doesn't.
+- ~~**The stream's crop isn't applied.**~~ Fixed by patch 0182 (below): 854x480 came
+  out 856 wide, 1366x768 1368 wide, and 1080p from our encoder 1088 high.
 - The driver offers 16x16 to 4096x4096.
 
 Not tried: an SM-T825, 10-bit (Main 10), and which commit fixed it on 7.3.
+
+## Crop and stability (2026-11-06, patch 0182)
+
+The firmware sends no crop rectangle with its sequence-changed event, for
+H.264 as well as HEVC, so the driver reported the coded size: libx264's
+1920x1080 came out 1920x1088 (every H.264 1080p clip, which is coded as
+1088 lines and cropped), 854x480 came out 856 or 864 wide. **0182** keeps
+the size userspace sets on the OUTPUT queue (GStreamer takes it from the
+container) and, when the firmware gives no crop and the coded size is that
+size rounded up by less than a 64-pixel coding block, crops to it. Other
+cases keep the coded size, as before.
+
+`tests/venus-stress.sh` on an SM-T820 (Linux 7.3.1, android branch with
+0182), every decode compared frame for frame with libavcodec's decoder in
+the same GStreamer pipeline, and the kernel log checked after each test:
+
+| Test | Result |
+|---|---|
+| baseline: H.264 720p, 1080p, 854x480; HEVC 1080p, 854x480; VP8 720p; VP9 1080p | all bit-exact |
+| soak: 30 decodes, random clip order | 0 bad; MemAvailable 2928 -> 2886 MB |
+| parallel: 4 decoders at once, 5 rounds | all bit-exact |
+| H.264 1080p encode during an HEVC 1080p decode | decode bit-exact, 300/300 frames encoded |
+| abort: 30 decodes killed mid-stream, then every clip once more | all bit-exact |
+| seek: 20 random seeks each in H.264 and HEVC | ok |
+| resolution change 480p -> 720p -> 480p in one H.264 stream | 180/180 frames, bit-exact |
+| runtime PM: Venus idles off between sessions, 10 cycles | suspended all 10 times |
+
+No kernel messages from Venus in any test. With the same modules minus
+0182, the baseline fails H.264 1080p, H.264 854x480 and HEVC 854x480.
+
+**Limit: a resolution change in mid-stream to a size that needs a crop**
+(an adaptive stream going to 1080p) still shows the coded size (1088
+lines): userspace reads the crop at the resolution-change event, and then
+only the firmware knows the new picture's size. It does tell: every
+fill-buffer-done carries the visible size (`frame_width`/`frame_height`
+in `hfi_msg_session_fbd_uncompressed_plane0_pkt`, 1920x1080 for those
+frames, 854x480 for the HEVC clip; seen with a debug print). Using that
+would mean signalling a crop change to userspace from the first frame of
+the new size, which the driver can't do yet. Plain files are not affected. The script makes its clips with
+ffmpeg on the tablet (two threads: four at full load take the bare board's
+big cores past 90 C) and keeps them in `/var/tmp/venus-stress`.
 
 ## Encoder fixes (2026-10-31, patches 0099-0102)
 
