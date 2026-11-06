@@ -7,11 +7,17 @@
  * compatible.
  *
  * The firmware regions use the Wi-Fi model's DT, the stock layout of both
- * models. The modem DSP stays off here until GNSS is tested on this model
- * (docs/gnss.md). Not here yet: LTE and the SIM; the modem's shared memory
- * region is reserved. TLMM 58-61 stay reserved: stock comments out the eSE SPI on both
- * models and they are free on the Wi-Fi model, but which pins TrustZone owns
- * is set by its firmware and an owned pin resets the tablet about 9 s into
+ * models: the SM-T825's full LTE modem image (T825XXU3CTA1) loads into the
+ * same 108 MiB modem region as the SM-T820's GNSS-only one, and the stock
+ * SM-T825 DTs (Rev00-05) place modem, peripheral and MBA memory exactly as
+ * the Wi-Fi model's. The modem DSP (MSS) boots its own image from the
+ * tablet's modem partition (gts3-firmware), as on the SM-T820. The modem's
+ * shared memory region, which stock lends to the modem through memshare
+ * (no mainline driver), stays reserved.
+ *
+ * TLMM 58-61 stay reserved: stock comments out the eSE SPI on both models
+ * and they are free on the Wi-Fi model, but which pins TrustZone owns is
+ * set by its firmware and an owned pin resets the tablet about 9 s into
  * boot. So the top speaker pair (quaternary TDM on those pins) is left out
  * until it is checked on an SM-T825; the bottom pair, headphones and
  * microphones stay.
@@ -34,10 +40,6 @@
 			no-map;
 		};
 	};
-};
-
-&mss_pil {
-	status = "disabled";
 };
 
 &tlmm {

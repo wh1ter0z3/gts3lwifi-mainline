@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..6612d40873 100644
+index 601fa9f44e..1a2fabbc10 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -9,7 +9,7 @@ index 601fa9f44e..6612d40873 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=3
++pkgrel=4
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -305,7 +305,7 @@ index 601fa9f44e..6612d40873 100644
 +55728038f8518d35b8f191f8c61c465931bebfee629dc46a67c7a32cdbb9c030aaf22928ecc7f3e2f51dc8bee3969448f9615e32b690311c9355d0c3205b51dc  m069-iio-add-qualcomm-sensor-manager-driver.patch
 +99c812263fdd1459c1f8ade474d0f67d2674c7a4840b271eeeac7624a6994fc0a374ad9ed8e927f6e733cf415a4f9857b8f0db1f724c37968e5892c65b063ca7  m070-soc-qcom-add-in-kernel-sensors-registry-implementation.patch
 +cbb3e21bb9d760e1a79563215465be1a1f0608ba42745d412f27b6397e11363ca52067e1b471adc992edacd58befd99443894d75437867f8cbcdb7580f18d481  m071-remoteproc-qcom-enable-in-kernel-sns-reg.patch
-+efcce163af06693a472364124ed27e1916595a263a3119d89a2f42d8915c09eb060f0eac518338f72362787ccdafedf12f2bd154892af10b4a1908ebc5d61e89  0001-add-samsung-gts3lwifi-dts.patch
++de102d0d2874c5565f5b2a07b578cad3722c07e146932724e04ed95b3bf27b8fb7576de9358f71fa996f32057f9154fdc3e919cb904c25064fe332ec9ce1f094  0001-add-samsung-gts3lwifi-dts.patch
 +964a367bc0e25ed4bcc414d7a184e519169796cc91de2b2a8838cf505ee006e7f6d84db89ed298ecbab99be2fcd9060deaed840be574ccfb08f6be0dc001a1d5  0002-drm-panel-add-samsung-ams968hh01.patch
 +22818c232f0be8233a0550e4a470295c1c99969ed089610603033d0409e310461b5a719e5ca6f9eb338a877ab8fe691d345de2d93d5daceebcb3689449f64731  0003-drm-msm-mdp5-split-display-bonded-dsi.patch
 +4521cbc37842219bedae736850e6199892dfe92fdf7f7e516c17cc12dc951835aba20a973db673d0a20205f416d4fa3d44c18bd87f0807df4a833427d3cc8986  0004-drm-msm-dpu-msm8996-split-display-ctls.patch

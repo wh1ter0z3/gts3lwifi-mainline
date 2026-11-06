@@ -5,7 +5,7 @@
 | Model | Where the GNSS engine is | Stock | Mainline |
 |---|---|---|---|
 | SM-T820 (Wi-Fi, APQ8096) | modem DSP (MSS), which runs a GNSS-only modem image ("modemlite") | works: satellites and position reports at 1 Hz in LineageOS | **works**: the modem boots at startup as on stock, first fix 2.5-8 min after it starts, and geoclue gets it through gnss-share with our `qmi_loc` driver (`pmaports/gnss-share`, `device-samsung-gts3lwifi-gnss`; see "Results"). The regression checklist (step 10) is still open |
-| SM-T825 (LTE, MSM8996) | modem DSP, in the full LTE modem image | should work the same way (same location HAL) | off: its DT disables the modem DSP until someone tests it on one; we have no dump of its modem partition |
+| SM-T825 (LTE, MSM8996) | modem DSP, in the full LTE modem image | should work the same way (same location HAL) | **needs testing**: the DT enables the modem DSP since 2026-11-06; its modem image (T825XXU3CTA1) loads at the same address and span as the SM-T820's (see "Hardware") |
 
 "APQ8096 has no modem" is only true of the cellular part. The modem
 subsystem (MSS, a Hexagon QDSP6 v5.5) is there on the SM-T820 too, and
@@ -197,8 +197,15 @@ SM-T820:
 SM-T825: MSM8996 (msm-id 246) with the full LTE modem image and the same
 location HAL, so GNSS goes through the same QMI LOC service. Stock talks
 to the modem with Samsung's RIL (`libsec-ril` over `/dev/umts_ipc0`) and
-`netmgrd` for data. We have no copy of its modem partition: the image's
-size, memory span and file names are not known.
+`netmgrd` for data. Its modem partition, from stock firmware
+T825XXU3CTD1 (CP T825XXU3CTA1, MPSS.TH.2.0.1-00316-M8996FAAAANAZM-1), has
+the same file names as the SM-T820's (`image/mba.mbn`, `modem.mdt` +
+`modem.b00`-`b20`, `modem_pr/` with carrier configurations), and its
+loadable segments span 0x88800000-0x8f400000: the same 0x6c00000 bytes at
+the same address as the SM-T820's GNSS-only image, so the main DT's
+`mpss_mem` fits it. It is a full LTE/WCDMA build although its `verinfo`
+also says "modemlite". The four stock SM-T825 DTs (Rev00, 02, 04, 05)
+place the modem, peripheral and MBA memory exactly as the SM-T820's.
 
 The SM-T825 DT reserves `modem_shared_mem` with the comment "LTE model
 only"; downstream has it for both models. It is the memshare pool, and
@@ -252,7 +259,8 @@ at the new node.
 This layout was tested on 2026-11-01 as `dts/test/gnss.dtsi` (with
 `test-gnss.dts` and `test-gnss-lte.dts`) and then moved into the main DT
 unchanged: the compiled trees of both boards are identical to those of the
-test DTs, which are gone, apart from the SM-T825's MSS, which is now off.
+test DTs, which are gone, apart from the SM-T825's MSS, which was off
+until 2026-11-06 and is on again since its modem image was checked.
 The regression checklist of test step 10 is still to be run on the main DT
 build.
 
@@ -351,8 +359,8 @@ It installs
 `/run/gnss-share.sock`, group `geoclue`), systemd drop-ins for rmtfs,
 tqftpserv and gnss-share, and `90-gts3-gnss.rules`.
 
-- **A DT without the MSS** (the SM-T825's, and kernel packages from before
-  the MSS moved into the main DT): there is no `2080000.remoteproc` platform
+- **A DT without the MSS** (the SM-T825's before 2026-11-06, and kernel
+  packages from before the MSS moved into the main DT): there is no `2080000.remoteproc` platform
   device, so rmtfs, tqftpserv and gnss-share all skip on their `Condition*`
   lines, and `gts3-firmware` doesn't copy the modem's images. Nothing runs
   and nothing needs masking. (The rmtfs package's own udev rule still tries
@@ -559,19 +567,20 @@ before the modem starts, and again with the packages (the modem up):
   `/lib/firmware/updates/qcom/msm8996/samsung/gts3/`, `gts3-firmware` copies
   them and the modem comes up on that same boot.
 - SM-T825: its DT includes the main DT, so it gets the same regions (the
-  stock layout of both models), with the MSS disabled. Check that it boots
-  and that audio, sensors, GPU and Venus still work.
+  stock layout of both models), MSS included. Check that it boots, that the
+  modem comes up with its own image, and that audio, sensors, GPU and Venus
+  still work.
 
 **11. Later.** Let rmtfs write (drop `-r` in a drop-in) only once
 sessions work, with the backup from step 1 at hand; the modem would then
 keep its orbit data and settings across restarts.
 
 SM-T825: steps 0-7 with `msm8996-samsung-gts3llte.dts`, after a backup of its
-partitions and a dump of its `modem` partition (to check the image span
-first). On that model ModemManager may take the modem (it offers WDS, DMS
-and NAS there); then ModemManager and gnss-share would both run location
-sessions. Sort that out before removing the `&mss_pil` override from its
-DT; with the override the subpackage does nothing there.
+partitions (the image span was checked on the stock firmware instead of a
+dump). On that model ModemManager, when installed, may take the modem (it
+offers WDS, DMS and NAS there); then ModemManager and gnss-share could both
+run location sessions, so check a fix with and without ModemManager
+running.
 
 ## Risks and safety
 
@@ -622,9 +631,10 @@ DT; with the override the subpackage does nothing there.
 - **gnss-share upstream.** Patches 0001-0004 are not sent: postmarketOS
   does not accept contributions made with generative AI tools. 0001 is an
   upstream bug fix that someone could redo independently.
-- **SM-T825**: modem image span and file names unknown; it probably has
-  WDS/DMS/NAS, so ModemManager may take the modem and run its own location
-  session alongside gnss-share; Samsung's RIL is a different matter.
+- **SM-T825**: untested. Its modem image fits the main DT (see
+  "Hardware"); it probably has WDS/DMS/NAS, so ModemManager may take the
+  modem and run its own location session alongside gnss-share. LTE itself
+  is `docs/lte.md`.
 - tqftpserv 1.3 (Alpine) against the `updates/` lookup of current git; if
   the modem does not get `modem_pr`, link it into
   `/lib/firmware/qcom/msm8996/samsung/gts3/` (on 2026-11-01 the modem

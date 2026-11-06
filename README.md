@@ -20,7 +20,7 @@ only changes the SoC ID, the modem memory and the pins TrustZone may own.
 | Model | State |
 |---|---|
 | SM-T820 (Wi-Fi, `gts3lwifi`) | main target, everything below is tested on it |
-| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem (LTE, SIM) work in progress, GPS off until tested; top speakers left out until checked |
+| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem DSP on with its own LTE image, untested (LTE, SIM, GPS: [lte](docs/lte.md)); top speakers left out until checked |
 
 ## Status
 
@@ -51,8 +51,8 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | USB device mode | Works | network, serial, storage |
 | USB host / OTG, USB 3 | Works | 5 Gbit/s as a host ([usb](docs/usb.md)) |
 | USB-C power (PD) | Works | 5 V / 3 A or 9 V / 1.65 A sink, 5 V / 1.5 A source ([usb](docs/usb.md)) |
-| GPS / GNSS | Works on the SM-T820 | through geoclue (modem DSP in the main DT, gnss-share `qmi_loc` driver), first fix 2.5-8 min after boot. Off on the SM-T825 until tested ([gnss](docs/gnss.md)) |
-| LTE modem, SIM (SM-T825) | WIP | the modem (MSS) bring-up needs the SM-T825's own modem firmware and memory layout |
+| GPS / GNSS | Works on the SM-T820 | through geoclue (modem DSP in the main DT, gnss-share `qmi_loc` driver), first fix 2.5-8 min after boot. On the SM-T825 the same, untested ([gnss](docs/gnss.md)) |
+| LTE modem, SIM (SM-T825) | WIP | the modem DSP boots the SM-T825's own LTE image (it fits the same memory); SIM, registration and SMS should work over QMI/ModemManager, untested. No mobile data: IPA v2.5 has no mainline driver ([lte](docs/lte.md)) |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
 | Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
@@ -79,9 +79,10 @@ from either model help, the SM-T825 most of all:
 
 - **Linux 7.3.1 on the SM-T825**: boot, display, touch, Wi-Fi, audio, sensors.
   Only its device tree was compile-tested (PR #10).
-- **GPS** (PR #9): the moved modem DSP and ADSP/SLPI memory on the SM-T825
-  (GPS stays off there), the modem's battery cost, a real fix through stock
-  geoclue on either model.
+- **GPS** (PR #9): the moved modem DSP and ADSP/SLPI memory on the SM-T825,
+  the modem's battery cost, a real fix through stock geoclue on either model.
+- **The SM-T825's modem**: that it boots its own LTE image, then SIM,
+  registration and SMS ([test steps](docs/lte.md#test-on-an-sm-t825)).
 - **Back/Recent touch keys** (PR #13), **headphone jack and headset mic**
   (PR #14), **GPU memory clock** (PR #15): tested on an SM-T820 from RAM
   boots; still to check as installed packages, and on an SM-T825.
