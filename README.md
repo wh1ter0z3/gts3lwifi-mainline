@@ -11,9 +11,9 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 
 ## Preview image
 
-An image to flash, for testers: [install guide](docs/install-preview.md),
-[release notes](docs/release-notes-preview.md). Built by `scripts/build-preview.py` from
-`scripts/preview/lock.json`.
+An image to flash, for testers, is being prepared (not released yet): [install
+guide](docs/install-preview.md), [release notes](docs/release-notes-preview.md). Built by
+`scripts/build-preview.py` from `scripts/preview/lock.json`.
 
 ## Models
 
