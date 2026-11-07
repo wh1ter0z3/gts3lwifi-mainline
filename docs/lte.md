@@ -45,6 +45,11 @@ yet. GNSS on that model goes through the same modem (`docs/gnss.md`).
 
 ## Test on an SM-T825
 
+`sudo sh tools/t825-check.sh` runs the automatic part of the steps below in one go (plus
+sensors, touch keys, jack, GPU, video, power), backs up the modem partitions first and writes a
+log with IMEI, IMSI, ICCID and phone numbers masked. `--video` and `--suspend` add a shortened
+Venus stress run and one suspend cycle.
+
 With a kernel whose LTE DT enables the MSS and `device-samsung-gts3lwifi-gnss`
 installed (rmtfs, tqftpserv). rmtfs runs read-only (`-r`), so the modem
 can't write its EFS partitions (`modemst1`/`modemst2`, which hold the
