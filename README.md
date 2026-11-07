@@ -20,7 +20,7 @@ only changes the SoC ID, the modem memory and the pins TrustZone may own.
 | Model | State |
 |---|---|
 | SM-T820 (Wi-Fi, `gts3lwifi`) | main target, everything below is tested on it |
-| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); modem off in `main` until tested (branch `t825-modem` turns it on, [lte](https://github.com/wh1ter0z3/gts3lwifi-mainline/blob/t825-modem/docs/lte.md)); top speakers left out until checked |
+| SM-T825 (LTE, `gts3llte`) | boots to KDE (first report 2026-10-31); on Linux 7.3.1 (current `main` + modem branch) a tester reports a smooth UI, and Wi-Fi and audio working from boot (2026-11-07); modem off in `main` until tested (branch `t825-modem` turns it on, [lte](https://github.com/wh1ter0z3/gts3lwifi-mainline/blob/t825-modem/docs/lte.md)); top speakers left out until checked |
 
 ## Status
 
@@ -77,8 +77,11 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 Merged on 2026-11-06 after testing on an SM-T820 only (7.3.1 kernel). Reports
 from either model help, the SM-T825 most of all:
 
-- **Linux 7.3.1 on the SM-T825**: boot, display, touch, Wi-Fi, audio, sensors.
-  Only its device tree was compile-tested (PR #10).
+- **Linux 7.3.1 on the SM-T825**: a tester's report on 2026-11-07 (branch
+  `t825-modem`, which is `main` plus the modem): boots, smooth UI, Wi-Fi and
+  audio work from boot. Still to check there: sensors and auto-rotate (with
+  `pmaports/kwin`, whose fix removes the snow during the rotation animation),
+  camera, video.
 - **GPS** (PR #9): the moved modem DSP and ADSP/SLPI memory on the SM-T825
   (GPS stays off there), the modem's battery cost, a real fix through stock
   geoclue on either model.
