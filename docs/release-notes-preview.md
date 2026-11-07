@@ -19,9 +19,12 @@ SM-T825. Install: [install-preview.md](install-preview.md).
   public. It shows a prompt to change it at each login until you do. There is no
   autologin. Root has no password, and SSH is off until you turn it on. Please change the
   password before connecting to a network you don't trust.
-- **SM-T825: no modem.** No LTE and no SIM. GPS is off on this model too. **Nobody has
-  booted Linux 7.3.1 on an SM-T825**, only 6.19. The lk2nd for the SM-T825 in this release is
-  a new build that has not been run either; an lk2nd you already have works too.
+- **SM-T825: no modem.** No LTE and no SIM. GPS is off on this model too (the modem work
+  is on the `t825-modem` branch, not in this image). Linux 7.3.1 has booted on an SM-T825:
+  on 2026-11-07 a tester reported a smooth UI, and Wi-Fi and audio working from boot, on
+  our `main` plus the modem branch. This image itself hasn't run on one. The lk2nd for the
+  SM-T825 in this release is a new build that has not been run either; an lk2nd you
+  already have works too.
 - **Suspend and battery.** Suspend is s2idle only, no deep sleep. It passed 4 of 4 cycles of
   20 s on the SM-T820. Battery life in suspend hasn't been measured, so don't count on
   it lasting. Plasma's idle timer suspends after a while, and until the Power key wakes
@@ -52,13 +55,11 @@ use it.
 |---|---|
 | LTE, SIM (SM-T825) | Not supported |
 | GPS (SM-T825) | Off until tested |
-| Home key | Does nothing in Plasma: the mapping isn't in this image's packages yet. Use the application menu in the panel |
-| Back and Recent touch keys | Not yet |
-| Headphone jack detection, headset mic | Not yet. Speakers, headphones and the built-in mics work |
 | Top speakers (SM-T825) | Left out until checked. Bottom pair, headphones and mics are on |
 | Fingerprint | Blocked: its pins belong to Samsung's TrustZone |
 | Cover (hall) sensor, grip sensor (SM-T825) | Not yet |
 | Compass heading | Not yet |
+| Video playback across a resolution change | A stream that switches size in the middle (adaptive streaming) to one that needs a crop, such as 1080p, shows 8 extra lines at the bottom. Files play correctly |
 | Microphone level | Quiet, peaks near 5 %: gain never tuned |
 | Camera app | None in this image. The kernel and libcamera side work. Plasma Camera, from the repositories, is broken on this tablet (wrong resolution, smeared photos, empty video, crash when switching cameras) |
 | Bluetooth | On some boots there's no controller (`Opcode 0x0c03 failed: -110` in the log). Bring it back with `sudo rmmod hci_uart; sudo modprobe hci_uart` |
@@ -72,16 +73,18 @@ use it.
 All of this is from the SM-T820, from [the README](../README.md) and
 [kernel-7.3.md](kernel-7.3.md), most of it on the 7.3.1 kernel package this image builds,
 on a system installed and modified by hand over several weeks. This image differs: it
-has Plasma 6.8.2 and KWin 6.8.2, where our tablet has 6.8.1. The SM-T825 has booted to KDE on
-earlier kernels, nothing more is known.
+has Plasma 6.8.2 and KWin 6.8.2, where our tablet has 6.8.1. On the SM-T825, a tester
+reported the 7.3.1 kernel booting with a smooth UI, Wi-Fi and audio (2026-11-07); the rest
+is untested there.
 
 | Area | README | Hand checks on 7.3.1 |
 |---|---|---|
 | Boot, cpufreq, thermal, eMMC, microSD, reboot, power-off | Works | 13 of 13 boots clean; the rest not rechecked |
 | Display, brightness, rotation | Works | picture and brightness by eye, rotation by hand |
-| GPU (Adreno 530, freedreno) | Works | KWin running |
+| GPU (Adreno 530, freedreno) | Works | KWin running; memory clock votes give 20-27 % more fps in most scenes |
 | Touch, S-Pen, keyboard cover | Works | by hand |
 | Power, Volume keys | Works | Power: sleeps and wakes twice in a row |
+| Home key, Back and Recent touch keys | Works | Home opens the launcher, Recent opens Present Windows, Back is Back; the key lights time out |
 | Wi-Fi 2.4 and 5 GHz | Works | passes traffic after suspend |
 | Bluetooth | Works | stays powered after suspend; see the timeout above |
 | USB device mode | Works | gadget running |
@@ -89,9 +92,10 @@ earlier kernels, nothing more is known.
 | GPS through geoclue (SM-T820) | Works | first fix after 80 s at a window, probably with orbit data kept from earlier fixes. README: 2.5 to 8 min after boot |
 | Battery gauge, charging | Works | not rechecked |
 | Speakers, headphones, mics | Works | by ear; mic quiet |
-| Venus video | Partial | H.264 and HEVC decode match software. Encode not rechecked |
+| Headphone jack detection, headset mic and button | Works | plug and unplug switch the output; centre button tested |
+| Venus video | Works | H.264, HEVC, VP8, VP9 decode frame-for-frame identical to software, with the right picture size, and stable under `tests/venus-stress.sh` (parallel decoders, encode during decode, killed decodes, seeks, resolution changes). 4K HEVC about 20 fps |
 | Cameras | Works | both capture, in Ocellus, which this image doesn't have |
-| Sensors | Works | accelerometer, gyroscope, magnetometer, light, ADC; orientation reads normal |
+| Sensors | Works | accelerometer (streamed at 12 Hz to save power), gyroscope, magnetometer, light, ADC; orientation reads normal |
 | Waydroid, Widevine | Optional extras, not in this image | not rechecked |
 
 ## What we'd like you to check
@@ -126,8 +130,8 @@ saw on screen, and lk2nd's log:
 
 ### SM-T825: the main question
 
-The project moves to Linux 7.3 if it boots on both models, and so far it hasn't been
-tried on an SM-T825. Your first report matters even if nothing else works. Please tell us:
+Linux 7.3.1 has booted on one SM-T825 (2026-11-07), but this image and its lk2nd haven't.
+Your first report matters even if nothing else works. Please tell us:
 
 - **Which lk2nd:** the one from this release, or the one you had. Did fastboot show up on
   USB with it?
