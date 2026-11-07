@@ -4,9 +4,9 @@
  },
  "jobs": 16,
  "fork": {
-  "url": "https://github.com/jaydens-tasty-slop/gts3lwifi-mainline.git",
-  "commit": "d8b79e35ce4bc5d5dc994f4b1d01d66071968cfc",
-  "pmaports_tree": "a2c99719d44d5dbaab68411bfe92b1413cc160b6",
+  "url": "https://github.com/wh1ter0z3/gts3lwifi-mainline.git",
+  "commit": "fa315df947bb01353f313741d93dcb887e683996",
+  "pmaports_tree": "9350e5ca33068db330b9ea359aaebe67ae34a4fb",
   "build": [
    "linux-postmarketos-qcom-msm8996",
    "device-samsung-gts3lwifi",
