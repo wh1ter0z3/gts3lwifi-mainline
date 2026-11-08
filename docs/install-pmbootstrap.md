@@ -1,8 +1,8 @@
 # Installing postmarketOS with pmbootstrap (main or android kernel)
 
-From zero to postmarketOS (console, no desktop) on the Galaxy Tab S3, built yourself with
-pmbootstrap from this repository, optionally booting straight into Android apps
-(Waydroid). The same steps give either kernel: branch `main` (the
+From zero to postmarketOS on the Galaxy Tab S3, built yourself with pmbootstrap from this
+repository, with either the KDE Plasma desktop or just a text console, and optionally
+booting straight into Android apps (Waydroid). The same steps give either kernel: branch `main` (the
 normal one) or branch `android` (the same kernel plus what Android needs, see
 [android.md](android.md)). For a ready-made image instead, see the preview (not released
 yet).
@@ -12,9 +12,13 @@ yet).
 end to end by anyone as written: the package overlay in step 2 and the Waydroid autologin
 in step 7 are untested. Tell us where it goes wrong.
 
-The console UI is small and boots to a text login; Waydroid then runs Android full screen
-on its own, without a desktop. For KDE Plasma instead, choose `plasma-desktop` in step 3
-(see [pmos-install.md](pmos-install.md)).
+Pick one user interface in step 3; the steps that differ have a part for each:
+
+| | Plasma | Console |
+|---|---|---|
+| What you get | the full KDE Plasma desktop (Wayland), touch and S-Pen, auto-rotate | a text login only; much smaller and lighter |
+| Android apps (Waydroid) | in windows on the desktop, or as their own full-screen session | full screen on their own, without a desktop |
+| Wi-Fi setup | System Settings | `nmtui` |
 
 **This erases the tablet's data** (userdata) **and replaces Android's boot partition.**
 Back up first. Recovery (TWRP), `system`, `efs` and `modem` are not touched; don't wipe
@@ -78,18 +82,26 @@ one in `extra-repos/systemd/kwin`, which the loop finds.
 
 `pmbootstrap init` again, and choose: channel **edge**; vendor **samsung**, device
 **gts3lwifi** (also for the SM-T825: one build runs on both models); user interface
-**console**; **systemd: yes**; your user name and the rest as you like. Say yes to the SSH
-server if you want to log in from the PC.
+**plasma-desktop** or **console**; **systemd: yes**; your user name and the rest as you
+like. Say yes to the SSH server if you want to log in from the PC.
 
 ## 4. Build the image
+
+Plasma:
+
+```sh
+pmbootstrap install --add device-samsung-gts3lwifi-waydroid
+```
+
+Console (`networkmanager-tui` gives `nmtui` for setting up Wi-Fi):
 
 ```sh
 pmbootstrap install --add networkmanager-tui,device-samsung-gts3lwifi-waydroid
 ```
 
-It builds the kernel first, which takes a while. `networkmanager-tui` gives `nmtui` for
-setting up Wi-Fi; leave out `device-samsung-gts3lwifi-waydroid` if you don't want Android
-apps. It asks for the user's password.
+It builds the kernel first, which takes a while. Leave out
+`device-samsung-gts3lwifi-waydroid` if you don't want Android apps. It asks for the user's
+password.
 
 ## 5. Flash
 
@@ -103,40 +115,67 @@ fastboot reboot
 
 ## 6. First boot
 
-It boots to a text login on the screen; log in with your user name and password. On the
-first boot the tablet copies its own firmware (Wi-Fi, GPU, audio, modem) from its Android
-partitions (`gts3-firmware`). If Wi-Fi or sound is missing on the very first boot, reboot
-once.
+On the first boot the tablet copies its own firmware (Wi-Fi, GPU, audio, modem) from its
+Android partitions (`gts3-firmware`). If Wi-Fi or sound is missing on the very first boot,
+reboot once.
 
-Wi-Fi: `nmtui` (Activate a connection), or
-`nmcli device wifi connect "NETWORK NAME" --ask`. Over the USB cable the tablet is also at
-`172.16.42.1` (`ssh user@172.16.42.1`, if you installed the SSH server).
+- Plasma: it boots to the login screen; log in with your user name and password. Wi-Fi is
+  in the panel's network icon or System Settings.
+- Console: it boots to a text login on the screen. Wi-Fi: `nmtui` (Activate a
+  connection), or `nmcli device wifi connect "NETWORK NAME" --ask`.
 
-## 7. Optional: boot straight into Android (Waydroid)
+Over the USB cable the tablet is also at `172.16.42.1` (`ssh user@172.16.42.1`, if you
+installed the SSH server).
+
+## 7. Optional: Android apps (Waydroid), and booting straight into them
 
 Needs `device-samsung-gts3lwifi-waydroid` (step 4, or later with
 `pmbootstrap sideload device-samsung-gts3lwifi-waydroid`) and Wi-Fi. Details:
 [waydroid.md](waydroid.md).
 
+First, on either UI:
+
 1. Download Android once, on the tablet: `sudo waydroid init` (about 1 GB; if the download
    breaks, see "Downloading the images" in [waydroid.md](waydroid.md)).
-2. Try it once: log in on the tablet's screen and run `gts3-waydroid-session`. Android
-   comes up full screen (in `cage`). Leave the tablet alone during Android's first boot,
-   about 5-6 minutes. Powering Android off from its menu brings you back to the console.
-3. Start it at every boot: log in on the screen automatically, and start Android from the
-   login shell. On the tablet, with your user name instead of `user`:
+2. Leave the tablet alone during Android's first boot below, about 5-6 minutes; later
+   boots are quick.
 
-   ```sh
-   sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
-   printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty -o "-p -f -- \\\\u" --noclear --autologin user %%I $TERM\n' |
-       sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf
-   printf '\n# Android full screen when logging in on the screen\n[ "$(tty)" = /dev/tty1 ] && gts3-waydroid-session\n' >> ~/.profile
-   ```
+### Plasma
 
-   There is no password prompt at boot then. Powering Android off still brings you to
-   the console (logged in), where `gts3-waydroid-session` starts it again.
-4. To stop starting Android at boot: remove the last two lines from `~/.profile`; to stop
-   the autologin: `sudo rm -r /etc/systemd/system/getty@tty1.service.d`.
+- In windows on the desktop: start Waydroid or an Android app from the application menu.
+- Full screen, as its own session: log out and pick "Android (Waydroid)" on the login
+  screen. Powering Android off from its menu ends the session and returns to the login
+  screen.
+- Straight into Android at every boot (the login manager of the systemd Plasma flavour is
+  plasma-login-manager; replace `user` with your user name):
+
+  ```sh
+  sudo mkdir -p /etc/plasmalogin.conf.d
+  printf '[Autologin]\nUser=user\nSession=waydroid-fullscreen.desktop\nRelogin=false\n' |
+      sudo tee /etc/plasmalogin.conf.d/50-waydroid-autologin.conf
+  ```
+
+  There is no password prompt at boot then. Back to Plasma: power Android off and pick
+  Plasma on the login screen. To stop it: `sudo rm /etc/plasmalogin.conf.d/50-waydroid-autologin.conf`.
+
+### Console
+
+- Full screen: log in on the tablet's screen and run `gts3-waydroid-session`. Android
+  comes up full screen (in `cage`); powering it off from its menu brings you back to the
+  console.
+- Straight into Android at every boot: log in on the screen automatically, and start
+  Android from the login shell. On the tablet, with your user name instead of `user`:
+
+  ```sh
+  sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+  printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty -o "-p -f -- \\\\u" --noclear --autologin user %%I $TERM\n' |
+      sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf
+  printf '\n# Android full screen when logging in on the screen\n[ "$(tty)" = /dev/tty1 ] && gts3-waydroid-session\n' >> ~/.profile
+  ```
+
+  There is no password prompt at boot then. Powering Android off brings you to the
+  console (logged in), where `gts3-waydroid-session` starts it again. To stop it: remove
+  the last two lines from `~/.profile`, and `sudo rm -r /etc/systemd/system/getty@tty1.service.d`.
 
 ## 8. Later: kernel updates, and switching between main and android
 
