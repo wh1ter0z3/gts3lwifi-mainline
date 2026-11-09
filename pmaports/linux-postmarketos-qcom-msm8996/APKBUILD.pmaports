@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=3
+pkgrel=4
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -225,6 +225,8 @@ source="
 	0169-asoc-apq8096-headset-jack.patch
 	0170-arm64-dts-msm8996-gpu-opp-ddr.patch
 	0182-media-venus-vdec-crop-to-stream-size.patch
+	0183-irqchip-qcom-mpm-program-the-vmpm-wake-up-timer.patch
+	0184-clk-qcom-gcc-msm8996-no-parent-for-the-modem-gpll0-vote.patch
 "
 builddir="$srcdir/linux-$pkgver"
 
@@ -450,4 +452,6 @@ b2c5b5ddc8779172b05b20bdc2509ac4896e8d74f6e3eaf6c4919e8bb6e947cff383df7054331ffc
 82f3acd6e228245c12c4abcfbd8e3727e89e1c4a8d79e252b695be8a83a961e7be132cf6ce64303c07a12eda05ef62e2f9d2cb7dc390c7bf69480dba7fec182a  0169-asoc-apq8096-headset-jack.patch
 50dc1d7a57d223322fa8771f9b6a01a26c357e6d9a8b15a33e304b2f6a6dca823192db2f76082fb5ee9a028f63916756c88e0e8f22cc685633ed02a5430aafb8  0170-arm64-dts-msm8996-gpu-opp-ddr.patch
 92fcd7cd2729b29f3116ee84ec39d9ad95330ed1eb17127acdbf4b673052145b37e238349d143ae62ca48babcb7467ec466d1e6b9f5a48e10df237509bcca489  0182-media-venus-vdec-crop-to-stream-size.patch
+a1fcedc2b9f01a09bba777ce3e80a179fd2c3ae9ce4c6dcf1732c05e1d7b30153ef65a4e1676d0544795da8b98002aa684762202c41abdcbf30bf4e1dc133ea7  0183-irqchip-qcom-mpm-program-the-vmpm-wake-up-timer.patch
+9c6093d435d8d577af12565ddc4bacc979b935c6af419d5a283a16535bb3d43cfb4f5cc05eb726ced28b3ba6089d9b70109181034990c7cfa4162442cf0281eb  0184-clk-qcom-gcc-msm8996-no-parent-for-the-modem-gpll0-vote.patch
 "

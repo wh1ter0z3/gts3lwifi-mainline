@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Mon, 9 Nov 2026 15:27:51 +0530
+Subject: [PATCH] clk: qcom: gcc-msm8996: No parent for the modem's GPLL0 vote
+
+gcc_mss_gpll0_div_clk is the AP's vote bit for GPLL0's output to the
+modem (downstream gpll0_out_msscc, a gate clock without a parent). The
+modem votes for GPLL0 itself. With GPLL0 as the parent, the running
+modem kept GPLL0, and through it XO, enabled from the AP's side, so the
+RPM never saw the AP release XO and the SoC never reached XO shutdown.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/clk/qcom/gcc-msm8996.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/clk/qcom/gcc-msm8996.c b/drivers/clk/qcom/gcc-msm8996.c
+index dc8b6f3f3d..f2d93abf04 100644
+--- a/drivers/clk/qcom/gcc-msm8996.c
++++ b/drivers/clk/qcom/gcc-msm8996.c
+@@ -105,6 +105,13 @@ static struct clk_branch gcc_mmss_gpll0_div_clk = {
+ 	},
+ };
+ 
++/*
++ * The AP's vote for GPLL0's output to the modem. The modem votes for GPLL0
++ * itself, so this is a plain vote bit without a parent, as downstream has it
++ * (gpll0_out_msscc). With GPLL0 as its parent, the running modem kept GPLL0
++ * and through it XO enabled from the AP's side, and the AP never let the
++ * RPM turn XO off.
++ */
+ static struct clk_branch gcc_mss_gpll0_div_clk = {
+ 	.halt_check = BRANCH_HALT_DELAY,
+ 	.clkr = {
+@@ -112,11 +119,6 @@ static struct clk_branch gcc_mss_gpll0_div_clk = {
+ 		.enable_mask = BIT(2),
+ 		.hw.init = &(struct clk_init_data){
+ 			.name = "gcc_mss_gpll0_div_clk",
+-			.parent_hws = (const struct clk_hw*[]){
+-				&gpll0.clkr.hw,
+-			},
+-			.num_parents = 1,
+-			.flags = CLK_SET_RATE_PARENT,
+ 			.ops = &clk_branch2_ops
+ 		},
+ 	},

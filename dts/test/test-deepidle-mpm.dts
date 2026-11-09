@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * TEST ONLY: test-deepidle.dts plus the MPM (MSM Power Manager), so that
+ * entering system power collapse tells the RPM, which can then turn off XO
+ * and lower the rails (vlow/vmin in /sys/kernel/debug/qcom_stats). This is
+ * what stock's qcom,notify-rpm level does (msm_mpm_enter_sleep()).
+ *
+ * From the stock device trees (qcom,mpm-v2): vMPM at 0x681b8 in the RPM
+ * message RAM, wake-up interrupt SPI 171 rising, IPC bit 1 of the APCS
+ * (0x9820010), 96 pins. Stock's qcom,gic-map lists Linux hwirqs (SPI + 32):
+ *
+ *   pin 2  -> 216 = SPI 184
+ *   pin 52 -> 212 = SPI 180
+ *   pin 87 -> 358 = SPI 326, the SPMI PMIC arbiter (power key, RTC alarm,
+ *                   PMIC GPIOs such as Home and Volume Up)
+ *
+ * The register layout of mainline's irq-qcom-mpm (timer, then enable,
+ * falling, rising, polarity, status, 3 words each) matches downstream
+ * mpm-of.c. Mainline never writes the vMPM timer; stock writes the next
+ * wake-up as an arch counter value (or ~0). TLMM (GPIO) wake-ups through
+ * the MPM's gpio-map are not described here. Needs CONFIG_QCOM_MPM.
+ */
+
+#include "test-deepidle.dts"
+
+&rpm_msg_ram {
+	compatible = "qcom,rpm-msg-ram", "mmio-sram";
+	#address-cells = <1>;
+	#size-cells = <1>;
+	ranges = <0 0x00068000 0x6000>;
+
+	apss_mpm: sram@1b8 {
+		reg = <0x1b8 0x48>;
+	};
+};
+
+&rpm {
+	mpm: interrupt-controller {
+		compatible = "qcom,mpm";
+		qcom,rpm-msg-ram = <&apss_mpm>;
+		interrupts = <GIC_SPI 171 IRQ_TYPE_EDGE_RISING>;
+		mboxes = <&apcs_glb 1>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+		#power-domain-cells = <0>;
+		interrupt-parent = <&intc>;
+		qcom,mpm-pin-count = <96>;
+		qcom,mpm-pin-map = <2 184>,
+				   <52 180>,
+				   <87 326>;	/* SPMI PMIC arbiter */
+	};
+};
+
+&spmi_bus {
+	/delete-property/ interrupts;
+	interrupts-extended = <&mpm 87 IRQ_TYPE_LEVEL_HIGH>;
+};
+
+&system_pd {
+	power-domains = <&mpm>;
+};

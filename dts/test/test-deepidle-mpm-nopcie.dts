@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * TEST ONLY: test-deepidle-mpm.dts without PCIe (no Wi-Fi), to see whether
+ * the APSS releases its XO vote in suspend once the PCIe reference clocks
+ * are off. Used with the USB cable unplugged during the suspend.
+ */
+
+#include "test-deepidle-mpm.dts"
+
+&pcie0 {
+	status = "disabled";
+};

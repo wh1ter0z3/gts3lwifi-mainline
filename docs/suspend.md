@@ -53,3 +53,27 @@ patch 0147 keeps the link up. See [kernel-7.3](kernel-7.3.md).
   (some wake-up was pending, maybe the PCIe link going down).
 - `qrtr 5-19: PM: parent remoteproc0:smd-edge.IPCRTR.-1.-1 should not be
   sleeping`: a device-link warning from the ADSP's QRTR, harmless so far.
+
+## Deep sleep (work in progress, 2026-11-09)
+
+Goal: the RPM turning XO off (vlow) and lowering the rails (vmin) while the tablet sleeps. Before this
+work its counters (`/sys/kernel/debug/qcom_stats/vlow`, `vmin`) never moved. Tested on an SM-T820 from
+RAM boots, battery only (cable out), display blanked.
+
+| Step | State |
+|---|---|
+| L2 and system power collapse | **Granted** by Samsung's TrustZone as the stock kernel encodes them: 0x01000044 and 0x02003444, without the reset bit 30 (stock takes that bit from the CPU level only, `psci_enter_sleep()` in downstream lpm-levels.c; with it the firmware answers NOT_SUPPORTED). `dts/test/test-deepidle.dts` |
+| MPM | Described from the stock DTs (vMPM at 0x681b8 in the RPM message RAM, IPC bit 1, SPI 171, pin 87 = the SPMI PMIC arbiter) for mainline's `irq-qcom-mpm`; power key, RTC and PMIC GPIOs work through it. `dts/test/test-deepidle-mpm.dts`, needs `CONFIG_QCOM_MPM` |
+| MPM wake-up timer | **Patch 0183**: mainline never wrote the vMPM timer; without it a suspend with XO released never woke up. Now the earliest timer of the CPU domains, or none in suspend-to-idle, as downstream does |
+| Modem holding XO | **Patch 0184**: the modem's GPLL0 vote had GPLL0 as its parent, so the running modem kept GPLL0 and XO on from the AP's side; stock has it as a plain vote bit |
+| A modem that never boots | keeps the RPM's MPSS "active" forever and blocks XO shutdown: the modem has to run (rmtfs) for the SoC to sleep |
+| All four RPM masters release XO | Yes (RPM master stats at 0x68150, read from `/dev/mem`), once USB and the Bluetooth UART are idle |
+| RPM turns XO off | **Not yet**: vlow/vmin stay 0. Its sleep set still has bus bandwidth/clock votes (the RPM log shows `bmas`, `bslv`, `clk1` around every sleep); zeroing all of them hangs the system, so it is per device |
+| Idle current | 129 mA with XO held, 90-97 mA (lowest 72) with all masters releasing XO |
+
+Still holding XO in daily use: USB (the T820 does not notice an unplug: `s2mm005 ... failed to set USB
+role device: -95`), the Bluetooth UART (open even when Bluetooth is off), the PCIe link during suspend
+(patch 0147), and the boot options `clk_ignore_unused`/`pd_ignore_unused`. The test DTs are not for daily
+use: `test-deepidle-mpm-nopcie.dts` drops Wi-Fi, and a deep suspend can leave the tablet asleep until a
+power-key reset.
+

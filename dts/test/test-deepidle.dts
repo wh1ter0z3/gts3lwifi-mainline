@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * TEST ONLY: L2 power collapse and system power collapse as the deepest
+ * cluster and system idle states, the way the stock kernel's lpm-levels
+ * compose them (qcom,lpm-levels in the stock DTs, psci_enter_sleep() in
+ * downstream lpm-levels.c): affinity level at bit 24, system mode at bit 8,
+ * cluster mode at bit 4, CPU mode at bit 0, and the reset bit 30 only from
+ * the *CPU* level's qcom,is-reset, which stock's CPU levels never set (the
+ * cluster levels' is-reset only drives downstream's own bookkeeping).
+ *
+ *   L2 fpc      cluster mode 4                    0x01000044
+ *   system fpc  system mode 0x34, needs L2 fpc,   0x02003444
+ *               qcom,notify-rpm
+ *
+ * With bit 30 (0x41000044, 0x42003444) the firmware answers NOT_SUPPORTED.
+ *
+ * The CPU state stays 0x4: stock's CPU "fpc" is mode 4 without the reset
+ * bit too, the TrustZone keeps the context. Here the L2 and system states
+ * are only ever requested by the last CPU of a cluster or of the system, as
+ * stock does. cpuidle-psci-domain overwrites the
+ * domain state, so each parameter is the full composite.
+ *
+ * In L2 and system power collapse the CPUs' arch timers stop: the system
+ * relies on the memory-mapped timer (msm8996.dtsi timer@9840000) as the
+ * broadcast. Wake-up interrupts other than the timer may not reach the CPUs
+ * from system power collapse without the MPM, which mainline does not
+ * describe for msm8996 yet. RAM boot only, with panic and watchdog set.
+ * Latencies are stock's (L2 fpc 700 us, system fpc 11 ms), entry/exit split
+ * conservatively.
+ */
+
+#include "../apq8096-samsung-gts3lwifi.dts"
+
+/ {
+	domain-idle-states {
+		cluster_pc: cluster-pc {
+			compatible = "domain-idle-state";
+			arm,psci-suspend-param = <0x01000044>;
+			entry-latency-us = <400>;
+			exit-latency-us = <700>;
+			min-residency-us = <5000>;
+		};
+
+		system_pc: system-pc {
+			compatible = "domain-idle-state";
+			arm,psci-suspend-param = <0x02003444>;
+			entry-latency-us = <4000>;
+			exit-latency-us = <11000>;
+			min-residency-us = <50000>;
+		};
+	};
+};
+
+&cluster0_pd {
+	domain-idle-states = <&cluster_gdhs>, <&cluster_pc>;
+};
+
+&cluster1_pd {
+	domain-idle-states = <&cluster_gdhs>, <&cluster_pc>;
+};
+
+&system_pd {
+	domain-idle-states = <&system_ret>, <&system_pc>;
+};
