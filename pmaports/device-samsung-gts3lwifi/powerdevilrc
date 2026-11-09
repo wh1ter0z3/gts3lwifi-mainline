@@ -1,0 +1,7 @@
+[AC][SuspendSession]
+idleTime=600000
+suspendType=1
+
+[Battery][SuspendSession]
+idleTime=300000
+suspendType=1

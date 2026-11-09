@@ -1,0 +1,14 @@
+[Unit]
+Description=Rebind the touchscreen on resume to clear a stuck touch grab
+# systemd-suspend.service only finishes once resume has thawed user.slice, so
+# ordering after it means the compositor is back up before we rebind.
+After=systemd-suspend.service
+
+[Service]
+Type=oneshot
+# Give the compositor a moment to re-establish its input state after thaw.
+ExecStartPre=/bin/sleep 4
+ExecStart=/usr/sbin/gts3-touch-resume
+
+[Install]
+WantedBy=systemd-suspend.service
