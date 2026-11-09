@@ -41,8 +41,12 @@ bad() { echo "  FAIL  $*"; }
 note() { echo "  --    $*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 check() { if eval "$2" >/dev/null 2>&1; then ok "$1"; else bad "$1"; fi; }
-# Mask anything that looks like an IMEI, IMSI, ICCID, MEID or phone number
-mask() { sed -E 's/[0-9A-Fa-f]{14,}/<masked>/g; s/\+?[0-9][0-9 -]{8,}[0-9]/<masked>/g'; }
+# Mask anything that looks like an IMEI, IMSI, ICCID, MEID or phone number, and the cell
+# and area codes, which give the tablet's location
+mask() {
+	sed -E 's/[0-9A-Fa-f]{14,}/<masked>/g; s/\+?[0-9][0-9 -]{8,}[0-9]/<masked>/g' |
+	sed -E "s/((Cell ID|Location Area Code|Tracking Area Code|LAC|TAC|cell id|location area code|tracking area code)[^:]*: *'?)[0-9A-Fa-fx]+/\\1<masked>/"
+}
 ask() {
 	[ "$ASK" = 1 ] || return 1
 	printf '\n  >>> %s\n      press Enter when ready (s + Enter skips) ' "$1" > /dev/tty
@@ -114,6 +118,10 @@ fi
 echo "== ModemManager (numbers masked)"
 if have mmcli; then
 	timeout 20 mmcli -L 2>&1 | indent
+	if timeout 20 mmcli -L 2>&1 | grep -q 'No modems'; then
+		note "ModemManager sees no modem; its view of the QRTR modem (last 30 lines):"
+		journalctl -b -u ModemManager --no-pager 2>/dev/null | grep -iE 'qrtr|qmi|modem|port|plugin' | tail -30 | mask | indent
+	fi
 	timeout 20 mmcli -m any 2>&1 | mask | indent
 	timeout 20 mmcli -m any --messaging-list-sms 2>&1 | mask | indent
 else
@@ -132,10 +140,12 @@ echo "== Sensors and rotation"
 for d in /sys/bus/iio/devices/iio:device*; do
 	[ -e "$d/name" ] && echo "   $(basename "$d"): $(cat "$d/name")"
 done
-ACC=$(dirname "$(ls /sys/bus/iio/devices/iio:device*/in_accel_x_raw 2>/dev/null | head -1)" 2>/dev/null)
-accel() { [ -n "$ACC" ] && echo "x=$(cat "$ACC/in_accel_x_raw") y=$(cat "$ACC/in_accel_y_raw") z=$(cat "$ACC/in_accel_z_raw")"; }
-[ -n "$ACC" ] && ok "accelerometer $(basename "$ACC"): $(accel)" || bad "no accelerometer channels"
-# iio-sensor-proxy's orientation, read over D-Bus while monitor-sensor holds the claim
+# The SMGR accelerometer only streams through its buffer (no in_accel_*_raw), so the
+# orientation comes from iio-sensor-proxy over D-Bus. KWin holds the sensor claim while
+# auto-rotate is on; monitor-sensor, if there, holds one too.
+ACC=$(grep -l '^qcom-smgr-accel$' /sys/bus/iio/devices/iio:device*/name 2>/dev/null | head -1)
+[ -n "$ACC" ] && ok "accelerometer $(basename "$(dirname "$ACC")") ($(cat "$(dirname "$ACC")/in_accel_sampling_frequency" 2>/dev/null) Hz)" ||
+	bad "no qcom-smgr-accel device"
 orient() {
 	if have busctl; then
 		busctl get-property net.hadess.SensorProxy /net/hadess/SensorProxy \
@@ -146,22 +156,23 @@ orient() {
 			AccelerometerOrientation 2>/dev/null | tr -d "()<>',"
 	fi
 }
-if have monitor-sensor && [ "$ASK" = 1 ]; then
-	monitor-sensor --accel > /dev/null 2>&1 &
-	MP=$!
+echo "   orientation now: $(orient)"
+if [ "$ASK" = 1 ]; then
+	MP=
+	have monitor-sensor && { monitor-sensor --accel > /dev/null 2>&1 & MP=$!; }
 	for pos in "portrait, Home button at the bottom (how you'd hold a phone)" \
 		   "landscape, Home button on the RIGHT" \
 		   "portrait upside down, Home button at the top" \
 		   "landscape, Home button on the LEFT"; do
 		if ask "hold the tablet upright: $pos"; then
 			sleep 2
-			echo "   $pos: $(orient); raw $(accel)"
+			echo "   $pos: $(orient)"
 		fi
 	done
-	kill $MP 2>/dev/null
+	[ -n "$MP" ] && kill $MP 2>/dev/null
 	note "also: does the screen turn the right way each time, and is there snow during the turn?"
 else
-	note "hands-on rotation check skipped (no monitor-sensor or --no-ask)"
+	note "hands-on rotation check skipped (--no-ask, or not run in a terminal)"
 fi
 
 echo "== Touch keys"
@@ -205,6 +216,26 @@ done
 for z in /sys/class/thermal/thermal_zone*; do printf '%s=%s ' "$(cat "$z/type")" "$(($(cat "$z/temp") / 1000))"; done | fold -w 100 | indent; echo
 
 echo "== Video and camera"
+FWV=/lib/firmware/updates/qcom/msm8996/samsung/gts3/venus.mdt
+dmesg | grep -iE 'venus|video-codec' | tail -5 | indent
+if [ -e "$FWV" ] && have python3; then
+	python3 - "$FWV" <<'PY' | indent
+import struct, sys
+d = open(sys.argv[1], 'rb').read()
+phoff, = struct.unpack_from('<I', d, 0x1c); phnum, = struct.unpack_from('<H', d, 0x2c)
+lo, hi = None, 0
+for i in range(phnum):
+    t, off, va, pa, fsz, msz, fl, al = struct.unpack_from('<8I', d, phoff + 32 * i)
+    if t != 1 or msz == 0 or ((fl >> 24) & 7) == 2: continue
+    lo = pa if lo is None else min(lo, pa); hi = max(hi, pa + msz)
+print("Venus firmware needs 0x%x bytes; the DT reserves 0x500000 (%s)" % (hi - lo, "fits" if hi - lo <= 0x500000 else "TOO BIG"))
+PY
+elif [ -e "$FWV" ]; then
+	note "python3 missing: send $FWV and the size of each venus.b0* file instead"
+	ls -l "${FWV%.mdt}".* 2>/dev/null | indent
+else
+	bad "no Venus firmware in /lib/firmware/updates"
+fi
 have v4l2-ctl && v4l2-ctl --list-devices 2>/dev/null | grep -A3 -iE 'venus|camss' | indent
 if have cam; then cam -l 2>&1 | indent; else note "cam missing (apk add libcamera-tools)"; fi
 if [ "$VIDEO" = 1 ]; then
