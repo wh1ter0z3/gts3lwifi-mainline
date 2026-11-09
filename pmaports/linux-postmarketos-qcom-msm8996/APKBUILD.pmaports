@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=4
+pkgrel=5
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -204,6 +204,7 @@ source="
 	0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
 	0122-drm-msm-locking-put-iova-spaces.patch
 	0123-drm-msm-shared-vm-keep-mappings-on-close.patch
+	0124-input-stmpe-keypad-reinit-on-resume.patch
 	0140-iio-qcom-smgr-sample-timestamp.patch
 	0141-iio-qcom-smgr-push-enabled-axes.patch
 	0142-iio-qcom-smgr-push-every-sample.patch
@@ -431,6 +432,7 @@ d23543b97c8af780b917b2f38fec22a1fed4453c52d15488dc8c4064392294fe994211ec0675b372
 be7e3755846429e40be162edf65a751789351476ea94eff87f7c2b1ad0e6721c00f1fd87ac4041261b423acbf16c66a378d893bccc61872d7ee4a97a91df3648  0121-input-stmpe-keypad-recover-from-accessory-power-cycle.patch
 5ae6170ae10227340f500151a6abc05fd41aff45bb65713c5f54e4600899aa3499d4f20610c80d147564d6ceb486558ce9ea6afb05201d3be27adc3a152319a8  0122-drm-msm-locking-put-iova-spaces.patch
 60798187327e1072d2928ed40b90bf686a8fd0b584526c04838b177b5ea195b7b5933b194ba7607db9047e96f6c11319b50801fccf2776141ff82f4409c48dc5  0123-drm-msm-shared-vm-keep-mappings-on-close.patch
+2ff66616084c41a3c32227d6e087db5058b4726b3973342ff3a06e0e31c25128a400e5bb38a6e17b107ade0fb8b3f4f9e9bca19ba8adcce62ebfc5beb80d1928  0124-input-stmpe-keypad-reinit-on-resume.patch
 7c0a36648d0a4e4aedd008a12bc6486a17ba6abef119642897f08b95535804c97eb274b9b37f9e5ef3d1bc4ac44db6331c17b9a146b81f0667db791dadb1a025  0140-iio-qcom-smgr-sample-timestamp.patch
 168e0ce3d3bc2e01d0a3d48af936c57056fed36884f0dac8595b0c43811959239720b045f641c972bd896d2444c49a56911cef0e09ef430738190a265b635b45  0141-iio-qcom-smgr-push-enabled-axes.patch
 6a122055a1347fe00feea363dd42eb52c2ae846d6de9b9dbfdfc69089c5e9d612a8bb5724d0ffdf4468b30f7bdb2fd8bcb8d49aafd1f8d4afcdc8c15a83143c8  0142-iio-qcom-smgr-push-every-sample.patch
