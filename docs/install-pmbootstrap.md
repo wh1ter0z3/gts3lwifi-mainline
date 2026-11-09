@@ -7,7 +7,7 @@ normal one) or branch `android` (the same kernel plus what Android needs, see
 [android.md](android.md)). For a ready-made image instead, see the preview (not released
 yet).
 
-**Status:** written 2026-11-08 from our install notes ([pmos-install.md](pmos-install.md),
+**Status:** written 2026-11-08 (build step added 2026-11-09 after the first tester's run) from our install notes ([pmos-install.md](pmos-install.md),
 [lk2nd.md](lk2nd.md)), the device's flashing settings and the preview build. Not yet run
 end to end by anyone as written: the package overlay in step 2 and the Waydroid autologin
 in step 7 are untested. Tell us where it goes wrong.
@@ -87,7 +87,15 @@ like. Say yes to the SSH server if you want to log in from the PC.
 
 ## 4. Build the image
 
-Plasma:
+First build our packages: `pmbootstrap install` doesn't build them by itself, and the
+device package needs our builds (gnss-share 99990.8.2 and up, for example), which the
+postmarketOS repositories don't have:
+
+```sh
+pmbootstrap build linux-postmarketos-qcom-msm8996 device-samsung-gts3lwifi kwin libcamera iio-sensor-proxy gnss-share
+```
+
+Then the image. Plasma:
 
 ```sh
 pmbootstrap install --add device-samsung-gts3lwifi-waydroid
@@ -99,7 +107,7 @@ Console (`networkmanager-tui` gives `nmtui` for setting up Wi-Fi):
 pmbootstrap install --add networkmanager-tui,device-samsung-gts3lwifi-waydroid
 ```
 
-It builds the kernel first, which takes a while. Leave out
+Leave out
 `device-samsung-gts3lwifi-waydroid` if you don't want Android apps. It asks for the user's
 password.
 
