@@ -1,0 +1,150 @@
+From f4f47498d1aad08e175f391cc36b3ebd633db5a3 Mon Sep 17 00:00:00 2001
+From: Nazim Aghabayov <nazim.aghabayov@buta-tech.com>
+Date: Mon, 9 Nov 2026 01:11:01 +0100
+Subject: [PATCH] input: stmpe-keypad: re-initialise the chip on resume
+
+The STMPE1801 in Samsung's Book Cover Keyboard is powered through the
+pogo pins and loses power while the system is suspended. On resume it
+comes back reset, with its keypad scanner wedged, and NAKs the first
+accesses while it powers up ("stmpe-i2c ...: failed to stop keypad scan:
+-6", then a silent keyboard even though extcon still reports the dock
+attached). The core STMPE resume only toggles the wake irq, and the
+accessory health poll re-initialises only on a reset-default register
+read, not on the NAKs seen here, so nothing brings the keypad back short
+of unbinding and rebinding the driver.
+
+Add an MFD helper, stmpe_reinit(), that soft-resets the chip and restores
+the chip-level interrupt setup, and give the keypad a resume handler that
+calls it and rebuilds the keypad block, retrying over the short power-up
+window. Cancel the health poll across suspend so it cannot race the
+resume path.
+
+Verified on an SM-T825: the Book Cover Keyboard types again after a
+system suspend, with no detach/reattach needed.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ drivers/input/keyboard/stmpe-keypad.c | 51 +++++++++++++++++++++++++++
+ drivers/mfd/stmpe.c                   | 23 ++++++++++++
+ include/linux/mfd/stmpe.h             |  1 +
+ 3 files changed, 75 insertions(+)
+
+diff --git a/drivers/input/keyboard/stmpe-keypad.c b/drivers/input/keyboard/stmpe-keypad.c
+index 146481d..223cd08 100644
+--- a/drivers/input/keyboard/stmpe-keypad.c
++++ b/drivers/input/keyboard/stmpe-keypad.c
+@@ -9,6 +9,7 @@
+ #include <linux/slab.h>
+ #include <linux/input.h>
+ #include <linux/interrupt.h>
++#include <linux/delay.h>
+ #include <linux/jiffies.h>
+ #include <linux/of.h>
+ #include <linux/platform_device.h>
+@@ -798,10 +799,60 @@ static const struct of_device_id stmpe_keypad_of_match[] = {
+ };
+ MODULE_DEVICE_TABLE(of, stmpe_keypad_of_match);
+ 
++static int stmpe_keypad_suspend(struct device *dev)
++{
++	struct stmpe_keypad *keypad = dev_get_drvdata(dev);
++
++	/* Keep the health poll from racing the resume re-init. */
++	cancel_delayed_work_sync(&keypad->health_work);
++	return 0;
++}
++
++static int stmpe_keypad_resume(struct device *dev)
++{
++	struct stmpe_keypad *keypad = dev_get_drvdata(dev);
++	int error = -EIO;
++	int i;
++
++	/*
++	 * In a detachable accessory (Samsung's Book Cover Keyboard) the STMPE
++	 * is unpowered while the system sleeps: it comes back reset, its keypad
++	 * scanner wedged, and NAKs the first accesses while it powers up. The
++	 * health poll only re-inits on a reset-default read, not on these NAKs,
++	 * so reset and rebuild the chip and the keypad from scratch here,
++	 * retrying over the short power-up window.
++	 */
++	for (i = 0; i < 6; i++) {
++		error = stmpe_reinit(keypad->stmpe);
++		if (!error)
++			error = stmpe_keypad_chip_init(keypad);
++		if (!error)
++			error = stmpe_keypad_start(&stmpe_keypad_lifecycle_ops,
++						  keypad);
++		if (!error)
++			break;
++		msleep(50);
++	}
++
++	keypad->present = !error;
++	if (error)
++		dev_warn(dev, "keypad resume reinit failed: %d\n", error);
++
++	/* Restart the health poll (the canary needs a non-default value). */
++	if (keypad->cols & 0xff)
++		schedule_delayed_work(&keypad->health_work,
++				      STMPE_KEYPAD_HEALTH_INTERVAL);
++	return 0;
++}
++
++static DEFINE_SIMPLE_DEV_PM_OPS(stmpe_keypad_pm_ops,
++				stmpe_keypad_suspend, stmpe_keypad_resume);
++
+ static struct platform_driver stmpe_keypad_driver = {
+ 	.driver = {
+ 		.name		= "stmpe-keypad",
+ 		.of_match_table	= stmpe_keypad_of_match,
++		.pm		= pm_sleep_ptr(&stmpe_keypad_pm_ops),
+ 	},
+ 	.probe		= stmpe_keypad_probe,
+ 	.remove		= stmpe_keypad_remove,
+diff --git a/drivers/mfd/stmpe.c b/drivers/mfd/stmpe.c
+index 633e7de..86f3784 100644
+--- a/drivers/mfd/stmpe.c
++++ b/drivers/mfd/stmpe.c
+@@ -1354,6 +1354,29 @@ int stmpe_restore_irq_setup(struct stmpe *stmpe)
+ }
+ EXPORT_SYMBOL_GPL(stmpe_restore_irq_setup);
+ 
++/**
++ * stmpe_reinit - reset and re-initialise a chip that lost power
++ * @stmpe: Device to re-initialise
++ *
++ * An STMPE inside a detachable accessory loses its register state, and its
++ * keypad scanner can wedge, whenever the accessory is unpowered - including
++ * across a system suspend, after which the chip may also NAK the first few
++ * accesses while it powers back up. Soft-reset the chip and restore the
++ * chip-level interrupt setup; the caller reconfigures its own block
++ * afterwards. Meant to be called from a subdriver's resume handler.
++ */
++int stmpe_reinit(struct stmpe *stmpe)
++{
++	int ret;
++
++	ret = stmpe_reset(stmpe);
++	if (ret)
++		return ret;
++
++	return stmpe_restore_irq_setup(stmpe);
++}
++EXPORT_SYMBOL_GPL(stmpe_reinit);
++
+ static int stmpe_add_device(struct stmpe *stmpe, const struct mfd_cell *cell)
+ {
+ 	return mfd_add_devices(stmpe->dev, stmpe->pdata->id, cell, 1,
+diff --git a/include/linux/mfd/stmpe.h b/include/linux/mfd/stmpe.h
+index 2211d34..d1b7fef 100644
+--- a/include/linux/mfd/stmpe.h
++++ b/include/linux/mfd/stmpe.h
+@@ -154,6 +154,7 @@ extern int stmpe_block_write(struct stmpe *stmpe, u8 reg, u8 length,
+ 			     const u8 *values);
+ extern int stmpe_set_bits(struct stmpe *stmpe, u8 reg, u8 mask, u8 val);
+ extern int stmpe_restore_irq_setup(struct stmpe *stmpe);
++extern int stmpe_reinit(struct stmpe *stmpe);
+ extern int stmpe_set_altfunc(struct stmpe *stmpe, u32 pins,
+ 			     enum stmpe_block block);
+ extern int stmpe_enable(struct stmpe *stmpe, unsigned int blocks);
