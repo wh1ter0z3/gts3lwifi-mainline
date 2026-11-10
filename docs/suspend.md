@@ -54,7 +54,7 @@ patch 0147 keeps the link up. See [kernel-7.3](kernel-7.3.md).
 - `qrtr 5-19: PM: parent remoteproc0:smd-edge.IPCRTR.-1.-1 should not be
   sleeping`: a device-link warning from the ADSP's QRTR, harmless so far.
 
-## Deep sleep (work in progress, 2026-11-09)
+## Deep sleep (work in progress, 2026-11-10: first vmin)
 
 Goal: the RPM turning XO off (vlow) and lowering the rails (vmin) while the tablet sleeps. Before this
 work its counters (`/sys/kernel/debug/qcom_stats/vlow`, `vmin`) never moved. Tested on an SM-T820 from
@@ -68,8 +68,16 @@ RAM boots, battery only (cable out), display blanked.
 | Modem holding XO | **Patch 0184**: the modem's GPLL0 vote had GPLL0 as its parent, so the running modem kept GPLL0 and XO on from the AP's side; stock has it as a plain vote bit |
 | A modem that never boots | keeps the RPM's MPSS "active" forever and blocks XO shutdown: the modem has to run (rmtfs) for the SoC to sleep |
 | All four RPM masters release XO | Yes (RPM master stats at 0x68150, read from `/dev/mem`), once USB and the Bluetooth UART are idle |
-| RPM turns XO off | **Not yet**: vlow/vmin stay 0. Its sleep set still has bus bandwidth/clock votes (the RPM log shows `bmas`, `bslv`, `clk1` around every sleep); zeroing all of them hangs the system, so it is per device |
-| Idle current | 129 mA with XO held, 90-97 mA (lowest 72) with all masters releasing XO |
+| Unused RPM clocks in the sleep set | **Patch 0185**: the RPM clock driver's handoff at probe votes every RPM clock on in the active and the sleep set, and nothing withdrew the votes of clocks no driver claims (no `.is_prepared`, so `clk_disable_unused()` skipped them): the XO buffers BB_CLK1/2, RF_CLK1/2 and DIV_CLK1-3, IPA, CE1 and QDSS stayed on in the sleep set. Now released; what is on while awake does not change (releasing the active-only halves as well broke the USB2 PHY at resume) |
+| Display engine bandwidth | **Patch 0186**: MDP5 voted 6.4 GB/s at probe and never dropped it, which kept the memory buses at 800 MHz in the sleep set. Now only while the MDP is resumed |
+| RPM turns XO off | **Yes, in suspend without Wi-Fi**: with 0185 + 0186 and `test-deepidle-mpm-nopcie.dts`, a 60 s suspend-to-idle on battery spent 61 s in RPM vmin (XO off, rails lowered), and USB came back. With Wi-Fi (PCIe link kept up across suspend, patch 0147) it stays out of vmin: the link, PHY and reference clocks stay on and the CPU wakes ~85 times a minute. Zeroing all bus votes at once hangs the system, so the remaining ones are per device |
+| Idle current | 129 mA with XO held, 90-97 mA (lowest 72) with all masters releasing XO; 50-90 mA (lowest 49) after 0185 + 0186, awake, display blanked |
+
+How to read it: the kernel-side RPM requests can be traced from boot with
+`kprobe_event=p:rpm/w,qcom_rpm_smd_write,st=%x1:u32,type=%x2:x32,id=%x3:u32,key=+0(%x4):x32,val=+8(%x4):u32`
+(`st` 0 = active set, 1 = sleep set; `type` is a little-endian fourcc: `clka` XO buffers, `clk0`
+misc clocks, `clk1`/`clk2` bus/memory clocks, `bmas`/`bslv` bandwidth), and
+`/sys/kernel/debug/interconnect/interconnect_summary` shows who votes for bandwidth.
 
 Still holding XO in daily use: USB (the T820 does not notice an unplug: `s2mm005 ... failed to set USB
 role device: -95`), the Bluetooth UART (open even when Bluetooth is off), the PCIe link during suspend

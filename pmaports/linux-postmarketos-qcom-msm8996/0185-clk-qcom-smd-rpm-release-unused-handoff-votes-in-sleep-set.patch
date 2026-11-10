@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 10:07:07 +0530
+Subject: [PATCH] clk: qcom: smd-rpm: Release unused handoff votes in the sleep
+ set
+
+The handoff at probe votes every RPM clock on in both the active and the
+sleep set, and nothing ever withdraws the votes of clocks no consumer
+claims: without an .is_prepared op, clk_disable_unused() skips them. On
+MSM8996 that leaves the XO buffers (BB_CLK1/2, RF_CLK1/2, DIV_CLK1-3),
+IPA, CE1 and QDSS in the APSS sleep set for good, and the RPM never shuts
+the XO down even though every master releases it.
+
+Count the handoff vote as an enable and report the clocks that vote in
+the sleep set as prepared, so clk_disable_unused() releases the unused
+ones. Active-only clocks get a sleep vote of 0 at handoff and are never
+reported prepared: what is on while the APSS is awake does not change.
+(Releasing the active-only halves too made the USB2 PHY's PLL fail to
+lock at resume after XO shutdown.)
+
+Tested on the SM-T820: with this and the MDP5 bandwidth fix, a 60 s
+s2idle on battery spends 61 s in RPM vmin (it never did before) and USB
+resumes (test DT with cluster/system power collapse and MPM, PCIe off,
+board without panel; Wi-Fi and display resume not covered yet).
+
+Similar to Konrad Dybcio's unmerged "SMD RPMCC sleep preparations"
+(.is_prepared hook by Shawn Guo).
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/clk/qcom/clk-smd-rpm.c | 29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/drivers/clk/qcom/clk-smd-rpm.c b/drivers/clk/qcom/clk-smd-rpm.c
+index 487d715ed5..7281df0d57 100644
+--- a/drivers/clk/qcom/clk-smd-rpm.c
++++ b/drivers/clk/qcom/clk-smd-rpm.c
+@@ -201,6 +201,15 @@ static int clk_smd_rpm_handoff(const struct clk_smd_rpm *r)
+ 				 sizeof(req));
+ 	if (ret)
+ 		return ret;
++
++	/*
++	 * An active-only clock never needs the resource while the APSS
++	 * sleeps; voting for it in the sleep set would keep the RPM from
++	 * shutting the XO down.
++	 */
++	if (r->active_only)
++		req.value = 0;
++
+ 	ret = qcom_rpm_smd_write(rpmcc_smd_rpm, QCOM_SMD_RPM_SLEEP_STATE,
+ 				 r->rpm_res_type, r->rpm_clk_id, &req,
+ 				 sizeof(req));
+@@ -412,9 +421,25 @@ static int clk_smd_rpm_enable_scaling(void)
+ 	return 0;
+ }
+ 
++/*
++ * The handoff vote at probe leaves every clock on. Reporting the clocks that
++ * vote in the sleep set as prepared lets clk_disable_unused() release the
++ * ones no consumer claimed, so that they don't keep the RPM from shutting
++ * the XO down. Active-only clocks are never reported prepared: their handoff
++ * vote (active set only) stays, so what is on while the APSS is awake does
++ * not change.
++ */
++static int clk_smd_rpm_is_prepared(struct clk_hw *hw)
++{
++	struct clk_smd_rpm *r = to_clk_smd_rpm(hw);
++
++	return r->enabled && !r->active_only;
++}
++
+ static const struct clk_ops clk_smd_rpm_ops = {
+ 	.prepare	= clk_smd_rpm_prepare,
+ 	.unprepare	= clk_smd_rpm_unprepare,
++	.is_prepared	= clk_smd_rpm_is_prepared,
+ 	.set_rate	= clk_smd_rpm_set_rate,
+ 	.determine_rate = clk_determine_rate_noop,
+ 	.recalc_rate	= clk_smd_rpm_recalc_rate,
+@@ -423,6 +448,7 @@ static const struct clk_ops clk_smd_rpm_ops = {
+ static const struct clk_ops clk_smd_rpm_branch_ops = {
+ 	.prepare	= clk_smd_rpm_prepare,
+ 	.unprepare	= clk_smd_rpm_unprepare,
++	.is_prepared	= clk_smd_rpm_is_prepared,
+ 	.recalc_rate	= clk_smd_rpm_recalc_rate,
+ };
+ 
+@@ -1365,6 +1391,9 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
+ 		ret = clk_smd_rpm_handoff(rpm_smd_clks[i]);
+ 		if (ret)
+ 			goto err;
++
++		/* The handoff vote is on until a consumer releases it */
++		rpm_smd_clks[i]->enabled = true;
+ 	}
+ 
+ 	for (i = 0; i < desc->num_icc_clks; i++) {

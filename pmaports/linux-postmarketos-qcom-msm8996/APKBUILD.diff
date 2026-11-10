@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..32b1875fed 100644
+index 601fa9f44e..bb9c64341d 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -9,7 +9,7 @@ index 601fa9f44e..32b1875fed 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=5
++pkgrel=6
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -18,7 +18,7 @@ index 601fa9f44e..32b1875fed 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,12 +28,208 @@ makedepends="
+@@ -28,12 +28,210 @@ makedepends="
  "
  
  # Source
@@ -224,13 +224,15 @@ index 601fa9f44e..32b1875fed 100644
 +	0182-media-venus-vdec-crop-to-stream-size.patch
 +	0183-irqchip-qcom-mpm-program-the-vmpm-wake-up-timer.patch
 +	0184-clk-qcom-gcc-msm8996-no-parent-for-the-modem-gpll0-vote.patch
++	0185-clk-qcom-smd-rpm-release-unused-handoff-votes-in-sleep-set.patch
++	0186-drm-msm-mdp5-drop-bandwidth-vote-while-runtime-suspended.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
  
  prepare() {
  	default_prepare
-@@ -61,6 +257,203 @@ package() {
+@@ -61,6 +259,205 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -435,4 +437,6 @@ index 601fa9f44e..32b1875fed 100644
 +92fcd7cd2729b29f3116ee84ec39d9ad95330ed1eb17127acdbf4b673052145b37e238349d143ae62ca48babcb7467ec466d1e6b9f5a48e10df237509bcca489  0182-media-venus-vdec-crop-to-stream-size.patch
 +a1fcedc2b9f01a09bba777ce3e80a179fd2c3ae9ce4c6dcf1732c05e1d7b30153ef65a4e1676d0544795da8b98002aa684762202c41abdcbf30bf4e1dc133ea7  0183-irqchip-qcom-mpm-program-the-vmpm-wake-up-timer.patch
 +9c6093d435d8d577af12565ddc4bacc979b935c6af419d5a283a16535bb3d43cfb4f5cc05eb726ced28b3ba6089d9b70109181034990c7cfa4162442cf0281eb  0184-clk-qcom-gcc-msm8996-no-parent-for-the-modem-gpll0-vote.patch
++36378deb8d09a40eb5babe44eb897c98887d8c9cf57587fc1926f5bdbf626b83b5f6ec4392b7bb9489382cee281845cd0d9a70c14b9d990f2cd312da1941f48d  0185-clk-qcom-smd-rpm-release-unused-handoff-votes-in-sleep-set.patch
++bf72a7a40b9134fdf446babd8e2ceabd03b6ac7e9f62aec0ac9168dbaadeb49d8d9871710cb19b15c2d73f37bc6401f9db260978b2c92b0d7f949aeb1584dd84  0186-drm-msm-mdp5-drop-bandwidth-vote-while-runtime-suspended.patch
  "

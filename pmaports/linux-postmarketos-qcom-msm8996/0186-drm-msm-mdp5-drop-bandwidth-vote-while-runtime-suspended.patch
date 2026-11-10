@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 10:07:08 +0530
+Subject: [PATCH] drm/msm/mdp5: Drop the bandwidth vote while runtime suspended
+
+mdp5_setup_interconnect() votes 6.4 GB/s peak on the MDP and rotator
+paths at probe and never drops it. The RPM interconnect votes go to both
+the active and the sleep set, so with the display off the memory buses
+stay at full speed (BIMC and MMSS AXI at 800 MHz in the sleep set) and
+the RPM can't shut the XO down.
+
+Keep the paths and vote while the MDP is resumed only; also put them on
+remove (they leaked). The vote is still made at probe for a scanout
+running from the bootloader until the first runtime suspend.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c | 55 ++++++++++++++++++++----
+ drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h |  5 +++
+ 2 files changed, 51 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
+index e8d1e81443..7f818453f9 100644
+--- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
++++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
+@@ -795,7 +795,29 @@ static int mdp5_init(struct platform_device *pdev, struct drm_device *dev)
+ 	return ret;
+ }
+ 
+-static int mdp5_setup_interconnect(struct platform_device *pdev)
++/*
++ * The bandwidth is voted for in the active and the sleep set of the RPM, so
++ * it is dropped while the MDP is runtime suspended: a standing 6.4 GB/s vote
++ * keeps the memory buses at full speed and the RPM from shutting the XO down.
++ */
++static void mdp5_set_bw(struct mdp5_kms *mdp5_kms, bool on)
++{
++	u32 peak = on ? MBps_to_icc(6400) : 0;
++
++	icc_set_bw(mdp5_kms->path_mdp0, 0, peak);
++	icc_set_bw(mdp5_kms->path_mdp1, 0, peak);
++	icc_set_bw(mdp5_kms->path_rot, 0, peak);
++}
++
++static void mdp5_put_interconnect(struct mdp5_kms *mdp5_kms)
++{
++	icc_put(mdp5_kms->path_mdp0);
++	icc_put(mdp5_kms->path_mdp1);
++	icc_put(mdp5_kms->path_rot);
++}
++
++static int mdp5_setup_interconnect(struct mdp5_kms *mdp5_kms,
++				   struct platform_device *pdev)
+ {
+ 	struct icc_path *path0 = msm_icc_get(&pdev->dev, "mdp0-mem");
+ 	struct icc_path *path1 = msm_icc_get(&pdev->dev, "mdp1-mem");
+@@ -804,6 +826,12 @@ static int mdp5_setup_interconnect(struct platform_device *pdev)
+ 	if (IS_ERR(path0))
+ 		return PTR_ERR(path0);
+ 
++	mdp5_kms->path_mdp0 = path0;
++	if (!IS_ERR(path1))
++		mdp5_kms->path_mdp1 = path1;
++	if (!IS_ERR(path_rot))
++		mdp5_kms->path_rot = path_rot;
++
+ 	if (!path0) {
+ 		/* no interconnect support is not necessarily a fatal
+ 		 * condition, the platform may simply not have an
+@@ -815,12 +843,8 @@ static int mdp5_setup_interconnect(struct platform_device *pdev)
+ 		return 0;
+ 	}
+ 
+-	icc_set_bw(path0, 0, MBps_to_icc(6400));
+-
+-	if (!IS_ERR_OR_NULL(path1))
+-		icc_set_bw(path1, 0, MBps_to_icc(6400));
+-	if (!IS_ERR_OR_NULL(path_rot))
+-		icc_set_bw(path_rot, 0, MBps_to_icc(6400));
++	/* The MDP may scan out the bootloader's framebuffer until it suspends */
++	mdp5_set_bw(mdp5_kms, true);
+ 
+ 	return 0;
+ }
+@@ -839,7 +863,7 @@ static int mdp5_dev_probe(struct platform_device *pdev)
+ 	if (!mdp5_kms)
+ 		return -ENOMEM;
+ 
+-	ret = mdp5_setup_interconnect(pdev);
++	ret = mdp5_setup_interconnect(mdp5_kms, pdev);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -881,8 +905,16 @@ static int mdp5_dev_probe(struct platform_device *pdev)
+ 
+ static void mdp5_dev_remove(struct platform_device *pdev)
+ {
++	struct msm_drm_private *priv = platform_get_drvdata(pdev);
++	struct mdp5_kms *mdp5_kms = NULL;
++
++	if (priv && priv->kms)
++		mdp5_kms = to_mdp5_kms(to_mdp_kms(priv->kms));
++
+ 	DBG("");
+ 	component_master_del(&pdev->dev, &msm_drm_ops);
++	if (mdp5_kms)
++		mdp5_put_interconnect(mdp5_kms);
+ }
+ 
+ static __maybe_unused int mdp5_runtime_suspend(struct device *dev)
+@@ -893,7 +925,10 @@ static __maybe_unused int mdp5_runtime_suspend(struct device *dev)
+ 
+ 	DBG("");
+ 
+-	return mdp5_disable(mdp5_kms);
++	mdp5_disable(mdp5_kms);
++	mdp5_set_bw(mdp5_kms, false);
++
++	return 0;
+ }
+ 
+ static __maybe_unused int mdp5_runtime_resume(struct device *dev)
+@@ -904,6 +939,8 @@ static __maybe_unused int mdp5_runtime_resume(struct device *dev)
+ 
+ 	DBG("");
+ 
++	mdp5_set_bw(mdp5_kms, true);
++
+ 	return mdp5_enable(mdp5_kms);
+ }
+ 
+diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h
+index f787783f2f..1cf098758c 100644
+--- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h
++++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.h
+@@ -51,6 +51,11 @@ struct mdp5_kms {
+ 	/* io/register spaces: */
+ 	void __iomem *mmio;
+ 
++	/* memory bandwidth, voted for while the MDP is resumed */
++	struct icc_path *path_mdp0;
++	struct icc_path *path_mdp1;
++	struct icc_path *path_rot;
++
+ 	struct clk *axi_clk;
+ 	struct clk *ahb_clk;
+ 	struct clk *core_clk;
