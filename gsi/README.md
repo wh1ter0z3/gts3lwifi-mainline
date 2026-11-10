@@ -193,6 +193,10 @@ Java tools (it lives in the mount namespace from before APEX activation).
   (silent, watchdog reset) eight times within minutes of hardware encoder sessions. With its
   `power/control` at `on` (gsi-init), none in dozens of sessions and hours. The driver's
   power collapse/resume on HFI v3 is still to be fixed; this costs some idle power.
+- Hardware decoding (`c2.v4l2.avc.decoder`, not listed): with patch 0199 the bitstream is
+  queued, then the HFI v3 firmware fails the session ("Output2 upscale not supported"): the
+  decoder's secondary output is set up larger than the stream. `dectest/dectest.c` (NDK,
+  `-lmediandk`) decodes a file with a named codec: software H.264 1080p runs at 25 fps.
 - The Venus encoder's drain at the end of a session sometimes races the codec's restart
   (`V4L2_ENC_CMD_START` while still draining: -EBUSY); scrcpy then ends with an encoding
   error, at its end only.
