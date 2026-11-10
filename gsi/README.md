@@ -131,8 +131,9 @@ The vendor has no Codec2 component for V4L2 encoders. `tools/mkodm-c2v4l2.sh` ma
 come along, in `/odm/lib64/c2v4l2` for this service only), our init rc, VINTF fragment and
 `media_codecs.xml` (`odm-c2v4l2/`). It needs patches 0194 and 0195 and an Android 15+ system
 image (its `libui` uses an API 35 `libbinder_ndk` call). MediaCodec then lists
-`c2.v4l2.avc.encoder` after the software encoder (see "Known issues": freezes);
-`scrcpy -s 172.16.42.1:5555 --video-encoder=c2.v4l2.avc.encoder --max-fps 60 --video-bit-rate 12M`. Scrolling in Settings
+`c2.v4l2.avc.encoder` first (rank 1), the default H.264 encoder:
+`scrcpy -s 172.16.42.1:5555 --max-fps 60 --video-bit-rate 12M`. gsi-init keeps Venus out of
+runtime suspend (see "Known issues"). Scrolling in Settings
 records at about 29 frames per second at 768x1024 and up to 38 at 1536x2048, against 2.6
 with the software encoder at the same CPU load. At 1440x1920 the GPU hands over a tiled
 frame and the picture is scrambled. The decoder is not listed yet.
@@ -185,9 +186,14 @@ Java tools (it lives in the mount namespace from before APEX activation).
   (`lk2nd.pass-ramoops=zap` wipes it); that is how the fence panic (0192) was found. gsi-init
   keeps the previous boot's kernel log as `<dir>/boot.prev.log`. Android lowers the console
   log level to 3: `echo 7 4 1 7 > /proc/sys/kernel/printk` from the root shell.
-- OneUI froze the board (no kernel message at all, watchdog reset) seven times, always while
-  a hardware encoder session ran or had just ended, never with the software encoder;
-  teardown traces show the freeze can come before any teardown step. Not solved.
+- Venus runtime PM: the HFI v3 core powers down about 2 s after it goes idle (after an encoder
+  session, and within one while the screen is static); with that, OneUI froze the board
+  (silent, watchdog reset) eight times within minutes of hardware encoder sessions. With its
+  `power/control` at `on` (gsi-init), none in dozens of sessions and hours. The driver's
+  power collapse/resume on HFI v3 is still to be fixed; this costs some idle power.
+- The Venus encoder's drain at the end of a session sometimes races the codec's restart
+  (`V4L2_ENC_CMD_START` while still draining: -EBUSY); scrcpy then ends with an encoding
+  error, at its end only.
 - USB is our network gadget's: gsi-init's board rc unmounts adbd's FunctionFS and stops the
   vendor's gadget HAL, which otherwise retried binding Android's `g1` a few times a second
   (a uevent storm; it once took the link down). adb runs over TCP.

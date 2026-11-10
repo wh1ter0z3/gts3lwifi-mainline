@@ -216,6 +216,14 @@ if [ -w /sys/block/zram0/disksize ]; then
 fi
 log "modules loaded: $(wc -l < /proc/modules)"
 
+# Venus: no runtime suspend. Its HFI v3 core powers down about 2 s after it
+# goes idle, after an encoder session and within one while the screen is
+# static; every board freeze (silent, watchdog reset) came within minutes of
+# such sessions, none with it kept on (hours, dozens of sessions).
+for d in /sys/bus/platform/devices/*.video-codec /sys/bus/platform/devices/*.video-codec:video-*; do
+	[ -w "$d/power/control" ] && echo on > "$d/power/control"
+done
+
 # Bluetooth (QCA6174 on the UART): hci0 stays an unconfigured controller until
 # it has a public address, and Android's btlinux HAL waits for a configured one
 # forever. pmOS's gts3-bdaddr reads Samsung's address from efs (read-only) and
