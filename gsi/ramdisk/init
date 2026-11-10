@@ -201,6 +201,16 @@ mp -a $(ls $M/netfilter $M/ipv4/netfilter $M/ipv6/netfilter 2>/dev/null | sed -n
 	grep -E '^(x_tables|ip_tables|ip6_tables|iptable_|ip6table_|xt_|ipt_|ip6t_)')
 # netd wants dummy0; systemd's modprobe.d sets numdummies=0, the argument wins
 mp dummy numdummies=1
+
+# zram swap: Android's swapon_all gives up on 7.x kernels (it writes zram's
+# max_comp_streams, which is gone), and OneUI on 4 GB without swap spends its
+# time in kswapd. lz4, half the RAM.
+if [ -w /sys/block/zram0/disksize ]; then
+	echo lz4 > /sys/block/zram0/comp_algorithm
+	echo $(( $(awk '/^MemTotal/ {print $2}' /proc/meminfo) / 2 ))K > /sys/block/zram0/disksize &&
+		mkswap /dev/zram0 >/dev/null && swapon -p 32767 /dev/zram0 &&
+		log "zram: $(awk '/zram0/ {print $3}' /proc/swaps) KiB swap"
+fi
 log "modules loaded: $(wc -l < /proc/modules)"
 gadget
 

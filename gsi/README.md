@@ -24,7 +24,8 @@ init:
    ramdisk's devtmpfs as its `/dev`;
 2. loads the iptables modules netd needs (Android blanks `kernel.modprobe`, and netd's legacy
    iptables can't load them) and points the kernel's module requests at pmOS's `modprobe`
-   (`/dev/gsi/modprobe`);
+   (`/dev/gsi/modprobe`), and sets up zram swap (half the RAM; Android's `swapon_all`
+   fails on 7.x);
 3. USB NCM gadget (same IDs and address as pmOS: 172.16.42.1), a root shell on TCP port 23
    (`nc 172.16.42.1 23`), hardware watchdog feeder, kernel log streamed to `log.img`,
    dead-man timer (`gsi.deadman=MIN`: reboots unless `<dir>/keep` exists by then), a keeper
@@ -56,6 +57,9 @@ The `android` kernel branch (7.3, `gts3-android.config`) plus `kernel/0187`..`01
 - 0190: the memfd ashmem ioctl shim from the Android Common Kernel (Android 16's libcutils).
 - 0191: the config: netd's tables and matches, IPsec, IPv6 sysctls, socket destruction,
   dummy0, the shim.
+- 0192: the DRM crtc fence's name callbacks hit a BUG_ON when the fence is signalled while
+  they run (7.x detaches fence ops on signal); SurfaceFlinger asks for fence names all the
+  time, so OneUI panicked the kernel within the hour.
 
 `tools/mkgsiboot.sh <Image.gz> <board.dtb> <pmos root uuid> <out.img>` makes the boot image
 (`WDT=1` adds the watchdog node, `VKMS=1`, `EXTRA_CMDLINE=`; it wants a static aarch64
@@ -76,8 +80,10 @@ our fstab, firmware from `/lib/firmware`, no kernel modules, no phone modem scri
 start the MSS), no vibrator HAL (no motor), KeyMint patch levels, `ro.hardware.egl=mesa`,
 Wi-Fi Direct feature, our mixer configuration for its tinyhal audio HAL
 (`vendor-overlay/etc/audio.gts3.xml`, from the UCM profile: speakers and built-in mics, 40 ms
-periods), the effects configuration also under Samsung's name (`audio_effects_sec.xml`:
-OneUI's audioserver aborts at the first sound without one), busybox and `gsi-login` for the
+periods), the effects configuration and the audio policy also under Samsung's names
+(`audio_effects_sec.xml`: OneUI's audioserver aborts at the first sound without one;
+`audio_policy_configuration_sec.xml`: otherwise OneUI uses a built-in default without
+remote submix, USB or Bluetooth audio), busybox and `gsi-login` for the
 root shell; labels are kept (init
 refuses services whose binary has none, even when permissive). With `HEALTH=`, `LIGHTS=`
 and `SEHSTUBS=` it puts in our HALs (`health/`, `sh health/build.sh` with the Android NDK):
@@ -104,8 +110,8 @@ insists on an online activation at the Wi-Fi step. Accepting the required terms 
 `settings put global device_provisioned 1`, `settings put secure user_setup_complete 1`,
 `pm disable-user com.sec.android.app.SecSetupWizard` gets to the home screen. adb: write the
 PC's `adbkey.pub` to `/data/misc/adb/adb_keys` (`system:shell`, 0640) from the root shell,
-`setprop persist.adb.tcp.port 5555`, restart `adbd`; `scrcpy -s 172.16.42.1:5555 --no-audio`
-(playback capture doesn't work yet, and scrcpy quits when its audio fails). The root shell itself can't run Android's
+`setprop persist.adb.tcp.port 5555`, restart `adbd`; `scrcpy -s 172.16.42.1:5555 --max-fps 30 --video-bit-rate 4M`
+(audio works since the `_sec` policy file). The root shell itself can't run Android's
 Java tools (it lives in the mount namespace from before APEX activation).
 
 ## Known issues and next steps
@@ -113,9 +119,12 @@ Java tools (it lives in the mount namespace from before APEX activation).
 - Android's `ueventd` ignores live uevents after its coldboot here (no nodes for devices that
   appear later); pmOS's udevd covers the host side.
 - Audio: Android plays through the speakers (tinyhal, `audio.gts3.xml`); headphones and the
-  headset mic (PCMs of their own) not yet; recording and playback capture (scrcpy's audio)
-  fail, not looked into yet; sensors, camera untested; Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
+  headset mic (PCMs of their own) not yet; playback capture works (scrcpy's audio);
+  sensors, camera untested;
+- No cpuset hierarchy (the kernel lacks `CONFIG_CPUSETS_V1`): Android can't put background
+  work on the little cores; video encoding is software only (no V4L2 Codec2 encoder in the
+  vendor), so scrcpy wants `--max-fps 30 --video-bit-rate 4M`; Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
 - A real panel (`drm_hwcomposer` on the MDP) needs a tester with a display.
-- One unexplained reboot of OneUI after ~1.5 h: read `fastboot oem ramoops console` from lk2nd
-  before booting anything else (`lk2nd.pass-ramoops=zap` wipes it).
+- After a reset, read `fastboot oem ramoops console` from lk2nd before booting anything else
+  (`lk2nd.pass-ramoops=zap` wipes it); that is how the fence panic (0192) was found.
 - The kernel patches are kept here, not yet in the pmaports package.

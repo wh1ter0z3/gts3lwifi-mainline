@@ -2,9 +2,9 @@
 # system_ext are mounted by the boot ramdisk (gsi-init) from image files;
 # it also mounts userdata.img (loop7) on /data: first_stage_mount tells
 # fs_mgr it is mounted already (a second mount fails with EBUSY, and init then
-# never sets ro.crypto.state, so zygote never starts).
+# never sets ro.crypto.state, so zygote never starts). zram swap is set up by
+# gsi-init too (swapon_all fails on 7.x).
 #<src>                                              <mnt_point> <type> <mnt_flags>                                   <fs_mgr_flags>
 /dev/block/loop7                                    /data       ext4   noatime,nosuid,nodev,noauto_da_alloc,discard   latemount,first_stage_mount
 /devices/platform/soc@0/74a4900.mmc/mmc_host/mmc*   auto        auto   defaults                                      voldmanaged=sdcard1:auto
 /devices/platform/soc@0/6a00000.usb/*/usb*          auto        auto   defaults                                      voldmanaged=usb1:auto
-/dev/block/zram0                                    none        swap   defaults                                      zramsize=50%

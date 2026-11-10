@@ -27,6 +27,11 @@ fi
 # OneUI's libeffectsconfig looks for Samsung's file name (and its audioserver
 # aborts at the first sound without an effects configuration)
 [ -f "$V/etc/audio_effects_sec.xml" ] || cp -a "$V/etc/audio_effects.xml" "$V/etc/audio_effects_sec.xml"
+# Same for the audio policy: OneUI reads audio_policy_configuration_sec.xml and
+# otherwise falls back to a built-in default (speaker and one mic: no remote
+# submix, so no playback capture, no USB or Bluetooth audio)
+[ -f "$V/etc/audio_policy_configuration_sec.xml" ] ||
+	cp -a "$V/etc/audio_policy_configuration.xml" "$V/etc/audio_policy_configuration_sec.xml"
 rm -rf "$V/lib/modules"; mkdir -m 0755 "$V/lib/modules"
 # Their phone's modem (they start remoteproc1, our MSS), rild, rmtfs, radio HAL
 rm -f "$V/etc/init/modem_manager.rc" "$V/etc/init/rild.rc" "$V/etc/init/init.rmtfs.rc" \
