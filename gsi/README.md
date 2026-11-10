@@ -205,11 +205,15 @@ Java tools (it lives in the mount namespace from before APEX activation).
   QCA6174 firmware claims them but doesn't answer `LE_ADV_FILTER` and the stack aborted.
 - A board without panel: add `video=DSI-1:d` to the command line, or the framebuffer
   console keeps committing to the MDP (pp done timeouts, a dozen a second).
-- OneUI daily use: a crash-looping `com.sec.android.sdhms` (uninstalled for user 0) fed
+- OneUI daily use: a crash-looping `com.sec.android.sdhms` (persistent: `pm disable` as root;
+  disable-user and uninstall for a user don't stick, it still fails a dozen times at boot) fed
   Samsung's bug report tool (`dmabuf_dump` at 100% CPU); `com.qti.qcc` polled a missing HAL
   every second. Disabled (`pm disable-user`) to save RAM on a Wi-Fi tablet without camera:
   Secure Folder, diagmon, CHN device management, beacon manager, smart suggestions, MCF,
-  VEX framework, SVE, SCPM, IMS.
+  VEX framework, SVE, SCPM, IMS. `odm-oneui/` (copy to `<dir>/odm/`): AOSP's thermal HAL as a
+  `seh-stubs` instance (no sensors, empty lists), which OneUI's system apps looked for every
+  few seconds. After many hard resets, `dumpsys batterystats --reset` ends system_server's
+  "setState is called with an earlier timestamp" bursts (tens of thousands of lines).
 - OneUI's list cards showed square bites at their rounded corners with the vendor's
   Mesa 23.1.7: fixed with Mesa 26.2.6 (see "Mesa").
 - The kernel patches are kept here, not yet in the pmaports package.

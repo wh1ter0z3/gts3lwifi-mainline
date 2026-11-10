@@ -1,0 +1,8 @@
+# AOSP's thermal HAL, as a stub: OneUI's system apps look for it every few
+# seconds (servicemanager logs each miss). Every call gets "no error" and
+# empty lists: no thermal sensors, as Android knew so far.
+service vendor.thermal-stub /vendor/bin/hw/vendor.samsung.hardware.seh-stubs android.hardware.thermal.IThermal
+    class hal
+    user system
+    group system
+    seclabel u:r:hal_health_default:s0
