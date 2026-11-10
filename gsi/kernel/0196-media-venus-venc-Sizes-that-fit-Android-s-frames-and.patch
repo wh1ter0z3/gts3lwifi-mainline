@@ -1,0 +1,117 @@
+From 7d7e906eed28761488d08261a34f195667b5cbe0 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 00:45:14 +0530
+Subject: [PATCH] media: venus: venc: Sizes that fit Android's frames and
+ bitstream buffers
+
+Two limits made Android's v4l2_codec2 encoder fail above 768x1024:
+
+- The raw frame width was 128 pixels aligned whatever the format. RGBA
+  frames come from the GPU, whose linear lines are 64 pixels aligned,
+  and the firmware only needs 128 bytes: a 960 pixels wide frame was
+  taken for 1024 and its dma-buf found too small. Align RGBA (and the
+  coded size that goes with it) to 64 pixels.
+
+- The capture plane had to be as large as the client asked at S_FMT;
+  v4l2_codec2 asks 4 MB at 1536x2048 but allocates the driver's frame
+  size (2.25 MB). With the driver's own bitstream buffers (dma-bufs on
+  an HFI v3 encoder) the client's only take copies of the encoded
+  frames: hold them to the firmware's size only.
+
+Tested on a Samsung Galaxy Tab S3 (msm8996), OneUI 8, scrcpy through
+c2.v4l2.avc.encoder: 1536x2048, 1200x1600, 960x1280 and 768x1024 encode
+with the right picture. 1440x1920 encodes but the GPU gives a tiled
+frame at that size (the picture is scrambled), not something the driver
+can see.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/venc.c | 36 ++++++++++++++++++++----
+ 1 file changed, 31 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/venus/venc.c b/drivers/media/platform/qcom/venus/venc.c
+index c0e3fdd11..65d6da4b6 100644
+--- a/drivers/media/platform/qcom/venus/venc.c
++++ b/drivers/media/platform/qcom/venus/venc.c
+@@ -205,8 +205,12 @@ static int venc_enum_fmt(struct file *file, void *fh, struct v4l2_fmtdesc *f)
+ 	return 0;
+ }
+ 
++/*
++ * @raw: the raw (output queue) format the frame size is for; that of @f
++ * itself when @f is for the output queue
++ */
+ static const struct venus_format *
+-venc_try_fmt_common(struct venus_inst *inst, struct v4l2_format *f)
++venc_try_fmt_raw(struct venus_inst *inst, struct v4l2_format *f, u32 raw)
+ {
+ 	struct v4l2_pix_format_mplane *pixmp = &f->fmt.pix_mp;
+ 	struct v4l2_plane_pix_format *pfmt = pixmp->plane_fmt;
+@@ -234,7 +238,15 @@ venc_try_fmt_common(struct venus_inst *inst, struct v4l2_format *f)
+ 	pixmp->height = clamp(pixmp->height, frame_height_min(inst),
+ 			      frame_height_max(inst));
+ 
+-	pixmp->width = ALIGN(pixmp->width, 128);
++	/*
++	 * NV12 lines are 128 pixels aligned. RGBA lines only need 128 bytes,
++	 * and RGBA frames come from the GPU, whose linear lines are 64 pixels
++	 * aligned: take that, the stride of the frames Android's encoder is
++	 * given (as wide as the display, nothing to spare for 128 pixels)
++	 */
++	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
++		raw = fmt->pixfmt;
++	pixmp->width = ALIGN(pixmp->width, venc_fmt_is_rgba(raw) ? 64 : 128);
+ 	pixmp->height = ALIGN(pixmp->height, 32);
+ 
+ 	pixmp->width = ALIGN(pixmp->width, 2);
+@@ -260,6 +272,12 @@ venc_try_fmt_common(struct venus_inst *inst, struct v4l2_format *f)
+ 	return fmt;
+ }
+ 
++static const struct venus_format *
++venc_try_fmt_common(struct venus_inst *inst, struct v4l2_format *f)
++{
++	return venc_try_fmt_raw(inst, f, inst->fmt_out->pixfmt);
++}
++
+ static int venc_try_fmt(struct file *file, void *fh, struct v4l2_format *f)
+ {
+ 	struct venus_inst *inst = to_inst(file);
+@@ -304,7 +322,7 @@ static int venc_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
+ 	format.fmt.pix_mp.pixelformat = pixfmt_out;
+ 	format.fmt.pix_mp.width = orig_pixmp.width;
+ 	format.fmt.pix_mp.height = orig_pixmp.height;
+-	venc_try_fmt_common(inst, &format);
++	venc_try_fmt_raw(inst, &format, pixfmt_out);
+ 
+ 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+ 		inst->out_width = format.fmt.pix_mp.width;
+@@ -321,7 +339,7 @@ static int venc_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
+ 	format.fmt.pix_mp.pixelformat = pixfmt_cap;
+ 	format.fmt.pix_mp.width = orig_pixmp.width;
+ 	format.fmt.pix_mp.height = orig_pixmp.height;
+-	venc_try_fmt_common(inst, &format);
++	venc_try_fmt_raw(inst, &format, pixfmt_out);
+ 
+ 	inst->width = format.fmt.pix_mp.width;
+ 	inst->height = format.fmt.pix_mp.height;
+@@ -1216,7 +1234,15 @@ static int venc_queue_setup(struct vb2_queue *q,
+ 		sizes[0] = venus_helper_get_framesz(inst->fmt_cap->pixfmt,
+ 						    inst->width,
+ 						    inst->height);
+-		sizes[0] = max(sizes[0], inst->output_buf_size);
++		/*
++		 * dma-bufs on a static mode encoder only take copies of the
++		 * encoded frames (the firmware writes into buffers of the
++		 * driver's own): don't hold them to a larger size the client
++		 * asked for, which it may not allocate (v4l2_codec2)
++		 */
++		if (q->memory != VB2_MEMORY_DMABUF ||
++		    venus_helper_is_dynamic_bufmode(inst))
++			sizes[0] = max(sizes[0], inst->output_buf_size);
+ 		inst->output_buf_size = sizes[0];
+ 		break;
+ 	default:
+-- 
+2.53.0
+

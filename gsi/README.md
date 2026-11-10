@@ -70,6 +70,8 @@ The `android` kernel branch (7.3, `gts3-android.config`) plus `kernel/0187`..`01
   RGBA input also under the name `BGR32`, which the component asks for (not for upstream),
   and bitstream buffers of the driver's own when the capture queue imports dma-bufs: the
   msm8996 firmware wants all of them when the session starts and has no dynamic mode.
+- 0196: frame and bitstream sizes that fit what `v4l2_codec2` hands over (RGBA lines 64
+  pixels aligned like the GPU's, not 128; bitstream dma-bufs held to the firmware's size).
 
 `tools/mkgsiboot.sh <Image.gz> <board.dtb> <pmos root uuid> <out.img>` makes the boot image
 (`WDT=1` adds the watchdog node, `VKMS=1`, `EXTRA_CMDLINE=`; it wants a static aarch64
@@ -125,12 +127,15 @@ The vendor has no Codec2 component for V4L2 encoders. `tools/mkodm-c2v4l2.sh` ma
 come along, in `/odm/lib64/c2v4l2` for this service only), our init rc, VINTF fragment and
 `media_codecs.xml` (`odm-c2v4l2/`). It needs patches 0194 and 0195 and an Android 15+ system
 image (its `libui` uses an API 35 `libbinder_ndk` call). MediaCodec then lists
-`c2.v4l2.avc.encoder`; the software encoder stays the default. scrcpy:
-`scrcpy -s 172.16.42.1:5555 --video-encoder=c2.v4l2.avc.encoder --max-fps 60 --video-bit-rate 8M`.
-On a 768x1024 virtual display, scrolling in Settings records at about 29 frames per second,
-against 2.6 with the software encoder at the same CPU load. The frame width must be a
-multiple of 32 pixels (the firmware's RGBA stride is 128 bytes aligned). The decoder is not
-listed yet.
+`c2.v4l2.avc.encoder` first (rank 1), so it is the default H.264 encoder:
+`scrcpy -s 172.16.42.1:5555 --max-fps 60 --video-bit-rate 12M`. Scrolling in Settings
+records at about 29 frames per second at 768x1024 and up to 38 at 1536x2048, against 2.6
+with the software encoder at the same CPU load. At 1440x1920 the GPU hands over a tiled
+frame and the picture is scrambled. The decoder is not listed yet.
+
+The virtual display is 1024x768 at 320 dpi, a phone's layout (512x384 dp). For the Tab S3's
+(2048x1536 at 320 dpi, 1024x768 dp): `wm size 2048x1536` (kept across boots); scrcpy then
+mirrors 1536x2048.
 
 ## OneUI notes
 
@@ -156,5 +161,13 @@ Java tools (it lives in the mount namespace from before APEX activation).
   not the encoder (not looked into); Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
 - A real panel (`drm_hwcomposer` on the MDP) needs a tester with a display.
 - After a reset, read `fastboot oem ramoops console` from lk2nd before booting anything else
-  (`lk2nd.pass-ramoops=zap` wipes it); that is how the fence panic (0192) was found.
+  (`lk2nd.pass-ramoops=zap` wipes it); that is how the fence panic (0192) was found. gsi-init
+  keeps the previous boot's kernel log as `<dir>/boot.prev.log`. Android lowers the console
+  log level to 3: `echo 7 4 1 7 > /proc/sys/kernel/printk` from the root shell.
+- OneUI froze the board (no kernel message at all, watchdog reset) four times in a day of
+  hardware encoder tests, every time within minutes of a session; not yet tied to a cause.
+- Android's USB gadget HAL keeps trying to bind its own gadget (`g1`: UDC busy, a few times a
+  second) and once took the USB link down for a minute and a half.
+- OneUI's list cards show square bites at their rounded corners (in screenshots too: the
+  app's GPU rendering, not the encoder; not HWUI's partial updates).
 - The kernel patches are kept here, not yet in the pmaports package.

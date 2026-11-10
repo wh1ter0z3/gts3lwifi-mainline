@@ -142,7 +142,10 @@ if [ ! -f "$G/log.img" ]; then
 		chroot /pmos /sbin/mke2fs -q -t ext4 -L gsilog "${G#/pmos}/log.img"
 fi
 LOG1=; LOG2=
-if mkdir -p /log && mount -t ext4 -o loop "$G/log.img" /log && : > /log/boot.log; then
+if mkdir -p /log && mount -t ext4 -o loop "$G/log.img" /log &&
+	# the previous boot's log, for a look after a reset (<dir>/boot.prev.log)
+	{ [ ! -s /log/boot.log ] || cp /log/boot.log "$G/boot.prev.log"; } &&
+	: > /log/boot.log; then
 	setsid sh -c 'while :; do cat /dev/kmsg >> /log/boot.log 2>/dev/null; sleep 1; done' & LOG1=$!
 	setsid sh -c 'while :; do sync; sleep 1; done' & LOG2=$!
 fi
