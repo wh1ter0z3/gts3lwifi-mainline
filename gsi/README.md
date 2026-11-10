@@ -43,6 +43,10 @@ Files in `<dir>/odm/` are copied into that `/odm` at boot: board files for one i
 (init rc files, VINTF fragments, HALs and their libraries, a `media_codecs.xml`, which
 Android reads from `/odm/etc` before `/vendor/etc`) without rebuilding the vendor image.
 
+Paths listed in `<dir>/vendor-bind/BIND` (one per line, relative to `/vendor`) are bound
+from `<dir>/vendor-bind/` over the vendor's: another driver without a vendor rebuild (see
+"Mesa"); delete the folder to go back.
+
 Parameters: `gsi.dir=` (image directory, default `/android`), `gsi.data=SIZE` (new
 `userdata.img`), `gsi.deadman=MIN`, `gsi.vkms=1` (virtual display for a board without
 panel), `gsi.selinux=permissive|enforcing`, and for the Waydroid vendor
@@ -137,6 +141,23 @@ The virtual display is 1024x768 at 320 dpi, a phone's layout (512x384 dp). For t
 (2048x1536 at 320 dpi, 1024x768 dp): `wm size 2048x1536` (kept across boots); scrcpy then
 mirrors 1536x2048.
 
+## Mesa
+
+The GloDroid vendor's Mesa 23.1.7 draws OneUI's rounded list cards with square bites at
+their corners (in screenshots too, so in the app's rendering). Mesa 26.2.6 doesn't.
+`tools/build-mesa.sh <mesa source> <build dir> <out dir>` builds its EGL/GLES with the NDK
+(freedreno only, Android 13 API, libdrm and libc++ static, about 20 minutes on two
+cores); the four libraries go to `<dir>/vendor-bind/lib64/egl/` with `lib64/egl` in
+`<dir>/vendor-bind/BIND`.
+
+Built outside AOSP, Mesa has no IMapper backend and can't learn a buffer's layout, so it
+falls back to single-plane RGB and can't import YUV buffers (video). `gralloc-shim/` is a
+gralloc0 module named "CrOS Gralloc" that answers the one call Mesa's minigbm backend
+makes (`CROS_GRALLOC_DRM_GET_BUFFER_INFO`) from the minigbm handle itself (the magic
+checked at byte 116, as the vendor's minigbm does); `sh gralloc-shim/build.sh`, then
+`gralloc.gts3.so` to `<dir>/odm/lib64/hw/`. Mesa logs "Using gralloc0 CrOS API";
+`yuvtest` (same folder) imports a YUV buffer and reads back the expected grey.
+
 ## OneUI notes
 
 MysticGSI is built from the Chinese Tab S9 firmware: its setup wizard starts in Chinese and
@@ -168,6 +189,6 @@ Java tools (it lives in the mount namespace from before APEX activation).
   hardware encoder tests, every time within minutes of a session; not yet tied to a cause.
 - Android's USB gadget HAL keeps trying to bind its own gadget (`g1`: UDC busy, a few times a
   second) and once took the USB link down for a minute and a half.
-- OneUI's list cards show square bites at their rounded corners (in screenshots too: the
-  app's GPU rendering, not the encoder; not HWUI's partial updates).
+- OneUI's list cards showed square bites at their rounded corners with the vendor's
+  Mesa 23.1.7: fixed with Mesa 26.2.6 (see "Mesa").
 - The kernel patches are kept here, not yet in the pmaports package.

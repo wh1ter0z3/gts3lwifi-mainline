@@ -240,6 +240,17 @@ done
 # Bind, not move: drivers that probe late (the GPU, after its SMMU) still
 # load firmware from this root until switch_root
 mount --bind /vendor $N/vendor || fail "bind vendor"
+# <dir>/vendor-bind: each path listed in its BIND file (relative to /vendor,
+# a file or directory the vendor image has) is bound over the vendor's, e.g.
+# lib64/egl for another Mesa; no vendor rebuild, delete the folder to undo
+if [ -f $G/vendor-bind/BIND ]; then
+	while read -r p; do
+		case "$p" in ''|'#'*|*..*) continue ;; esac
+		[ -e "$G/vendor-bind/$p" ] && [ -e "$N/vendor/$p" ] &&
+			mount --bind "$G/vendor-bind/$p" "$N/vendor/$p" &&
+			log "vendor-bind: /vendor/$p" || log "vendor-bind: /vendor/$p failed"
+	done < $G/vendor-bind/BIND
+fi
 
 # /data: mounted here (fs_mgr ignored the fstab entry for a loop device);
 # init's post-fs-data then owns it. Android expects it unencrypted.
