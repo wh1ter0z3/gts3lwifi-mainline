@@ -131,8 +131,8 @@ The vendor has no Codec2 component for V4L2 encoders. `tools/mkodm-c2v4l2.sh` ma
 come along, in `/odm/lib64/c2v4l2` for this service only), our init rc, VINTF fragment and
 `media_codecs.xml` (`odm-c2v4l2/`). It needs patches 0194 and 0195 and an Android 15+ system
 image (its `libui` uses an API 35 `libbinder_ndk` call). MediaCodec then lists
-`c2.v4l2.avc.encoder` first (rank 1), so it is the default H.264 encoder:
-`scrcpy -s 172.16.42.1:5555 --max-fps 60 --video-bit-rate 12M`. Scrolling in Settings
+`c2.v4l2.avc.encoder` after the software encoder (see "Known issues": freezes);
+`scrcpy -s 172.16.42.1:5555 --video-encoder=c2.v4l2.avc.encoder --max-fps 60 --video-bit-rate 12M`. Scrolling in Settings
 records at about 29 frames per second at 768x1024 and up to 38 at 1536x2048, against 2.6
 with the software encoder at the same CPU load. At 1440x1920 the GPU hands over a tiled
 frame and the picture is scrambled. The decoder is not listed yet.
@@ -185,10 +185,23 @@ Java tools (it lives in the mount namespace from before APEX activation).
   (`lk2nd.pass-ramoops=zap` wipes it); that is how the fence panic (0192) was found. gsi-init
   keeps the previous boot's kernel log as `<dir>/boot.prev.log`. Android lowers the console
   log level to 3: `echo 7 4 1 7 > /proc/sys/kernel/printk` from the root shell.
-- OneUI froze the board (no kernel message at all, watchdog reset) four times in a day of
-  hardware encoder tests, every time within minutes of a session; not yet tied to a cause.
-- Android's USB gadget HAL keeps trying to bind its own gadget (`g1`: UDC busy, a few times a
-  second) and once took the USB link down for a minute and a half.
+- OneUI froze the board (no kernel message at all, watchdog reset) seven times, always while
+  a hardware encoder session ran or had just ended, never with the software encoder;
+  teardown traces show the freeze can come before any teardown step. Not solved.
+- USB is our network gadget's: gsi-init's board rc unmounts adbd's FunctionFS and stops the
+  vendor's gadget HAL, which otherwise retried binding Android's `g1` a few times a second
+  (a uevent storm; it once took the link down). adb runs over TCP.
+- Bluetooth: gsi-init sets the controller's address from efs (pmOS's `gts3-bdaddr`; without
+  it hci0 stays unconfigured and the btlinux HAL waits forever) and the board rc turns off
+  Android's vendor HCI capabilities (`bluetooth.core.le.vendor_capabilities.enabled`): the
+  QCA6174 firmware claims them but doesn't answer `LE_ADV_FILTER` and the stack aborted.
+- A board without panel: add `video=DSI-1:d` to the command line, or the framebuffer
+  console keeps committing to the MDP (pp done timeouts, a dozen a second).
+- OneUI daily use: a crash-looping `com.sec.android.sdhms` (uninstalled for user 0) fed
+  Samsung's bug report tool (`dmabuf_dump` at 100% CPU); `com.qti.qcc` polled a missing HAL
+  every second. Disabled (`pm disable-user`) to save RAM on a Wi-Fi tablet without camera:
+  Secure Folder, diagmon, CHN device management, beacon manager, smart suggestions, MCF,
+  VEX framework, SVE, SCPM, IMS.
 - OneUI's list cards showed square bites at their rounded corners with the vendor's
   Mesa 23.1.7: fixed with Mesa 26.2.6 (see "Mesa").
 - The kernel patches are kept here, not yet in the pmaports package.

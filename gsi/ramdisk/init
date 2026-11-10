@@ -215,6 +215,21 @@ if [ -w /sys/block/zram0/disksize ]; then
 		log "zram: $(awk '/zram0/ {print $3}' /proc/swaps) KiB swap"
 fi
 log "modules loaded: $(wc -l < /proc/modules)"
+
+# Bluetooth (QCA6174 on the UART): hci0 stays an unconfigured controller until
+# it has a public address, and Android's btlinux HAL waits for a configured one
+# forever. pmOS's gts3-bdaddr reads Samsung's address from efs (read-only) and
+# sets it, which starts the controller's firmware download: here, while the
+# system is idle (under Android's boot load the UART download failed)
+if [ -x /pmos/usr/sbin/gts3-bdaddr ]; then
+	i=0
+	while [ ! -e /sys/class/bluetooth/hci0 ] && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
+	if [ -e /sys/class/bluetooth/hci0 ] && $U /usr/sbin/gts3-bdaddr; then
+		log "bluetooth: address set"
+	else
+		log "bluetooth: no address"
+	fi
+fi
 gadget
 
 # /data: an ext4 image next to the others
@@ -354,6 +369,24 @@ on early-init
     write /proc/sys/kernel/sysrq 1
 on property:sys.use_memfd=false
     setprop sys.use_memfd true
+
+# USB belongs to our network gadget. Android's own can never bind and retries
+# several times a second (adbd's FunctionFS, the vendor gadget HAL writing
+# g1/UDC): a uevent storm, and once it took the link down. adb runs over TCP
+# (persist.adb.tcp.port). The vendor mounts the FunctionFS at early-boot; this
+# file is parsed after the vendor's, so its early-boot runs later
+on early-boot
+    umount /dev/usb-ffs/adb
+    umount /dev/usb-ffs/mtp
+    umount /dev/usb-ffs/ptp
+on property:init.svc.vendor.usb-gadget-hal-1-2=running
+    stop vendor.usb-gadget-hal-1-2
+
+# Bluetooth: the QCA6174's firmware claims Android's vendor HCI capabilities
+# but doesn't answer their commands (LE_ADV_FILTER 0xfd57 times out and the
+# stack aborts): don't use them
+on boot
+    setprop bluetooth.core.le.vendor_capabilities.enabled false
 EOT
 	# A board without panel (gsi.vkms=1): point a DRM composer
 	# (drm_hwcomposer) at the virtual display, not at the MDP, whose DSI

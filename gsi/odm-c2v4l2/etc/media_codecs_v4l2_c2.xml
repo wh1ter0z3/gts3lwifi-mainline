@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Venus (MSM8996) H.264 encoder through Codec2 V4L2, ahead of the software
-     one (rank 1: MediaCodecList sorts by rank, and createEncoderByType takes the
-     first match). The decoder stays unlisted until it is tested. -->
+<!-- Venus (MSM8996) H.264 encoder through Codec2 V4L2. Not ranked ahead of the
+     software one: OneUI froze the board within minutes of hardware encoder
+     sessions (cause not found yet); pick it by name (scrcpy --video-encoder).
+     rank="1" makes it the default. The decoder stays unlisted. -->
 <MediaCodecs>
     <Encoders>
-        <MediaCodec name="c2.v4l2.avc.encoder" type="video/avc" rank="1">
+        <MediaCodec name="c2.v4l2.avc.encoder" type="video/avc">
             <Limit name="size" min="96x96" max="4096x2160" />
             <Limit name="alignment" value="2x2" />
             <Limit name="block-size" value="16x16" />
