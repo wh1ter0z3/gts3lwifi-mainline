@@ -18,7 +18,7 @@
 #   pmos_root_uuid=   the pmOS root filesystem (as pmOS's own boot image)
 #   gsi.dir=          image directory in it (default /android)
 #   gsi.vkms=1        load vkms (a virtual display; for a board without panel)
-#   gsi.data=SIZE     size of a new userdata.img (default 8G)
+#   gsi.data=SIZE     size of userdata.img: made at it, or grown to it (default 8G)
 #   gsi.deadman=MIN   reboot after MIN minutes unless <dir>/keep exists by then
 #                     (it is removed at each boot; default 0 = never)
 #   gsi.compositor=cage|cage-headless
@@ -207,10 +207,11 @@ mp dummy numdummies=1
 
 # zram swap: Android's swapon_all gives up on 7.x kernels (it writes zram's
 # max_comp_streams, which is gone), and OneUI on 4 GB without swap spends its
-# time in kswapd. lz4, half the RAM.
+# time in kswapd. lz4 (OneUI's pages compress about 5:1), three quarters of the
+# RAM.
 if [ -w /sys/block/zram0/disksize ]; then
 	echo lz4 > /sys/block/zram0/comp_algorithm
-	echo $(( $(awk '/^MemTotal/ {print $2}' /proc/meminfo) / 2 ))K > /sys/block/zram0/disksize &&
+	echo $(( $(awk '/^MemTotal/ {print $2}' /proc/meminfo) * 3 / 4 ))K > /sys/block/zram0/disksize &&
 		mkswap /dev/zram0 >/dev/null && swapon -p 32767 /dev/zram0 &&
 		log "zram: $(awk '/zram0/ {print $3}' /proc/swaps) KiB swap"
 fi
@@ -246,6 +247,41 @@ if [ ! -f "$G/userdata.img" ]; then
 	truncate -s "$DATA_SIZE" "$G/userdata.img" &&
 		chroot /pmos /sbin/mke2fs -q -t ext4 -L data "${G#/pmos}/userdata.img" ||
 		fail "userdata.img"
+else
+	# grown to gsi.data when smaller (never shrunk): checked, then resized
+	# offline; only with room on the pmOS root for all of it and 1 GB more.
+	# (Not $U: gadget() reuses that name for the UDC.)
+	C="chroot /pmos /usr/bin/env PATH=/usr/sbin:/usr/bin:/sbin:/bin"
+	I="${G#/pmos}/userdata.img"
+	to_bytes() {
+		case "$1" in
+		*G) echo $(( ${1%G} * 1073741824 )) ;; *M) echo $(( ${1%M} * 1048576 )) ;;
+		*K) echo $(( ${1%K} * 1024 )) ;; *) echo "$1" ;;
+		esac
+	}
+	want=$(to_bytes "$DATA_SIZE")
+	fs=$($C dumpe2fs -h "$I" 2>/dev/null |
+		awk '/^Block count:/ {c = $3} /^Block size:/ {b = $3} END {print c * b}')
+	if [ -n "$fs" ] && [ "$fs" -gt 0 ] && [ "$want" -gt "$fs" ]; then
+		cur=$(stat -c %s "$G/userdata.img")
+		free=$(stat -f -c '%a %S' /pmos | awk '{print $1 * $2}')
+		if [ "$want" -gt "$cur" ] && [ "$free" -lt $(( want - cur + 1073741824 )) ]; then
+			log "userdata.img: no room to grow to $DATA_SIZE"
+		else
+			$C e2fsck -fp "$I" > /tmp/fsck.log 2>&1
+			rc=$?
+			# -f for resize2fs: e2fsck just checked it, but with the clock
+			# still at 1970 its check looks older than Android's last mount
+			if [ $rc -lt 4 ]; then
+				{ [ "$want" -le "$cur" ] || truncate -s "$DATA_SIZE" "$G/userdata.img"; } &&
+					$C resize2fs -f "$I" > /tmp/resize.log 2>&1 &&
+					log "userdata.img grown to $DATA_SIZE" ||
+					log "userdata.img: resize failed: $(tail -n 2 /tmp/resize.log | tr '\n' ' ')"
+			else
+				log "userdata.img: e2fsck $rc, not grown: $(tail -n 3 /tmp/fsck.log | tr '\n' ' ')"
+			fi
+		fi
+	fi
 fi
 losetup /dev/loop7 "$G/userdata.img" || fail "losetup userdata.img"
 

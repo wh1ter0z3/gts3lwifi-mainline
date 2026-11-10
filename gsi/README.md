@@ -24,12 +24,13 @@ init:
    ramdisk's devtmpfs as its `/dev`;
 2. loads the iptables modules netd needs (Android blanks `kernel.modprobe`, and netd's legacy
    iptables can't load them) and points the kernel's module requests at pmOS's `modprobe`
-   (`/dev/gsi/modprobe`), and sets up zram swap (half the RAM; Android's `swapon_all`
-   fails on 7.x);
+   (`/dev/gsi/modprobe`), and sets up zram swap (lz4, three quarters of the RAM: OneUI's
+   pages compress about 5:1; Android's `swapon_all` fails on 7.x);
 3. USB NCM gadget (same IDs and address as pmOS: 172.16.42.1), a root shell on TCP port 23
    (`nc 172.16.42.1 23`), hardware watchdog feeder, kernel log streamed to `log.img`,
-   dead-man timer (`gsi.deadman=MIN`: reboots unless `<dir>/keep` exists by then), a keeper
-   for the USB link's routes (netd's routing policy would cut it);
+   dead-man timer for tests (`gsi.deadman=MIN`: reboots unless `<dir>/keep` exists by then;
+   left out for daily use), a keeper for the USB link's routes (netd's routing policy would
+   cut it);
 4. mounts `system.img` (+ `product.img`, `system_ext.img`), `vendor.img`, `userdata.img` on
    `/data` (loop7; the fstab marks it `first_stage_mount`), binderfs, selinuxfs, and a tmpfs
    `/odm` holding the board's `ueventd.rc` and an init rc: `sys.use_memfd=true` (no ashmem in
@@ -47,8 +48,9 @@ Paths listed in `<dir>/vendor-bind/BIND` (one per line, relative to `/vendor`) a
 from `<dir>/vendor-bind/` over the vendor's: another driver without a vendor rebuild (see
 "Mesa"); delete the folder to go back.
 
-Parameters: `gsi.dir=` (image directory, default `/android`), `gsi.data=SIZE` (new
-`userdata.img`), `gsi.deadman=MIN`, `gsi.vkms=1` (virtual display for a board without
+Parameters: `gsi.dir=` (image directory, default `/android`), `gsi.data=SIZE` (size of
+`userdata.img`: made at it, or grown to it offline after an `e2fsck` when it is smaller and the
+pmOS root has room for all of it and 1 GB more; never shrunk), `gsi.deadman=MIN`, `gsi.vkms=1` (virtual display for a board without
 panel), `gsi.selinux=permissive|enforcing`, and for the Waydroid vendor
 `gsi.compositor=cage|cage-headless` and `gsi.audio=pipewire` (cage and PipeWire from pmOS).
 
