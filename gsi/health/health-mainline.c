@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 /* libbinder_ndk platform API (LLNDK), not in the NDK's headers */
@@ -230,6 +231,47 @@ static void read_health(struct health_info *h)
 		h->health = HEALTH_GOOD;
 }
 
+static long now_s(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec;
+}
+
+/*
+ * What the charger does at full charge is not news: it tops the battery up
+ * (Full, Charging, Not charging in turns, a moment of "Over voltage" health
+ * now and then), and OneUI plays its charger sound at each change. Report
+ * full while a charger is connected at 100 %, and a bad health only once it
+ * has lasted HEALTH_HOLD seconds.
+ */
+#define HEALTH_HOLD 10
+static void smooth_health(struct health_info *h)
+{
+	static long bad_since;
+
+	if ((h->ac || h->usb || h->wireless || h->dock) && h->level >= 100 &&
+	    (h->status == STATUS_CHARGING || h->status == STATUS_NOT_CHARGING))
+		h->status = STATUS_FULL;
+	if (h->health != HEALTH_GOOD && h->health != HEALTH_UNKNOWN) {
+		if (!bad_since)
+			bad_since = now_s();
+		if (now_s() - bad_since < HEALTH_HOLD)
+			h->health = HEALTH_GOOD;
+	} else {
+		bad_since = 0;
+	}
+}
+
+/* what a user sees: the rest (voltage, current, temperature) changes all the time */
+static bool visible_change(const struct health_info *a, const struct health_info *b)
+{
+	return a->ac != b->ac || a->usb != b->usb || a->wireless != b->wireless ||
+	       a->dock != b->dock || a->status != b->status || a->health != b->health ||
+	       a->present != b->present || a->level != b->level;
+}
+
 /* parcels */
 
 /* a stable AIDL parcelable: its size (including this field), then the fields */
@@ -362,12 +404,32 @@ static bool notify_one(AIBinder *cb, AIBinder_Class *cls, bool seh, const struct
 	return r != STATUS_DEAD_OBJECT;
 }
 
-static void notify_all(void)
+/*
+ * Callbacks get the state when it changed visibly, when a minute has gone
+ * by, and on request (update(), a new callback) at most every MIN_INTERVAL
+ * seconds: the charger and fuel gauge send uevents every second or so.
+ */
+#define PERIOD 60
+#define MIN_INTERVAL 2
+enum notify_why { NOTIFY_EVENT, NOTIFY_REQUEST, NOTIFY_NEW_CALLBACK };
+
+static void notify_all(enum notify_why why)
 {
+	static struct health_info last;
+	static long last_at = -PERIOD;
 	struct health_info h;
+	long now = now_s();
 
 	read_health(&h);
+	smooth_health(&h);
 	pthread_mutex_lock(&lock);
+	if ((why == NOTIFY_EVENT && !visible_change(&h, &last) && now - last_at < PERIOD) ||
+	    (why == NOTIFY_REQUEST && !visible_change(&h, &last) && now - last_at < MIN_INTERVAL)) {
+		pthread_mutex_unlock(&lock);
+		return;
+	}
+	last = h;
+	last_at = now;
 	for (int i = 0; i < MAX_CB; i++) {
 		if (aosp_cbs[i] && !notify_one(aosp_cbs[i], aosp_cb_class, false, &h))
 			cb_remove(aosp_cbs, aosp_cbs[i]);
@@ -408,10 +470,10 @@ static binder_status_t health_transact(AIBinder *binder, transaction_code_t code
 		pthread_mutex_unlock(&lock);
 		r = reply_ok(out);
 		if (code == H_REGISTER_CALLBACK)
-			notify_all();
+			notify_all(NOTIFY_NEW_CALLBACK);
 		return r;
 	case H_UPDATE:
-		notify_all();
+		notify_all(NOTIFY_REQUEST);
 		return reply_ok(out);
 	case H_GET_ENERGY_COUNTER:
 		return reply_exception(out, EX_UNSUPPORTED_OPERATION);
@@ -424,6 +486,7 @@ static binder_status_t health_transact(AIBinder *binder, transaction_code_t code
 		return STATUS_UNKNOWN_TRANSACTION;
 
 	read_health(&h);
+	smooth_health(&h);
 	r = reply_ok(out);
 	if (r)
 		return r;
@@ -456,7 +519,7 @@ static binder_status_t seh_transact(AIBinder *binder, transaction_code_t code,
 {
 	AIBinder *cb = NULL;
 	binder_status_t r;
-	bool known;
+	bool known = true;	/* no binder: an update() */
 
 	(void)binder;
 	if (code == GET_INTERFACE_VERSION) {
@@ -482,7 +545,7 @@ static binder_status_t seh_transact(AIBinder *binder, transaction_code_t code,
 	r = reply_ok(out);
 	for (int i = 0; !r && i < 4; i++)
 		r = AParcel_writeInt32(out, 0);
-	notify_all();
+	notify_all(known ? NOTIFY_REQUEST : NOTIFY_NEW_CALLBACK);
 	return r;
 }
 
@@ -526,7 +589,7 @@ static void uevent_loop(void)
 			if (!power)
 				continue;
 		}
-		notify_all();
+		notify_all(NOTIFY_EVENT);
 	}
 }
 

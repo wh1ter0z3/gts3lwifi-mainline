@@ -92,7 +92,11 @@ and `SEHSTUBS=` it puts in our HALs (`health/`, `sh health/build.sh` with the An
 
 - `health-mainline`: IHealth v1 from `/sys/class/power_supply`, plus a stub of Samsung's
   `ISehHealth` as its binder extension (OneUI calls `getExtension()` on the health HAL
-  without a null check, and takes its battery updates only from Samsung's callback);
+  without a null check, and takes its battery updates only from Samsung's callback).
+  It reports a full battery on the charger as full while the charger tops it up (else
+  OneUI plays its charging sound at every top-off), shows a non-good health only after
+  10 s, and tells the callbacks only about visible changes (at most once a minute
+  otherwise);
 - `lights-mainline`: ILights v2, the backlight and the touch key LED, and battery,
   notification and attention lights that do nothing (OneUI's LightsService assumes them);
 - `seh-stubs`: stand-ins for the Samsung HALs a OneUI system_server waits for forever
