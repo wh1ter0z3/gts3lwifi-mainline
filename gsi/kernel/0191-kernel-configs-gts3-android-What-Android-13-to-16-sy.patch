@@ -1,0 +1,107 @@
+From f4d4c64082eaa2d4323ce40c35df6292a0f937db Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 20:13:18 +0530
+Subject: [PATCH 191/191] kernel/configs: gts3-android: What Android 13 to 16
+ system images need
+
+Booting GloDroid's Android 13, TrebleDroid's Android 16 and a OneUI 8
+image on the Tab S3: netd's iptables tables and matches (it exits on the
+first missing one, and zygote with it), the quota2 match, IPsec (its rules
+match on policy), the IPv6 sysctls and socket destruction it uses, dummy0,
+and the memfd ashmem shim. Android blanks kernel.modprobe, so the boot
+ramdisk loads the iptables set.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernel/configs/gts3-android.config | 66 +++++++++++++++++++++++++++++-
+ 1 file changed, 64 insertions(+), 2 deletions(-)
+
+diff --git a/kernel/configs/gts3-android.config b/kernel/configs/gts3-android.config
+index 0d6b4c7c0..86d57096d 100644
+--- a/kernel/configs/gts3-android.config
++++ b/kernel/configs/gts3-android.config
+@@ -35,17 +35,79 @@ CONFIG_USERFAULTFD=y
+ CONFIG_SW_SYNC=y
+ CONFIG_UHID=y
+ 
+-# netd's traffic accounting and firewall (x_tables is modular in the base
+-# config, so the matches are modules; Android's init loads them)
++# netd's traffic accounting and firewall. x_tables is modular in the base
++# config, so these are modules too; Android blanks kernel.modprobe, so the
++# boot ramdisk loads the iptables set before Android starts. netd exits (and
++# takes zygote with it) when a table or match of its rules is missing.
++CONFIG_IP_NF_RAW=m
++CONFIG_IP6_NF_RAW=m
++CONFIG_IP_NF_MATCH_TTL=m
++CONFIG_IP_NF_MATCH_ECN=m
++CONFIG_IP6_NF_MATCH_HL=m
+ CONFIG_NETFILTER_XT_MATCH_BPF=m
+ CONFIG_NETFILTER_XT_MATCH_OWNER=m
+ CONFIG_NETFILTER_XT_MATCH_QUOTA=m
++CONFIG_NETFILTER_XT_MATCH_QUOTA2=m
++CONFIG_NETFILTER_XT_MATCH_QUOTA2_LOG=y
++CONFIG_NETFILTER_XT_MATCH_POLICY=m
++CONFIG_NETFILTER_XT_MATCH_SOCKET=m
++CONFIG_NETFILTER_XT_MATCH_STATE=m
++CONFIG_NETFILTER_XT_MATCH_CONNMARK=m
++CONFIG_NETFILTER_XT_MATCH_CONNLIMIT=m
++CONFIG_NETFILTER_XT_MATCH_HASHLIMIT=m
++CONFIG_NETFILTER_XT_MATCH_HELPER=m
++CONFIG_NETFILTER_XT_MATCH_IPRANGE=m
++CONFIG_NETFILTER_XT_MATCH_LENGTH=m
++CONFIG_NETFILTER_XT_MATCH_LIMIT=m
++CONFIG_NETFILTER_XT_MATCH_MAC=m
++CONFIG_NETFILTER_XT_MATCH_PKTTYPE=m
++CONFIG_NETFILTER_XT_MATCH_STRING=m
++CONFIG_NETFILTER_XT_MATCH_TIME=m
++CONFIG_NETFILTER_XT_MATCH_U32=m
++CONFIG_NETFILTER_XT_MATCH_HL=m
++CONFIG_NETFILTER_XT_MATCH_ESP=m
++CONFIG_NETFILTER_XT_MARK=m
++CONFIG_NETFILTER_XT_CONNMARK=m
++CONFIG_NETFILTER_XT_TARGET_IDLETIMER=m
++CONFIG_NETFILTER_XT_TARGET_CONNMARK=m
++CONFIG_NETFILTER_XT_TARGET_CT=m
++CONFIG_NETFILTER_XT_TARGET_NFLOG=m
++CONFIG_NETFILTER_XT_TARGET_NFQUEUE=m
++CONFIG_NETFILTER_XT_TARGET_TCPMSS=m
++CONFIG_NETFILTER_XT_TARGET_TPROXY=m
++CONFIG_NETFILTER_XT_TARGET_TRACE=m
++CONFIG_NETFILTER_XT_TARGET_SECMARK=m
++CONFIG_NETFILTER_XT_TARGET_CLASSIFY=m
++CONFIG_NF_CONNTRACK_SECMARK=y
++CONFIG_NF_CT_NETLINK=m
++CONFIG_NF_CONNTRACK_FTP=m
++CONFIG_NF_CONNTRACK_TFTP=m
++CONFIG_NF_CONNTRACK_PPTP=m
++# IPsec (IpSecService; netd's rules match on it)
++CONFIG_XFRM_USER=y
++CONFIG_XFRM_INTERFACE=m
++CONFIG_XFRM_MIGRATE=y
++CONFIG_XFRM_STATISTICS=y
++CONFIG_NET_KEY=m
++CONFIG_INET_ESP=m
++CONFIG_INET6_ESP=m
++# netd: IPv6 sysctls it sets, socket destruction on network changes, dummy0
++CONFIG_IPV6_ROUTER_PREF=y
++CONFIG_IPV6_ROUTE_INFO=y
++CONFIG_IPV6_OPTIMISTIC_DAD=y
++CONFIG_INET_UDP_DIAG=m
++CONFIG_INET_DIAG_DESTROY=y
++CONFIG_DUMMY=m
+ CONFIG_NET_SCH_INGRESS=y
+ CONFIG_NET_CLS_ACT=y
+ CONFIG_NET_CLS_BPF=y
+ CONFIG_NET_ACT_BPF=y
+ CONFIG_TUN=y
+ 
++# Android 16's libcutils uses memfd only if the ashmem ioctls work on it
++# (mainline has no /dev/ashmem)
++CONFIG_MEMFD_ASHMEM_SHIM=y
++
+ # Kernel config visible to Android's VTS
+ CONFIG_IKCONFIG=y
+ CONFIG_IKCONFIG_PROC=y
+-- 
+2.53.0
+

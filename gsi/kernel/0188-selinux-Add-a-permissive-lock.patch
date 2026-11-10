@@ -1,0 +1,85 @@
+From 666bfc2faeb856aa5090c8c3c94ff167b56f2812 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 20:13:17 +0530
+Subject: [PATCH 188/191] selinux: Add a permissive lock
+
+selinux.permissive_lock=1, on the command line or written to
+/sys/module/selinux/parameters/permissive_lock, makes requests for
+enforcing mode succeed without effect from then on; the lock can't be
+released. For an Android system image whose init switches to enforcing
+mode regardless of androidboot.selinux (user builds) on a kernel and
+vendor policy it was not made for. Only with SECURITY_SELINUX_DEVELOP,
+which already lets root switch to permissive mode.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ security/selinux/selinuxfs.c | 39 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/security/selinux/selinuxfs.c b/security/selinux/selinuxfs.c
+index c7d914769..05e4c3ee2 100644
+--- a/security/selinux/selinuxfs.c
++++ b/security/selinux/selinuxfs.c
+@@ -23,6 +23,7 @@
+ #include <linux/mutex.h>
+ #include <linux/namei.h>
+ #include <linux/init.h>
++#include <linux/moduleparam.h>
+ #include <linux/string.h>
+ #include <linux/security.h>
+ #include <linux/major.h>
+@@ -129,6 +130,38 @@ static ssize_t sel_read_enforce(struct file *filp, char __user *buf,
+ }
+ 
+ #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
++/*
++ * selinux.permissive_lock=1 (on the command line, or written to
++ * /sys/module/selinux/parameters/permissive_lock): from then on, requests
++ * for enforcing mode are ignored. For an Android system image (a GSI) whose
++ * init switches to enforcing mode regardless of androidboot.selinux
++ * (user builds do) on a kernel and vendor policy it wasn't made for. The
++ * lock can't be released.
++ */
++static bool permissive_lock;
++
++static int permissive_lock_set(const char *val, const struct kernel_param *kp)
++{
++	bool lock;
++	int ret;
++
++	ret = kstrtobool(val, &lock);
++	if (ret)
++		return ret;
++	if (!lock)
++		return permissive_lock ? -EPERM : 0;
++	if (!permissive_lock)
++		pr_notice("SELinux: permissive mode locked\n");
++	permissive_lock = true;
++	return 0;
++}
++
++static const struct kernel_param_ops permissive_lock_ops = {
++	.set = permissive_lock_set,
++	.get = param_get_bool,
++};
++module_param_cb(permissive_lock, &permissive_lock_ops, &permissive_lock, 0644);
++
+ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
+ 				 size_t count, loff_t *ppos)
+ 
+@@ -154,6 +187,12 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
+ 		goto out;
+ 
+ 	new_value = !!scan_value;
++	if (new_value && permissive_lock) {
++		/* Report success: Android's init treats a failure as fatal */
++		pr_notice_once("SELinux: permissive mode locked, %s (%d) asked for enforcing\n",
++			       current->comm, task_pid_nr(current));
++		new_value = false;
++	}
+ 
+ 	old_value = enforcing_enabled();
+ 	if (new_value != old_value) {
+-- 
+2.53.0
+

@@ -1,0 +1,7 @@
+# build outputs and local inputs (binaries, images, firmware stay out of the repo)
+health/health-mainline
+health/lights-mainline
+health/seh-stubs
+ramdisk-bin-busybox
+img/
+dl/

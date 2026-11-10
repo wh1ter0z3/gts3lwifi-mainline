@@ -1,0 +1,5 @@
+#!/vendor/bin/busybox sh
+# Debug shell of gsi-init (TCP port 23): Android tools first, then busybox
+export PATH=/system/bin:/system/xbin:/vendor/bin:/vendor/bin/bb
+export ANDROID_ROOT=/system ANDROID_DATA=/data HOME=/data/local/tmp TERM=dumb
+exec /vendor/bin/busybox sh -i 2>&1

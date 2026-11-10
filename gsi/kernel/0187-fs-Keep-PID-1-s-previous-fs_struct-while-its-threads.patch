@@ -1,0 +1,49 @@
+From 568309d2d092c8b790b18ebc4d9f55fc1cb322fd Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 20:13:16 +0530
+Subject: [PATCH 187/191] fs: Keep PID 1's previous fs_struct while its threads
+ still use it
+
+validate_fs_switch() points userspace_init_fs at nullfs as soon as PID 1
+switches to another fs_struct. Android's init does that in its main thread
+(unshare(CLONE_NEWNS) when it sets up its mount namespaces, on systems with
+updatable APEXes) while its property service thread goes on running on the
+old one. That thread then resolves every path from an empty root: opening
+/sys/fs/selinux/access fails and every property set is refused ("SELinux
+permission check failed", without an AVC), so the boot stops. Firmware and
+usermode helper lookups, which also go through userspace_init_fs, would
+fail the same way from then on.
+
+The state is not stale while other threads of PID 1 still run on it, so
+leave it alone then, as kernels did before nullfs.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ fs/fs_struct.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/fs/fs_struct.c b/fs/fs_struct.c
+index 34699f3b6..047ab8525 100644
+--- a/fs/fs_struct.c
++++ b/fs/fs_struct.c
+@@ -192,6 +192,17 @@ static inline void validate_fs_switch(struct fs_struct *old_fs)
+ 	/* @old_fs may be dangling but for comparison it's fine */
+ 	if (old_fs != userspace_init_fs)
+ 		return;
++	/*
++	 * Not stale while other threads of PID 1 still run on it (the global
++	 * reference is the one left otherwise, and it keeps @old_fs alive):
++	 * Android's init unshares its mount namespace in the main thread while
++	 * its property service thread goes on resolving paths, for every
++	 * property set (/sys/fs/selinux/access). Leave it as older kernels did.
++	 */
++	if (READ_ONCE(old_fs->users) > 1) {
++		pr_info("VFS: Pid 1 stopped sharing filesystem state, its other threads still use it\n");
++		return;
++	}
+ 	pr_warn("VFS: Pid 1 stopped sharing filesystem state\n");
+ 	set_fs_root(userspace_init_fs, &init_fs.root);
+ 	set_fs_pwd(userspace_init_fs, &init_fs.root);
+-- 
+2.53.0
+

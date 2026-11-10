@@ -71,6 +71,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | postmarketOS with Plasma (Wayland) | Works | installed on the eMMC behind lk2nd ([pmos-install](docs/pmos-install.md)) |
 | Widevine DRM | Partial | L3 plays in Waydroid and Flatpak Firefox; L1 not on mainline ([widevine](docs/widevine.md)) |
 | Waydroid (Android 13) | Works | Android apps on Linux, GPU-accelerated; an extra, not a stock Android replacement; optional `-waydroid` subpackage ([waydroid](docs/waydroid.md)) |
+| Android system images (GSI) | Experimental (`gsi` branch) | GloDroid's Android 13, TrebleDroid's Android 16 and a OneUI 8 image boot natively on this kernel with one adapted vendor image, from image files on the pmOS partition ([gsi](gsi/README.md)) |
 
 ## Needs testing
 
