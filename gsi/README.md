@@ -39,6 +39,10 @@ init:
    boot image: lk2nd would take it for a downstream boot), locks SELinux permissive
    (`gsi.selinux=permissive`, the default), and starts Android's init at `selinux_setup`.
 
+Files in `<dir>/odm/` are copied into that `/odm` at boot: board files for one image set
+(init rc files, VINTF fragments, HALs and their libraries, a `media_codecs.xml`, which
+Android reads from `/odm/etc` before `/vendor/etc`) without rebuilding the vendor image.
+
 Parameters: `gsi.dir=` (image directory, default `/android`), `gsi.data=SIZE` (new
 `userdata.img`), `gsi.deadman=MIN`, `gsi.vkms=1` (virtual display for a board without
 panel), `gsi.selinux=permissive|enforcing`, and for the Waydroid vendor

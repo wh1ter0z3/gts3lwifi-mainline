@@ -351,6 +351,11 @@ EOT
 		log "vkms is ${c##*/}"
 	done
 	mkdir -p $N/odm/etc/permissions
+	# <dir>/odm: more board files (init rc, VINTF fragments, libraries,
+	# media codec lists, HALs) for this image set, no vendor rebuild
+	if [ -d $G/odm ]; then
+		cp -a $G/odm/. $N/odm/ && log "odm overlay: $(du -sh $G/odm | cut -f1)"
+	fi
 fi
 
 # What Android's first stage init leaves behind: a tmpfs /dev with the nodes
