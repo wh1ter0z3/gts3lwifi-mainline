@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- gsi-init odm overlay: the vendor's codecs plus Codec2 V4L2 (Venus) -->
+<MediaCodecs>
+    <Include href="media_codecs_v4l2_c2.xml" />
+    <Include href="media_codecs_ffmpeg_c2.xml" />
+    <Include href="media_codecs_google_c2_audio.xml" />
+    <Include href="media_codecs_google_c2_video.xml" />
+</MediaCodecs>

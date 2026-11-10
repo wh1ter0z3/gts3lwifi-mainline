@@ -66,6 +66,10 @@ The `android` kernel branch (7.3, `gts3-android.config`) plus `kernel/0187`..`01
   time, so OneUI panicked the kernel within the hour.
 - 0193: `CPUSETS_V1`, Android's cpuset hierarchy (gsi-init's board rc puts background work
   on CPUs 0-1).
+- 0194, 0195: Venus encoder for Android's `v4l2_codec2` (see "Hardware video encoding"):
+  RGBA input also under the name `BGR32`, which the component asks for (not for upstream),
+  and bitstream buffers of the driver's own when the capture queue imports dma-bufs: the
+  msm8996 firmware wants all of them when the session starts and has no dynamic mode.
 
 `tools/mkgsiboot.sh <Image.gz> <board.dtb> <pmos root uuid> <out.img>` makes the boot image
 (`WDT=1` adds the watchdog node, `VKMS=1`, `EXTRA_CMDLINE=`; it wants a static aarch64
@@ -113,6 +117,21 @@ interfaces.
 `tools/mkvendor-waydroid.sh` (older path): Waydroid's vendor with pmOS's cage and PipeWire
 as its compositor and audio server; it only works with Waydroid's own system image.
 
+## Hardware video encoding
+
+The vendor has no Codec2 component for V4L2 encoders. `tools/mkodm-c2v4l2.sh` makes a
+`<dir>/odm` overlay with AOSP's `v4l2_codec2` service from GloDroid's Raspberry Pi 4 build
+(`gd-aosp-gd_rpi4-*.tar.xz`, Android 15; a VNDK-less vendor, so the service's 66 libraries
+come along, in `/odm/lib64/c2v4l2` for this service only), our init rc, VINTF fragment and
+`media_codecs.xml` (`odm-c2v4l2/`). It needs patches 0194 and 0195 and an Android 15+ system
+image (its `libui` uses an API 35 `libbinder_ndk` call). MediaCodec then lists
+`c2.v4l2.avc.encoder`; the software encoder stays the default. scrcpy:
+`scrcpy -s 172.16.42.1:5555 --video-encoder=c2.v4l2.avc.encoder --max-fps 60 --video-bit-rate 8M`.
+On a 768x1024 virtual display, scrolling in Settings records at about 29 frames per second,
+against 2.6 with the software encoder at the same CPU load. The frame width must be a
+multiple of 32 pixels (the firmware's RGBA stride is 128 bytes aligned). The decoder is not
+listed yet.
+
 ## OneUI notes
 
 MysticGSI is built from the Chinese Tab S9 firmware: its setup wizard starts in Chinese and
@@ -131,9 +150,10 @@ Java tools (it lives in the mount namespace from before APEX activation).
 - Audio: Android plays through the speakers (tinyhal, `audio.gts3.xml`); headphones and the
   headset mic (PCMs of their own) not yet; playback capture works (scrcpy's audio);
   sensors, camera untested;
-- Video encoding is software only: the Venus encoder works in the kernel (V4L2), but the
-  vendor has no Codec2 component for V4L2 encoders (AOSP's `v4l2_codec2` would be one), so
-  scrcpy wants `--max-fps 30 --video-bit-rate 4M`; Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
+- Video encoding in hardware needs the `odm-c2v4l2` overlay (see above); without it scrcpy
+  wants `--max-fps 30 --video-bit-rate 4M`. While scrolling, OneUI's list cards show
+  rectangular notches at their edges in recordings with either encoder: from the rendering,
+  not the encoder (not looked into); Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
 - A real panel (`drm_hwcomposer` on the MDP) needs a tester with a display.
 - After a reset, read `fastboot oem ramoops console` from lk2nd before booting anything else
   (`lk2nd.pass-ramoops=zap` wipes it); that is how the fence panic (0192) was found.

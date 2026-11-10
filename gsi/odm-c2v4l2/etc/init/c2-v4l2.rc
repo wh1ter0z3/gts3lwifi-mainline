@@ -1,0 +1,11 @@
+# Codec2 V4L2 components (AOSP external/v4l2_codec2, from GloDroid's RPi4
+# build: a VNDK-less vendor, so its libraries come along, kept apart for
+# this service): the Venus H.264 encoder (/dev/video7) for MediaCodec
+service vendor.media.c2-v4l2 /odm/bin/hw/android.hardware.media.c2@1.0-service-v4l2
+    class hal
+    user media
+    group mediadrm drmrpc camera graphics system
+    ioprio rt 4
+    task_profiles ProcessCapacityHigh
+    setenv LD_LIBRARY_PATH /odm/lib64/c2v4l2
+    seclabel u:r:mediacodec:s0

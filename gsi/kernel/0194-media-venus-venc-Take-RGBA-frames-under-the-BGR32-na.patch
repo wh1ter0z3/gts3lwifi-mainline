@@ -1,0 +1,104 @@
+From 58b4b6aa8adf89dbe4c742c9ee5c7a0d8085ebb9 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 23:28:23 +0530
+Subject: [PATCH 194/195] media: venus: venc: Take RGBA frames under the BGR32
+ name too
+
+Android's v4l2_codec2 encoder (GloDroid's build) passes RGBA_8888 frames
+(R, G, B, A in memory) to the V4L2 device as V4L2_PIX_FMT_BGR32, the old
+format whose alpha and byte order were never pinned down, and gives up
+on a direct input when the driver doesn't offer it. Offer it on HFI v3
+as another name for the RGBA input: same layout, same HFI format.
+
+Not for upstream: the name is wrong for what it carries. It lets the
+prebuilt Codec2 component use the encoder without a conversion pass.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/core.h    |  1 +
+ drivers/media/platform/qcom/venus/helpers.c |  4 +++-
+ drivers/media/platform/qcom/venus/venc.c    | 18 ++++++++++++++++--
+ 3 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index dea8850b4..b4c7fe8ca 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -125,6 +125,7 @@ enum venus_fmt {
+ 	VENUS_FMT_H263			= 12,
+ 	VENUS_FMT_XVID			= 13,
+ 	VENUS_FMT_RGBA32		= 14,
++	VENUS_FMT_BGR32			= 15,
+ };
+ 
+ struct venus_format {
+diff --git a/drivers/media/platform/qcom/venus/helpers.c b/drivers/media/platform/qcom/venus/helpers.c
+index dbb5c9019..1281cfddf 100644
+--- a/drivers/media/platform/qcom/venus/helpers.c
++++ b/drivers/media/platform/qcom/venus/helpers.c
+@@ -625,6 +625,7 @@ static u32 to_hfi_raw_fmt(u32 v4l2_fmt)
+ 	case V4L2_PIX_FMT_P010:
+ 		return HFI_COLOR_FORMAT_P010;
+ 	case V4L2_PIX_FMT_RGBA32:
++	case V4L2_PIX_FMT_BGR32:
+ 		return HFI_COLOR_FORMAT_RGBA8888;
+ 	default:
+ 		break;
+@@ -1879,7 +1880,8 @@ int venus_helper_set_stride(struct venus_inst *inst,
+ 
+ 	plane_actual_info.buffer_type = HFI_BUFFER_INPUT;
+ 
+-	if (inst->fmt_out->pixfmt == V4L2_PIX_FMT_RGBA32) {
++	if (inst->fmt_out->pixfmt == V4L2_PIX_FMT_RGBA32 ||
++	    inst->fmt_out->pixfmt == V4L2_PIX_FMT_BGR32) {
+ 		plane_actual_info.num_planes = 1;
+ 		plane_actual_info.plane_format[0].actual_stride =
+ 			ALIGN(width * 4, 128);
+diff --git a/drivers/media/platform/qcom/venus/venc.c b/drivers/media/platform/qcom/venus/venc.c
+index ea87b0f43..4ba3d19de 100644
+--- a/drivers/media/platform/qcom/venus/venc.c
++++ b/drivers/media/platform/qcom/venus/venc.c
+@@ -41,6 +41,15 @@ static const struct venus_format venc_formats[] = {
+ 		.num_planes = 1,
+ 		.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
+ 	},
++	/*
++	 * The same RGBA frames under the old, byte order ambiguous name:
++	 * Android's v4l2_codec2 (GloDroid's) asks for it for RGBA_8888.
++	 */
++	[VENUS_FMT_BGR32] = {
++		.pixfmt = V4L2_PIX_FMT_BGR32,
++		.num_planes = 1,
++		.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
++	},
+ 	[VENUS_FMT_H264] = {
+ 		.pixfmt = V4L2_PIX_FMT_H264,
+ 		.num_planes = 1,
+@@ -72,9 +81,14 @@ static const struct venus_format venc_formats[] = {
+  * The firmware does not list RGBA8888 among its raw formats, but the HFI v3
+  * one encodes from it and converts it to YUV itself.
+  */
++static bool venc_fmt_is_rgba(u32 pixfmt)
++{
++	return pixfmt == V4L2_PIX_FMT_RGBA32 || pixfmt == V4L2_PIX_FMT_BGR32;
++}
++
+ static bool venc_check_raw_format(struct venus_inst *inst, u32 pixfmt)
+ {
+-	return pixfmt != V4L2_PIX_FMT_RGBA32 || IS_V3(inst->core);
++	return !venc_fmt_is_rgba(pixfmt) || IS_V3(inst->core);
+ }
+ 
+ static const struct venus_format *
+@@ -236,7 +250,7 @@ venc_try_fmt_common(struct venus_inst *inst, struct v4l2_format *f)
+ 					     pixmp->height);
+ 	pfmt[0].sizeimage = max(ALIGN(pfmt[0].sizeimage, SZ_4K), sizeimage);
+ 
+-	if (pixmp->pixelformat == V4L2_PIX_FMT_RGBA32)
++	if (venc_fmt_is_rgba(pixmp->pixelformat))
+ 		pfmt[0].bytesperline = ALIGN(pixmp->width * 4, 128);
+ 	else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+ 		pfmt[0].bytesperline = ALIGN(pixmp->width, 128);
+-- 
+2.53.0
+

@@ -1,0 +1,328 @@
+From 31acf671a66853071f1c88bce2214092065d0a9b Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 23:28:23 +0530
+Subject: [PATCH 195/195] media: venus: venc: Bitstream buffers of the driver's
+ own for dma-bufs on HFI v3
+
+The HFI v3 encoder firmware (msm8996) keeps its bitstream buffers in
+static mode: it wants all of them when the session starts and takes no
+others later; asked for dynamic mode, it answers "unsupported property".
+Android's v4l2_codec2 queues dma-bufs on the capture queue, one at a
+time and not the same ones each time, so the firmware only knows the
+first one at the start and fails the session with BUFFERCOUNT_TOOSMALL.
+
+When the capture queue imports dma-bufs and the firmware has no dynamic
+mode, allocate the bitstream buffers in the driver instead, as many as
+there are capture buffers, and give those to the firmware. A queued
+capture buffer borrows one; when the firmware returns it, the encoded
+frame is copied into the dma-buf (a few tens of kB per frame).
+
+Tested on a Samsung Galaxy Tab S3 (msm8996) with Android 16 (OneUI 8)
+and GloDroid's v4l2_codec2 component: scrcpy records 768x1024 H.264 at
+about 29 frames per second while scrolling, against 2.6 with the
+software encoder.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/core.c    |   1 +
+ drivers/media/platform/qcom/venus/core.h    |  16 ++
+ drivers/media/platform/qcom/venus/helpers.c | 184 ++++++++++++++++++++
+ drivers/media/platform/qcom/venus/helpers.h |   3 +
+ drivers/media/platform/qcom/venus/venc.c    |   1 +
+ 5 files changed, 205 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/venus/core.c b/drivers/media/platform/qcom/venus/core.c
+index e520ddbf6..9a47c88f9 100644
+--- a/drivers/media/platform/qcom/venus/core.c
++++ b/drivers/media/platform/qcom/venus/core.c
+@@ -1218,3 +1218,4 @@ module_platform_driver(qcom_venus_driver);
+ 
+ MODULE_DESCRIPTION("Qualcomm Venus video encoder and decoder driver");
+ MODULE_LICENSE("GPL v2");
++MODULE_IMPORT_NS("DMA_BUF");
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index b4c7fe8ca..cb042ddd9 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -128,6 +128,18 @@ enum venus_fmt {
+ 	VENUS_FMT_BGR32			= 15,
+ };
+ 
++/**
++ * struct venus_bounce_buf - a bitstream buffer of the driver's own
++ * @va:		kernel address
++ * @da:		device address
++ * @owner:	index of the capture buffer using it, or -1
++ */
++struct venus_bounce_buf {
++	void *va;
++	dma_addr_t da;
++	int owner;
++};
++
+ struct venus_format {
+ 	u32 pixfmt;
+ 	unsigned int num_planes;
+@@ -474,6 +486,10 @@ struct venus_inst {
+ 	struct list_head dpbbufs;
+ 	struct list_head internalbufs;
+ 	struct list_head registeredbufs;
++	struct venus_bounce_buf *bounce;
++	unsigned int num_bounce;
++	u32 bounce_size;
++	spinlock_t bounce_lock;
+ 	struct list_head delayed_process;
+ 	struct work_struct delayed_process_work;
+ 	bool nonblock;
+diff --git a/drivers/media/platform/qcom/venus/helpers.c b/drivers/media/platform/qcom/venus/helpers.c
+index 1281cfddf..e88de7919 100644
+--- a/drivers/media/platform/qcom/venus/helpers.c
++++ b/drivers/media/platform/qcom/venus/helpers.c
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+  * Copyright (C) 2017 Linaro Ltd.
+  */
++#include <linux/dma-buf.h>
+ #include <linux/idr.h>
+ #include <linux/list.h>
+ #include <linux/mutex.h>
+@@ -420,6 +421,135 @@ int venus_helper_intbufs_realloc(struct venus_inst *inst)
+ }
+ EXPORT_SYMBOL_GPL(venus_helper_intbufs_realloc);
+ 
++/*
++ * HFI v3 encoders keep their bitstream buffers in static mode (the firmware
++ * refuses dynamic mode): they want all of them when the session starts, and
++ * no others later. A client that queues dma-bufs, one at a time and not the
++ * same ones every time (Android's v4l2_codec2), can't work that way. Give the
++ * firmware buffers of the driver's own then, as many as there are capture
++ * buffers, and copy each encoded frame into the client's buffer.
++ */
++static bool venus_bounce_needed(struct venus_inst *inst)
++{
++	struct vb2_queue *q = v4l2_m2m_get_dst_vq(inst->m2m_ctx);
++
++	return inst->session_type == VIDC_SESSION_TYPE_ENC &&
++	       !venus_helper_is_dynamic_bufmode(inst) &&
++	       q->memory == VB2_MEMORY_DMABUF;
++}
++
++static void venus_bounce_free(struct venus_inst *inst)
++{
++	struct device *dev = inst->core->dev;
++	unsigned int i;
++
++	for (i = 0; i < inst->num_bounce; i++)
++		dma_free_attrs(dev, inst->bounce_size, inst->bounce[i].va,
++			       inst->bounce[i].da, 0);
++	kfree(inst->bounce);
++	inst->bounce = NULL;
++	inst->num_bounce = 0;
++}
++
++static int venus_bounce_alloc(struct venus_inst *inst)
++{
++	struct device *dev = inst->core->dev;
++	unsigned int i;
++
++	inst->bounce = kcalloc(inst->num_output_bufs, sizeof(*inst->bounce),
++			       GFP_KERNEL);
++	if (!inst->bounce)
++		return -ENOMEM;
++
++	spin_lock_init(&inst->bounce_lock);
++	inst->bounce_size = inst->output_buf_size;
++
++	for (i = 0; i < inst->num_output_bufs; i++) {
++		inst->bounce[i].va = dma_alloc_attrs(dev, inst->bounce_size,
++						     &inst->bounce[i].da,
++						     GFP_KERNEL, 0);
++		if (!inst->bounce[i].va) {
++			venus_bounce_free(inst);
++			return -ENOMEM;
++		}
++		inst->bounce[i].owner = -1;
++		inst->num_bounce = i + 1;
++	}
++
++	return 0;
++}
++
++/* A free bounce buffer for capture buffer @idx */
++static struct venus_bounce_buf *venus_bounce_get(struct venus_inst *inst,
++						 int idx)
++{
++	struct venus_bounce_buf *b = NULL;
++	unsigned long flags;
++	unsigned int i;
++
++	spin_lock_irqsave(&inst->bounce_lock, flags);
++	for (i = 0; i < inst->num_bounce; i++) {
++		if (inst->bounce[i].owner == idx) {
++			b = &inst->bounce[i];
++			break;
++		}
++		if (!b && inst->bounce[i].owner < 0)
++			b = &inst->bounce[i];
++	}
++	if (b)
++		b->owner = idx;
++	spin_unlock_irqrestore(&inst->bounce_lock, flags);
++
++	return b;
++}
++
++void venus_helper_bounce_done(struct venus_inst *inst,
++			      struct vb2_v4l2_buffer *vbuf,
++			      u32 offset, u32 bytesused)
++{
++	struct vb2_buffer *vb = &vbuf->vb2_buf;
++	struct venus_bounce_buf *b = NULL;
++	struct dma_buf *dbuf = vb->planes[0].dbuf;
++	unsigned long flags;
++	unsigned int i;
++	void *dst;
++
++	if (!inst->bounce)
++		return;
++
++	spin_lock_irqsave(&inst->bounce_lock, flags);
++	for (i = 0; i < inst->num_bounce; i++) {
++		if (inst->bounce[i].owner == vb->index) {
++			b = &inst->bounce[i];
++			break;
++		}
++	}
++	spin_unlock_irqrestore(&inst->bounce_lock, flags);
++
++	if (!b)
++		return;
++
++	if (bytesused) {
++		dst = vb2_plane_vaddr(vb, 0);
++		if (dst && dbuf && offset + bytesused <= inst->bounce_size &&
++		    offset + bytesused <= vb2_plane_size(vb, 0)) {
++			dma_buf_begin_cpu_access(dbuf, DMA_BIDIRECTIONAL);
++			memcpy(dst + offset, b->va + offset, bytesused);
++			dma_buf_end_cpu_access(dbuf, DMA_BIDIRECTIONAL);
++		} else {
++			dev_warn_ratelimited(inst->core->dev_enc,
++					     "enc: can't copy %u bytes to buffer %u\n",
++					     bytesused, vb->index);
++			vb2_set_plane_payload(vb, 0, 0);
++		}
++	}
++
++	spin_lock_irqsave(&inst->bounce_lock, flags);
++	b->owner = -1;
++	spin_unlock_irqrestore(&inst->bounce_lock, flags);
++}
++EXPORT_SYMBOL_GPL(venus_helper_bounce_done);
++
+ static void fill_buffer_desc(const struct venus_buffer *buf,
+ 			     struct hfi_buffer_desc *bd, bool response)
+ {
+@@ -544,6 +674,16 @@ session_process_buf(struct venus_inst *inst, struct vb2_v4l2_buffer *vbuf)
+ 			fdata.buffer_type = inst->opb_buftype;
+ 		fdata.filled_len = 0;
+ 		fdata.offset = 0;
++
++		if (inst->bounce) {
++			struct venus_bounce_buf *b;
++
++			b = venus_bounce_get(inst, vb->index);
++			if (!b)
++				return -ENOBUFS;
++			fdata.device_addr = b->da;
++			fdata.alloc_len = inst->bounce_size;
++		}
+ 	}
+ 
+ 	return hfi_session_process_buf(inst, &fdata);
+@@ -578,6 +718,26 @@ int venus_helper_unregister_bufs(struct venus_inst *inst)
+ 	if (venus_helper_is_dynamic_bufmode(inst))
+ 		return 0;
+ 
++	if (inst->bounce) {
++		unsigned int i;
++
++		for (i = 0; i < inst->num_bounce; i++) {
++			memset(&bd, 0, sizeof(bd));
++			bd.buffer_type = HFI_BUFFER_OUTPUT;
++			bd.buffer_size = inst->bounce_size;
++			bd.num_buffers = 1;
++			bd.device_addr = inst->bounce[i].da;
++			bd.response_required = true;
++			ret |= hfi_session_unset_buffers(inst, &bd);
++		}
++		venus_bounce_free(inst);
++
++		list_for_each_entry_safe(buf, n, &inst->registeredbufs, reg_list)
++			list_del_init(&buf->reg_list);
++
++		return ret;
++	}
++
+ 	list_for_each_entry_safe(buf, n, &inst->registeredbufs, reg_list) {
+ 		fill_buffer_desc(buf, &bd, true);
+ 		ret = hfi_session_unset_buffers(inst, &bd);
+@@ -599,6 +759,30 @@ static int session_register_bufs(struct venus_inst *inst)
+ 	if (venus_helper_is_dynamic_bufmode(inst))
+ 		return 0;
+ 
++	if (venus_bounce_needed(inst)) {
++		unsigned int i;
++
++		ret = venus_bounce_alloc(inst);
++		if (ret)
++			return ret;
++
++		for (i = 0; i < inst->num_bounce; i++) {
++			memset(&bd, 0, sizeof(bd));
++			bd.buffer_type = HFI_BUFFER_OUTPUT;
++			bd.buffer_size = inst->bounce_size;
++			bd.num_buffers = 1;
++			bd.device_addr = inst->bounce[i].da;
++			ret = hfi_session_set_buffers(inst, &bd);
++			if (ret) {
++				dev_err(dev, "%s: set buffer failed\n", __func__);
++				venus_bounce_free(inst);
++				break;
++			}
++		}
++
++		return ret;
++	}
++
+ 	list_for_each_entry(buf, &inst->registeredbufs, reg_list) {
+ 		fill_buffer_desc(buf, &bd, false);
+ 		ret = hfi_session_set_buffers(inst, &bd);
+diff --git a/drivers/media/platform/qcom/venus/helpers.h b/drivers/media/platform/qcom/venus/helpers.h
+index e98f9dd7e..01a2ea8eb 100644
+--- a/drivers/media/platform/qcom/venus/helpers.h
++++ b/drivers/media/platform/qcom/venus/helpers.h
+@@ -45,6 +45,9 @@ int venus_helper_set_raw_format(struct venus_inst *inst, u32 hfi_format,
+ 				u32 buftype);
+ int venus_helper_set_color_format(struct venus_inst *inst, u32 fmt);
+ bool venus_helper_is_dynamic_bufmode(struct venus_inst *inst);
++void venus_helper_bounce_done(struct venus_inst *inst,
++			      struct vb2_v4l2_buffer *vbuf,
++			      u32 offset, u32 bytesused);
+ int venus_helper_set_dyn_bufmode(struct venus_inst *inst);
+ int venus_helper_set_bufsize(struct venus_inst *inst, u32 bufsize, u32 buftype);
+ int venus_helper_set_multistream(struct venus_inst *inst, bool out_en,
+diff --git a/drivers/media/platform/qcom/venus/venc.c b/drivers/media/platform/qcom/venus/venc.c
+index 4ba3d19de..c0e3fdd11 100644
+--- a/drivers/media/platform/qcom/venus/venc.c
++++ b/drivers/media/platform/qcom/venus/venc.c
+@@ -1433,6 +1433,7 @@ static void venc_buf_done(struct venus_inst *inst, unsigned int buf_type,
+ 		vb = &vbuf->vb2_buf;
+ 		vb2_set_plane_payload(vb, 0, bytesused + data_offset);
+ 		vb->planes[0].data_offset = data_offset;
++		venus_helper_bounce_done(inst, vbuf, data_offset, bytesused);
+ 		vb->timestamp = timestamp_us * NSEC_PER_USEC;
+ 		if (inst->enc_fw_ts)
+ 			venus_helper_get_ts_metadata(inst, timestamp_us, vbuf);
+-- 
+2.53.0
+

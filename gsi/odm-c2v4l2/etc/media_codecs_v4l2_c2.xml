@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Venus (MSM8996) H.264 encoder through Codec2 V4L2. The decoder stays
+     unlisted until it is tested. -->
+<MediaCodecs>
+    <Encoders>
+        <MediaCodec name="c2.v4l2.avc.encoder" type="video/avc">
+            <Limit name="size" min="96x96" max="4096x2160" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="blocks-per-second" range="1-1036800" />
+            <Limit name="bitrate" range="1-60000000" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-1920x1080" range="30-30" />
+        </MediaCodec>
+    </Encoders>
+</MediaCodecs>
