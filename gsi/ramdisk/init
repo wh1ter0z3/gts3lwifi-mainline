@@ -325,6 +325,13 @@ on init
 # No ashmem in mainline: libcutils (Android <= 15) uses memfd only when this
 # is true (FMQ for the composer, among others); some systems (OneUI) set it
 # false in their init.rc, so put it back
+# MSM8996: CPUs 0-1 are the low-power pair, 2-3 the fast pair: background
+# work stays on the slow pair (vendors set these, GloDroid's has no masks)
+on boot
+    write /dev/cpuset/background/cpus 0-1
+    write /dev/cpuset/system-background/cpus 0-1
+    write /dev/cpuset/restricted/cpus 0-1
+
 on early-init
     setprop sys.use_memfd true
     # init.rc blanks these (no module autoloading, no sysrq); this file is

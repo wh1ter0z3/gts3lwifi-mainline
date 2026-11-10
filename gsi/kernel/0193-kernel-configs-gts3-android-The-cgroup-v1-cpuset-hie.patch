@@ -1,0 +1,34 @@
+From 111906de186c75686e0a14b44b3db1904336e993 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 21:21:22 +0530
+Subject: [PATCH] kernel/configs: gts3-android: The cgroup v1 cpuset hierarchy
+
+Android's task profiles write apps and services into /dev/cpuset (a
+cgroup v1 cpuset mount); without CPUSETS_V1 init can't mount it, every
+AddTidToCgroup fails, and background work competes with the foreground
+app on all cores.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernel/configs/gts3-android.config | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/kernel/configs/gts3-android.config b/kernel/configs/gts3-android.config
+index 86d57096d..a8f2b07e6 100644
+--- a/kernel/configs/gts3-android.config
++++ b/kernel/configs/gts3-android.config
+@@ -104,6 +104,11 @@ CONFIG_NET_CLS_BPF=y
+ CONFIG_NET_ACT_BPF=y
+ CONFIG_TUN=y
+ 
++# Android's task profiles put apps and services into the cgroup v1 cpuset
++# hierarchy (/dev/cpuset: background work on the little cores); without it
++# every AddTidToCgroup fails and everything competes for all cores
++CONFIG_CPUSETS_V1=y
++
+ # Android 16's libcutils uses memfd only if the ashmem ioctls work on it
+ # (mainline has no /dev/ashmem)
+ CONFIG_MEMFD_ASHMEM_SHIM=y
+-- 
+2.53.0
+

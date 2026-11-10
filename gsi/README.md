@@ -60,6 +60,8 @@ The `android` kernel branch (7.3, `gts3-android.config`) plus `kernel/0187`..`01
 - 0192: the DRM crtc fence's name callbacks hit a BUG_ON when the fence is signalled while
   they run (7.x detaches fence ops on signal); SurfaceFlinger asks for fence names all the
   time, so OneUI panicked the kernel within the hour.
+- 0193: `CPUSETS_V1`, Android's cpuset hierarchy (gsi-init's board rc puts background work
+  on CPUs 0-1).
 
 `tools/mkgsiboot.sh <Image.gz> <board.dtb> <pmos root uuid> <out.img>` makes the boot image
 (`WDT=1` adds the watchdog node, `VKMS=1`, `EXTRA_CMDLINE=`; it wants a static aarch64
@@ -121,9 +123,9 @@ Java tools (it lives in the mount namespace from before APEX activation).
 - Audio: Android plays through the speakers (tinyhal, `audio.gts3.xml`); headphones and the
   headset mic (PCMs of their own) not yet; playback capture works (scrcpy's audio);
   sensors, camera untested;
-- No cpuset hierarchy (the kernel lacks `CONFIG_CPUSETS_V1`): Android can't put background
-  work on the little cores; video encoding is software only (no V4L2 Codec2 encoder in the
-  vendor), so scrcpy wants `--max-fps 30 --video-bit-rate 4M`; Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
+- Video encoding is software only: the Venus encoder works in the kernel (V4L2), but the
+  vendor has no Codec2 component for V4L2 encoders (AOSP's `v4l2_codec2` would be one), so
+  scrcpy wants `--max-fps 30 --video-bit-rate 4M`; Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
 - A real panel (`drm_hwcomposer` on the MDP) needs a tester with a display.
 - After a reset, read `fastboot oem ramoops console` from lk2nd before booting anything else
   (`lk2nd.pass-ramoops=zap` wipes it); that is how the fence panic (0192) was found.
