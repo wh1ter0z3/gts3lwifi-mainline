@@ -1,0 +1,23 @@
+#!/bin/sh
+# gts3-touch-resume
+# After a system suspend the touchscreen can come back with a stuck touch grab:
+# the panel still takes taps but popup menus and launchers ignore touch. It
+# happens when a touch was held across suspend (e.g. the Book Cover resting on
+# the glass) - a touch-down with no matching touch-up that the compositor keeps
+# holding. Re-adding the rmi4_i2c device clears it. This MUST run after the
+# compositor has thawed, so it is driven by gts3-touch-resume.service (ordered
+# after systemd-suspend.service), not a systemd system-sleep hook (those run
+# while user.slice is still frozen, before the compositor is back, and so do
+# not help).
+DRV=/sys/bus/i2c/drivers/rmi4_i2c
+[ -d "$DRV" ] || exit 0
+for L in "$DRV"/*; do
+	N=${L##*/}
+	case "$N" in
+	bind|unbind|uevent|module|new_device|delete_device) continue ;;
+	esac
+	[ -L "$L" ] || continue        # only i2c device symlinks (e.g. 3-0020)
+	echo "$N" > "$DRV/unbind" 2>/dev/null
+	echo "$N" > "$DRV/bind"   2>/dev/null
+done
+exit 0
