@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Galaxy Tab S3 (SM-T820), mainline kernel: the q6 sound card "S3" (WCD9335 on
+  SLIMbus behind the ADSP, four Richtek RT5508 speaker amplifiers). For a
+  tinyhal audio HAL (GloDroid's vendor: /vendor/etc/audio.<ro.product.device>.xml).
+  Routing from postmarketOS's UCM profile (Samsung/gts3lwifi/HiFi.conf):
+
+  Playback: PCM 0, MultiMedia1 -> PRIMARY_TDM_RX_0 (bottom pair) and
+            QUAT_TDM_RX_0 (top pair). DAC Volume 255 is 0 dB, 0.5 dB per step;
+            the amplifiers' speaker protection is not used, so 15 dB below
+            full scale and the rest in software.
+  Capture:  PCM 2, MultiMedia3 <- SLIMBUS_0_TX <- AIF1_CAP <- SLIM TX0/TX1
+            <- DEC0/DEC1 <- AMIC3 (main mic) / AMIC4 (sub mic).
+
+  Headphones (PCM 1) and the headset microphone (PCM 3) are streams of their
+  own, which tinyhal's one output and one input stream can't switch to.
+  The SM-T825 has no top pair (no 'Top 1 DAC Volume', no QUAT_TDM back end).
+
+  40 ms periods, four of them: with tinyhal's default the stream underruns
+  before the ADSP has taken its first buffer (XRUN with hw_ptr still 0).
+-->
+<audiohal>
+    <mixer name="S3">
+        <init>
+            <ctl name="PRIMARY_TDM_RX_0 Audio Mixer MultiMedia1" val="1" />
+            <ctl name="QUAT_TDM_RX_0 Audio Mixer MultiMedia1" val="1" />
+            <ctl name="Top 1 DAC Volume" val="225" />
+            <ctl name="Top 2 DAC Volume" val="225" />
+            <ctl name="Bottom 1 DAC Volume" val="225" />
+            <ctl name="Bottom 2 DAC Volume" val="225" />
+
+            <ctl name="MultiMedia3 Mixer SLIMBUS_0_TX" val="1" />
+            <ctl name="AIF1_CAP Mixer SLIM TX0" val="1" />
+            <ctl name="AIF1_CAP Mixer SLIM TX1" val="1" />
+            <ctl name="SLIM TX0 MUX" val="DEC0" />
+            <ctl name="SLIM TX1 MUX" val="DEC1" />
+            <ctl name="ADC MUX0" val="AMIC" />
+            <ctl name="ADC MUX1" val="AMIC" />
+            <ctl name="AMIC MUX0" val="ADC3" />
+            <ctl name="AMIC MUX1" val="ADC4" />
+            <ctl name="ADC3 Volume" val="16" />
+            <ctl name="ADC4 Volume" val="16" />
+        </init>
+    </mixer>
+    <device name="speaker" />
+    <device name="mic" />
+    <stream type="pcm" dir="out" cardname="S3" device="0" rate="48000" period_size="1920" period_count="4" />
+    <stream type="pcm" dir="in" cardname="S3" device="2" rate="48000" period_size="1920" period_count="4" />
+</audiohal>

@@ -74,7 +74,11 @@ libhidlbase), VNDK 33, so Android 13 to 16 system images accept it.
 `tools/mkvendor-glodroid.sh` (root, on the tablet) adapts its `vendor.img` (unsparsed):
 our fstab, firmware from `/lib/firmware`, no kernel modules, no phone modem scripts (they
 start the MSS), no vibrator HAL (no motor), KeyMint patch levels, `ro.hardware.egl=mesa`,
-Wi-Fi Direct feature, busybox and `gsi-login` for the root shell; labels are kept (init
+Wi-Fi Direct feature, our mixer configuration for its tinyhal audio HAL
+(`vendor-overlay/etc/audio.gts3.xml`, from the UCM profile: speakers and built-in mics, 40 ms
+periods), the effects configuration also under Samsung's name (`audio_effects_sec.xml`:
+OneUI's audioserver aborts at the first sound without one), busybox and `gsi-login` for the
+root shell; labels are kept (init
 refuses services whose binary has none, even when permissive). With `HEALTH=`, `LIGHTS=`
 and `SEHSTUBS=` it puts in our HALs (`health/`, `sh health/build.sh` with the Android NDK):
 
@@ -100,16 +104,17 @@ insists on an online activation at the Wi-Fi step. Accepting the required terms 
 `settings put global device_provisioned 1`, `settings put secure user_setup_complete 1`,
 `pm disable-user com.sec.android.app.SecSetupWizard` gets to the home screen. adb: write the
 PC's `adbkey.pub` to `/data/misc/adb/adb_keys` (`system:shell`, 0640) from the root shell,
-`setprop service.adb.tcp.port 5555`, restart `adbd`; `scrcpy -s 172.16.42.1:5555 --no-audio`
-(the audio configuration is still the Idol 3's). The root shell itself can't run Android's
+`setprop persist.adb.tcp.port 5555`, restart `adbd`; `scrcpy -s 172.16.42.1:5555 --no-audio`
+(playback capture doesn't work yet, and scrcpy quits when its audio fails). The root shell itself can't run Android's
 Java tools (it lives in the mount namespace from before APEX activation).
 
 ## Known issues and next steps
 
 - Android's `ueventd` ignores live uevents after its coldboot here (no nodes for devices that
   appear later); pmOS's udevd covers the host side.
-- Audio: GloDroid's tinyhal needs a mixer XML for our card (from the UCM profile); sensors,
-  camera untested; Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
+- Audio: Android plays through the speakers (tinyhal, `audio.gts3.xml`); headphones and the
+  headset mic (PCMs of their own) not yet; recording and playback capture (scrcpy's audio)
+  fail, not looked into yet; sensors, camera untested; Samsung daemons `perfsdkserver` and `ss_conn_daemon2` crash (harmless).
 - A real panel (`drm_hwcomposer` on the MDP) needs a tester with a display.
 - One unexplained reboot of OneUI after ~1.5 h: read `fastboot oem ramoops console` from lk2nd
   before booting anything else (`lk2nd.pass-ramoops=zap` wipes it).

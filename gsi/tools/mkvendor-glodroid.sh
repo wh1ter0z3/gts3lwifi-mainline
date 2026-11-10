@@ -18,6 +18,15 @@ tar -C "$W/src" --xattrs --xattrs-include='*' -cf - . | tar -C "$V" --xattrs --x
 umount "$W/src"
 # init.common.rc mounts /vendor/etc/fstab.${ro.hardware}; gsi-init passes gts3
 install -m 0644 -o 0 -g 0 "$COV/etc/fstab.gts3" "$V/etc/"
+# Our mixer configuration for their tinyhal audio HAL, which reads
+# /vendor/etc/audio.<ro.product.device>.xml: the vendor's name (idol347) wins,
+# ro.product.property_source_order starts with odm,vendor
+if [ -f "$COV/etc/audio.gts3.xml" ]; then
+	cat "$COV/etc/audio.gts3.xml" > "$V/etc/audio.idol347.xml"
+fi
+# OneUI's libeffectsconfig looks for Samsung's file name (and its audioserver
+# aborts at the first sound without an effects configuration)
+[ -f "$V/etc/audio_effects_sec.xml" ] || cp -a "$V/etc/audio_effects.xml" "$V/etc/audio_effects_sec.xml"
 rm -rf "$V/lib/modules"; mkdir -m 0755 "$V/lib/modules"
 # Their phone's modem (they start remoteproc1, our MSS), rild, rmtfs, radio HAL
 rm -f "$V/etc/init/modem_manager.rc" "$V/etc/init/rild.rc" "$V/etc/init/init.rmtfs.rc" \
