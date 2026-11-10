@@ -1,0 +1,62 @@
+From 6f8c68224564bb729357ae65eb0f1938308b8b6a Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 03:36:55 +0530
+Subject: [PATCH] media: venus: venc: Wait for a drain to finish before a START
+
+Android's v4l2_codec2 restarts the encoder with V4L2_ENC_CMD_START right
+after a drain (at the end of a session, for a new frame size), and its
+START can come before the firmware has given back the LAST buffer. The
+driver answered -EBUSY and the codec failed. Wait for the LAST buffer,
+up to 500 ms, before refusing.
+
+Tested on a Samsung Galaxy Tab S3 (msm8996) with OneUI 8 and scrcpy:
+sessions ending with an encoding error went from 3 in 8 to 0 in 6.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/venc.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/venus/venc.c b/drivers/media/platform/qcom/venus/venc.c
+index ca153557d..69a104898 100644
+--- a/drivers/media/platform/qcom/venus/venc.c
++++ b/drivers/media/platform/qcom/venus/venc.c
+@@ -615,6 +615,19 @@ venc_encoder_cmd(struct file *file, void *fh, struct v4l2_encoder_cmd *cmd)
+ 
+ 		inst->enc_state = VENUS_ENC_STATE_DRAIN;
+ 	} else if (cmd->cmd == V4L2_ENC_CMD_START) {
++		/*
++		 * Android's v4l2_codec2 restarts the encoder right after a
++		 * drain (end of a session, a new frame size), and its START
++		 * can come before the firmware has given back the LAST buffer:
++		 * wait for that a little rather than fail the codec.
++		 */
++		if (inst->enc_state == VENUS_ENC_STATE_DRAIN) {
++			mutex_unlock(&inst->lock);
++			wait_event_timeout(inst->reconf_wait,
++					   READ_ONCE(inst->enc_state) != VENUS_ENC_STATE_DRAIN,
++					   msecs_to_jiffies(500));
++			mutex_lock(&inst->lock);
++		}
+ 		if (inst->enc_state == VENUS_ENC_STATE_DRAIN) {
+ 			ret = -EBUSY;
+ 			goto unlock;
+@@ -1468,6 +1481,7 @@ static void venc_buf_done(struct venus_inst *inst, unsigned int buf_type,
+ 		if ((vbuf->flags & V4L2_BUF_FLAG_LAST) &&
+ 		    inst->enc_state == VENUS_ENC_STATE_DRAIN) {
+ 			inst->enc_state = VENUS_ENC_STATE_STOPPED;
++			wake_up(&inst->reconf_wait);
+ 		}
+ 	} else {
+ 		vbuf->sequence = inst->sequence_out++;
+@@ -1567,6 +1581,7 @@ static int venc_open(struct file *file)
+ 	INIT_LIST_HEAD(&inst->list);
+ 	mutex_init(&inst->lock);
+ 	mutex_init(&inst->ctx_q_lock);
++	init_waitqueue_head(&inst->reconf_wait);
+ 
+ 	inst->core = core;
+ 	inst->session_type = VIDC_SESSION_TYPE_ENC;
+-- 
+2.53.0
+
