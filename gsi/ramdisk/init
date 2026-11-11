@@ -583,7 +583,9 @@ EOT
 	# <dir>/odm: more board files (init rc, VINTF fragments, libraries,
 	# media codec lists, HALs) for this image set, no vendor rebuild
 	if [ -d $G/odm ]; then
-		cp -a $G/odm/. $N/odm/ && log "odm overlay: $(du -sh $G/odm | cut -f1)"
+		# root's, whoever owned the files where they were packed
+		cp -a $G/odm/. $N/odm/ && chown -R 0:0 $N/odm &&
+			log "odm overlay: $(du -sh $G/odm | cut -f1)"
 	fi
 fi
 

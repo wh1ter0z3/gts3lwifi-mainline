@@ -89,6 +89,11 @@ chown -R 0:0 "$V/etc/modprobe.d"; chmod 0644 "$V/etc/modprobe.d"/*.conf
 
 echo "firmware: $(find "$F" -type f | wc -l) files, $(find "$F" -type l | wc -l) links; modules: $(ls "$V/lib/modules")"
 df -h "$V" | tail -1
+# Zero the free blocks: what was removed above (the firmware of the image it
+# started from, Samsung's among it) must not stay in the image's free space
+dd if=/dev/zero of="$V/.zero" bs=1048576 2>/dev/null || :
+rm -f "$V/.zero"
+sync
 umount "$V"
 $E2 /usr/sbin/e2fsck -fy "$O" >/dev/null 2>&1 || :
 echo "built $OUT"
