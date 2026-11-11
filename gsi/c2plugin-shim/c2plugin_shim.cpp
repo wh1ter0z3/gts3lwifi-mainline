@@ -7,7 +7,12 @@
  * The app's CCodec only checks that its allocator store knows the ID; the
  * pool itself is made by the codec service, which has the real plugin. The
  * system image has no plugin, so CCodec fell back to plain gralloc, which
- * this decoder can't use. These allocators just answer their ID.
+ * this decoder can't use. This allocator just answers its ID.
+ *
+ * Only 22: with 21 the service's bufferqueue pool (C2VdaBqBlockPool) gets
+ * back only 2 of its buffers after a flush, and a seek stalls the decoder.
+ * Told 21 is unknown, CCodec keeps 22 for a surface too and attaches the
+ * decoded buffers to the surface to show them.
  *
  * Built with the NDK, libc++ linked in statically. CCodec sees the allocator
  * only through its vtable, so C2Allocator is declared here with AOSP's
@@ -71,7 +76,6 @@ protected:
 
 namespace {
 
-constexpr C2Allocator::id_t kV4l2BufferQueue = 21;
 constexpr C2Allocator::id_t kV4l2BufferPool = 22;
 
 class IdOnlyAllocator : public C2Allocator {
@@ -91,7 +95,7 @@ private:
 extern "C" __attribute__((visibility("default")))
 C2Allocator *CreateAllocator(C2Allocator::id_t id, c2_status_t *status)
 {
-	if (id != kV4l2BufferQueue && id != kV4l2BufferPool) {
+	if (id != kV4l2BufferPool) {
 		*status = C2_NOT_FOUND;
 		return nullptr;
 	}

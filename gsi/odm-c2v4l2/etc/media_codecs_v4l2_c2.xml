@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Venus (MSM8996) H.264 encoder through Codec2 V4L2, ahead of the software
-     one (rank 1: MediaCodecList sorts by rank, createEncoderByType takes the
-     first). Needs Venus runtime PM off (gsi-init does it): its power-down froze
-     the board. The decoder (c2.v4l2.avc.decoder) works but stays unlisted: a
-     seek while it decodes to a surface stalls (see the README). -->
+<!-- Venus (MSM8996) H.264 encoder and decoder through Codec2 V4L2, ahead of
+     the software ones (rank 1: MediaCodecList sorts by rank, and
+     createEncoderByType/createDecoderByType take the first). Needs Venus
+     runtime PM off (gsi-init does it): its power-down froze the board. The
+     decoder needs kernel patches 0199-0206 and the app side of the C2 plugin
+     (c2plugin-shim, in the system's library path; see the README). -->
 <MediaCodecs>
     <Encoders>
         <MediaCodec name="c2.v4l2.avc.encoder" type="video/avc" rank="1">
@@ -16,4 +17,16 @@
             <Limit name="performance-point-1920x1080" range="30-30" />
         </MediaCodec>
     </Encoders>
+    <Decoders>
+        <MediaCodec name="c2.v4l2.avc.decoder" type="video/avc" rank="1">
+            <Limit name="size" min="16x16" max="4096x2160" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="blocks-per-second" range="1-1036800" />
+            <Limit name="bitrate" range="1-100000000" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-3840x2160" range="30-30" />
+            <Feature name="adaptive-playback" />
+        </MediaCodec>
+    </Decoders>
 </MediaCodecs>

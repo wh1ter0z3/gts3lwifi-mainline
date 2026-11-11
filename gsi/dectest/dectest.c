@@ -2,7 +2,8 @@
 // ByteBuffers (or, with "surface", to an ImageReader's surface, as players
 // do) and reports frames, time and checksums of the first frame: of the whole
 // buffer, and of its luma in the track's size (comparable between decoders).
-// With "seek", it flushes the codec after 30 frames and starts over.
+// With "seek", it flushes the codec after 30 frames and starts over. The codec
+// name "auto" takes the first decoder for the track's type, as players do.
 // usage: dectest <file> <codec name> [surface] [seek]
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -66,8 +67,11 @@ int main(int argc, char **argv)
 		if (AImageReader_newWithUsage(w, h, AIMAGE_FORMAT_YUV_420_888, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, 4, &rd) ||
 		    AImageReader_getWindow(rd, &win)) { printf("image reader failed\n"); return 1; }
 	}
-	AMediaCodec *c = AMediaCodec_createCodecByName(argv[2]);
+	AMediaCodec *c = strcmp(argv[2], "auto") ? AMediaCodec_createCodecByName(argv[2]) :
+			 AMediaCodec_createDecoderByType(mime);
 	if (!c) { printf("no codec %s\n", argv[2]); return 1; }
+	char *name = NULL;
+	if (!AMediaCodec_getName(c, &name)) { printf("codec: %s\n", name); }
 	if (AMediaCodec_configure(c, fmt, win, NULL, 0) || AMediaCodec_start(c)) { printf("configure/start failed\n"); return 1; }
 	int frames = 0, images = 0, in_eos = 0, out_eos = 0; unsigned long sum = 0, ysum = 0; double t0 = now(), te = 0;
 	while (1) {
@@ -128,7 +132,7 @@ int main(int argc, char **argv)
 	}
 	double t = now() - t0;
 	printf("%s: %d frames in %.2f s = %.1f fps, first frame sum %lu, luma %dx%d sum %lu",
-	       argv[2], frames, t, frames / t, sum, w, h, ysum);
+	       name ? name : argv[2], frames, t, frames / t, sum, w, h, ysum);
 	if (rd) printf(", %d on the surface", images);
 	printf("\n");
 	AMediaCodec_stop(c); AMediaCodec_delete(c);

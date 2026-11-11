@@ -142,29 +142,30 @@ frame and the picture is scrambled.
 
 ## Hardware video decoding
 
-`c2.v4l2.avc.decoder`, the same service's H.264 decoder, decodes with patches 0199-0205 and
-two more pieces:
+`c2.v4l2.avc.decoder`, the same service's H.264 decoder, is the default H.264 decoder
+(rank 1 in `media_codecs_v4l2_c2.xml`), with patches 0199-0206 and two more pieces:
 
 - the app side of the Codec2 platform store plugin: the decoder takes its output pools from
-  the plugin's allocators (21 to a surface, 22 for byte buffers), and the app's CCodec only
-  asks its own allocator store whether it knows them; the service has the real plugin, the
-  system image none, and CCodec fell back to plain gralloc, which this decoder can't use.
-  `c2plugin-shim/` (`NDK=... sh build.sh`) builds a `libc2plugin_store.so` whose allocators
-  only answer their ID; it goes into the system's own library path through
-  `<dir>/system-add` (see gsi-init): `system-add/system/system_ext/lib64/` plus an `ADD`
-  file with the line `system/system_ext/lib64`;
-- `debug.stagefright.c2-poolmask` with bits 21 and 22 (`0x6c0000`; set by the rc in
-  `odm-c2v4l2/`), else CCodec doesn't have those pools made.
+  the plugin's allocators, and the app's CCodec only asks its own allocator store whether
+  it knows them; the service has the real plugin, the system image none, and CCodec fell
+  back to plain gralloc, which this decoder can't use. `c2plugin-shim/` (`NDK=... sh
+  build.sh`) builds a `libc2plugin_store.so` that knows 22 (V4L2_BUFFERPOOL) and answers
+  only its ID; it goes into the system's own library path through `<dir>/system-add` (see
+  gsi-init): `system-add/system/system_ext/lib64/` plus an `ADD` file with the line
+  `system/system_ext/lib64`. Not 21 (V4L2_BUFFERQUEUE, the pool for a surface): that pool
+  got back only 2 of its buffers after a flush, so a seek stalled; with 21 unknown CCodec
+  uses 22 for a surface too and attaches the decoded buffers to it;
+- `debug.stagefright.c2-poolmask` with bit 22 (`0x6c0000`, set by the rc in
+  `odm-c2v4l2/`), else CCodec doesn't have that pool made.
 
 Frames come out as the software decoder's, bit for bit (H.264 High and Main, 480p with an
-854-pixel width, 720p60, 1080p, 2160p; `dectest/dectest.c`, NDK, `-lmediandk`:
-`dectest <file> <codec> [surface] [seek]`). To a surface 1080p decodes at 50 frames per
-second (software 33), 2160p at 30 (software 10); to byte buffers, about 30 and 10 (the
-copies). A seek (flush, then the stream from its start) decodes on to byte buffers; to a
-surface it stalls: after the flush GloDroid's surface pool (C2VdaBqBlockPool) gives the
-decoder 2 buffers back, and the firmware waits for more. Players decode to surfaces and
-seek, so the decoder is not in `media_codecs_v4l2_c2.xml`; to try it, add it there (in the
-running system: `/odm/etc/media_codecs_v4l2_c2.xml`, then `setprop ctl.restart media`).
+854-pixel width, 720p60, 1080p, 2160p, a 360p to 720p switch; `dectest/dectest.c`, NDK,
+`-lmediandk`: `dectest <file> <codec|auto> [surface] [seek]`, from
+`/data/local/tests/system` so that it links as apps do). To a surface, 1080p decodes at 50
+frames per second (software 33), 2160p at 43 (software 10), also across seeks; 200 s of
+1080p left no buffers or memory behind. To byte buffers about 30 and 10 (the copies); there
+a resolution change mid-stream stalls: GloDroid's component reports the new crop but not
+the new size, and CCodec waits for room it never gets (the copy into the old buffers fails).
 
 The driver side, on HFI v3 firmware: Android's `ui::Size()` placeholder (-1x-1) became the
 largest coded size (0200); the codec specific data in buffers of their own counted as
@@ -172,7 +173,8 @@ pictures, and the first picture then waited for capture buffers without the sequ
 change event (0201: held and put in front of the first picture); a dma-buf swap at QBUF
 ended the session (0202); the visible rectangle came from neither the firmware nor
 userspace (0203, 0204: from the SPS); a seek queued stale reference buffers, the firmware
-failed and the kernel oopsed (0205).
+failed and the kernel oopsed (0205); at a resolution change the component sets the
+capture format before it frees the buffers (0206).
 
 The virtual display is 1024x768 at 320 dpi, a phone's layout (512x384 dp). For the Tab S3's
 (2048x1536 at 320 dpi, 1024x768 dp): `wm size 2048x1536` (kept across boots); scrcpy then
@@ -227,8 +229,8 @@ Java tools (it lives in the mount namespace from before APEX activation).
   (silent, watchdog reset) eight times within minutes of hardware encoder sessions. With its
   `power/control` at `on` (gsi-init), none in dozens of sessions and hours. The driver's
   power collapse/resume on HFI v3 is still to be fixed; this costs some idle power.
-- Hardware decoding works, but a seek while decoding to a surface stalls (see "Hardware
-  video decoding"): the decoder isn't listed for apps.
+- Hardware decoding to byte buffers stalls at a resolution change mid-stream (see "Hardware
+  video decoding"); players decode to surfaces.
 - The Venus encoder's drain at the end of a session sometimes races the codec's restart
   (`V4L2_ENC_CMD_START` while still draining: -EBUSY); scrcpy then ends with an encoding
   error, at its end only.

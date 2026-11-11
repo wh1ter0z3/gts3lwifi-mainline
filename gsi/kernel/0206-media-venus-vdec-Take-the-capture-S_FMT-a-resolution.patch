@@ -1,0 +1,60 @@
+From f836a73a7d4dcd4d4156632b404a8a67047dec93 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 09:51:22 +0530
+Subject: [PATCH] media: venus: vdec: Take the capture S_FMT a resolution
+ change asks for
+
+At a resolution change Android's v4l2_codec2 sets the capture format
+(the size and format G_FMT reports after the source change event)
+before it stops the capture queue and frees its buffers. On a busy
+queue S_FMT failed with EBUSY, and the component gave up on the stream.
+
+While the decoder is in the resolution change (DRC) state, take an
+S_FMT on the busy capture queue that asks for exactly G_FMT's format:
+there is nothing to change, the client frees and allocates the buffers
+next. Any other S_FMT on a busy queue is still EBUSY.
+
+A 360p to 720p stream then decodes on to a surface on msm8996.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/vdec.c | 23 +++++++++++++++++++++--
+ 1 file changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/venus/vdec.c b/drivers/media/platform/qcom/venus/vdec.c
+index 15a5cf155..5142b1d62 100644
+--- a/drivers/media/platform/qcom/venus/vdec.c
++++ b/drivers/media/platform/qcom/venus/vdec.c
+@@ -329,8 +329,27 @@ static int vdec_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
+ 
+ 	q = v4l2_m2m_get_vq(inst->m2m_ctx, f->type);
+ 
+-	if (vb2_is_busy(q))
+-		return -EBUSY;
++	if (vb2_is_busy(q)) {
++		struct v4l2_format cur = { .type = f->type };
++
++		/*
++		 * At a resolution change Android's v4l2_codec2 sets the capture
++		 * format before it frees the capture buffers: take it when it
++		 * is the format the sequence change event brought (G_FMT's),
++		 * which leaves nothing to change
++		 */
++		if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ||
++		    inst->codec_state != VENUS_DEC_STATE_DRC ||
++		    vdec_g_fmt(file, fh, &cur))
++			return -EBUSY;
++		vdec_try_fmt_common(inst, f);
++		if (pixmp->pixelformat != cur.fmt.pix_mp.pixelformat ||
++		    pixmp->width != cur.fmt.pix_mp.width ||
++		    pixmp->height != cur.fmt.pix_mp.height)
++			return -EBUSY;
++		*f = cur;
++		return 0;
++	}
+ 
+ 	/*
+ 	 * A coded size out of range means the client doesn't know it (Android's
+-- 
+2.53.0
+
