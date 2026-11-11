@@ -1,10 +1,11 @@
 #!/bin/sh
 # Build the boot image that starts Android from image files (see ramdisk/init).
-# usage: [WDT=1] [VKMS=1] [EXTRA_CMDLINE=...] mkgsiboot.sh <Image.gz> <board.dtb> <pmos root uuid> <out.img>
+# usage: [WDT=1] [VKMS=1] [EXTRA_CMDLINE=...] mkgsiboot.sh <Image.gz> <board.dtb> <pmos root uuid|-> <out.img>
+#   -        standalone: images on the userdata partition, no pmOS (see ramdisk/init)
 #   WDT=1    add the APSS watchdog node (gsi-init feeds it)
 #   VKMS=1   gsi.vkms=1: virtual display, for a board without panel
 set -eu
-[ $# -eq 4 ] || { echo "usage: $0 <Image.gz> <board.dtb> <pmos root uuid> <out.img>" >&2; exit 1; }
+[ $# -eq 4 ] || { echo "usage: $0 <Image.gz> <board.dtb> <pmos root uuid|-> <out.img>" >&2; exit 1; }
 KERNEL=$1 DTB=$2 UUID=$3 OUT=$4
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 MKBOOTIMG=${MKBOOTIMG:-$HOME/Projects/samsung-tab-s3/lk2nd/lk2nd/scripts/mkbootimg}
@@ -43,7 +44,7 @@ CMDLINE="$CMDLINE sysctl.kernel.firmware_config.ignore_sysfs_fallback=1"
 CMDLINE="$CMDLINE firmware_class.path=/vendor/firmware printk.devkmsg=on panic=10"
 # Keep the console log (ramoops) short: lk2nd stages only its first ~43 KB
 CMDLINE="$CMDLINE loglevel=4 log_buf_len=8M"
-CMDLINE="$CMDLINE pmos_root_uuid=$UUID"
+[ "$UUID" = - ] || CMDLINE="$CMDLINE pmos_root_uuid=$UUID"
 # No "androidboot" here: lk2nd would take the image for a downstream Android
 # boot and append Samsung's stock arguments (cma=32M, androidboot.hardware=qcom,
 # ...) and skip its mainline device tree fixups. gsi-init adds the androidboot

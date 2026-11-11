@@ -3,41 +3,52 @@
 # Galaxy Tab S3 with the mainline kernel.
 #
 # It does the job of Android's first stage init, but takes the partitions from
-# image files in a directory on the postmarketOS root partition, so nothing on
-# the eMMC is reflashed and pmOS still boots from the same disk:
+# image files in a directory, so the eMMC's own system/vendor partitions are
+# never reflashed. Two layouts:
+#  - standalone (no pmos_root_uuid=): the directory is on the userdata
+#    partition, made by the PC installer; kernel modules and links to the
+#    tablet's own firmware are in our vendor image, the firmware itself is read
+#    from the tablet's partitions (apnhlos, modem, system, efs; read only)
+#  - pmOS: the directory is on the postmarketOS root partition, so pmOS still
+#    boots from the same disk, and pmOS's udevd, modprobe and firmware are used
 #
 #   <dir>/system.img       system (system-as-root) image, e.g. a GSI
-#   <dir>/vendor.img       our vendor image (tools/mkvendor.sh)
+#   <dir>/vendor.img       our vendor image (tools/mkvendor-glodroid.sh;
+#                          standalone: tools/mkvendor-standalone.sh)
 #   <dir>/product.img      optional, if system.img has a separate product
 #   <dir>/system_ext.img   optional, likewise
-#   <dir>/userdata.img     ext4 image for /data (made on first boot)
+#   <dir>/userdata.img     ext4 image for /data (pmOS: made on first boot;
+#                          standalone: made by the installer)
+#   <dir>/log.img          small ext4 image for the kernel log (likewise)
 #   <dir>/system-hide      optional, system image directories to hide
 #   <dir>/system-add/      optional, files to add to system image directories
 #
-# Then it loads the kernel modules for the hardware (pmOS's udevd, modprobe and
-# /lib/modules, in a chroot), switches to the system image and runs Android's init at its
-# selinux_setup stage. Kernel command line:
+# Then it loads the kernel modules for the hardware, switches to the system
+# image and runs Android's init at its selinux_setup stage. Kernel command line:
 #   pmos_root_uuid=   the pmOS root filesystem (as pmOS's own boot image)
 #   gsi.dir=          image directory in it (default /android)
 #   gsi.vkms=1        load vkms (a virtual display; for a board without panel)
-#   gsi.data=SIZE     size of userdata.img: made at it, or grown to it (default 8G)
+#   gsi.data=SIZE     pmOS: size of userdata.img: made at it, or grown to it
+#                     (default 8G)
 #   gsi.deadman=MIN   reboot after MIN minutes unless <dir>/keep exists by then
 #                     (it is removed at each boot; default 0 = never)
 #   gsi.compositor=cage|cage-headless
-#                     start cage (pmOS's wlroots kiosk compositor) before
+#                     pmOS: start cage (pmOS's wlroots kiosk compositor) before
 #                     Android, for a vendor whose composer is a Wayland client
 #                     (Waydroid's); socket in /mnt/vendor/pmos/run/xdg
 #   gsi.audio=pipewire
-#                     start PipeWire + pipewire-pulse from pmOS, for a vendor
-#                     whose audio HAL is a PulseAudio client (Waydroid's)
+#                     pmOS: start PipeWire + pipewire-pulse from pmOS, for a
+#                     vendor whose audio HAL is a PulseAudio client (Waydroid's)
 #   gsi.selinux=permissive|enforcing
 #                     permissive (default): also lock it in the kernel
 #                     (selinux.permissive_lock), since the init of a user
 #                     build switches to enforcing whatever androidboot.selinux
 #                     says, and our vendor policy isn't made for any GSI
 # While Android runs, TCP port 23 on 172.16.42.1 is a root shell (no tty; e.g.
-# `nc 172.16.42.1 23`) on the USB NCM link pmOS also sets up, and
-# /mnt/vendor/pmos is the pmOS root (vold unmounts everything else under /mnt).
+# `nc 172.16.42.1 23`) on the USB NCM link pmOS also sets up (that address
+# only: not on Wi-Fi), and the partition with the images is mounted on
+# /mnt/vendor/store (standalone) or /mnt/vendor/pmos (vold unmounts
+# everything else under /mnt).
 #
 # Android's init reads its androidboot.* parameters from /proc/cmdline. They
 # can't be in the boot image (lk2nd would treat it as a downstream Android
@@ -112,25 +123,54 @@ for w in $(cat /proc/cmdline); do
 	gsi.selinux=*) SELINUX=${w#*=} ;;
 	esac
 done
-log "starting; pmOS root $ROOT_UUID, images in $GSI_DIR"
+# Without pmos_root_uuid, standalone: no pmOS on the tablet. The images are in
+# <gsi.dir> on an ext4 partition (the userdata partition, or one in a disk
+# image on it), and what pmOS gave (modules, firmware, tools) comes from the
+# vendor image and the tablet's own firmware partitions.
+[ -n "$ROOT_UUID" ] && STANDALONE=0 || STANDALONE=1
+[ $STANDALONE = 1 ] && { COMPOSITOR=; AUDIO=; }	# those run in pmOS
+log "starting; $([ $STANDALONE = 1 ] && echo standalone || echo "pmOS root $ROOT_UUID"), images in $GSI_DIR"
 
-# pmOS lives in a disk image on the userdata partition ("subpartitions")
-P=
-for u in /sys/class/block/mmcblk0p*/uevent; do
-	grep -q '^PARTNAME=userdata$' "$u" && P=$(sed -n 's/^DEVNAME=//p' "$u")
-done
-[ -n "$P" ] || fail "no userdata partition"
-L=$(losetup -f) && losetup -P "$L" "/dev/$P" || fail "losetup $P"
-R=
-for i in 1 2 3 4 5 6 7 8 9 10; do
-	R=$(blkid | sed -n "s|^\([^:]*\):.*UUID=\"$ROOT_UUID\".*|\1|p" | head -1)
-	[ -n "$R" ] && break
-	sleep 0.5
-done
-[ -n "$R" ] || fail "pmOS root $ROOT_UUID not found"
-mkdir -p /pmos && mount -t ext4 -o rw,noatime "$R" /pmos || fail "mount $R"
-log "pmOS root $R mounted"
-G=/pmos$GSI_DIR
+# /dev/<partition> of a partition label
+part_dev() {
+	for u in /sys/class/block/mmcblk0p*/uevent; do
+		grep -q "^PARTNAME=$1\$" "$u" && { echo "/dev/$(sed -n 's/^DEVNAME=//p' "$u")"; return 0; }
+	done
+	return 1
+}
+P=$(part_dev userdata) || fail "no userdata partition"
+if [ $STANDALONE = 1 ]; then
+	# the store: userdata itself, else a partition in a disk image on it
+	# (pmOS's "subpartitions", on a tablet that has it too)
+	SM=/store; SMA=/mnt/vendor/store
+	mkdir -p $SM
+	R=
+	store() {
+		mount -t ext4 -o rw,noatime "$1" $SM 2>/dev/null || return 1
+		[ -f "$SM$GSI_DIR/system.img" ] && R=$1 && return 0
+		umount $SM; return 1
+	}
+	if ! store "$P" && L=$(losetup -f) && losetup -P "$L" "$P"; then
+		sleep 1
+		for d in ${L}p*; do store "$d" && break; done
+	fi
+	[ -n "$R" ] || fail "no $GSI_DIR/system.img on $P"
+	log "store $R mounted"
+else
+	# pmOS lives in a disk image on the userdata partition ("subpartitions")
+	SM=/pmos; SMA=/mnt/vendor/pmos
+	L=$(losetup -f) && losetup -P "$L" "$P" || fail "losetup $P"
+	R=
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		R=$(blkid | sed -n "s|^\([^:]*\):.*UUID=\"$ROOT_UUID\".*|\1|p" | head -1)
+		[ -n "$R" ] && break
+		sleep 0.5
+	done
+	[ -n "$R" ] || fail "pmOS root $ROOT_UUID not found"
+	mkdir -p /pmos && mount -t ext4 -o rw,noatime "$R" /pmos || fail "mount $R"
+	log "pmOS root $R mounted"
+fi
+G=$SM$GSI_DIR
 [ -f "$G/system.img" ] && [ -f "$G/vendor.img" ] || fail "no images in $G"
 rm -f "$G/keep"
 dmesg > "$G/boot.log"
@@ -139,7 +179,7 @@ dmesg > "$G/boot.log"
 # that all but the last second survives a panic (<dir>/log.img, boot.log;
 # init's last words are in it). cat stops with EPIPE when it falls behind
 # the ring buffer, hence the loop (it then re-reads the buffer: duplicates).
-if [ ! -f "$G/log.img" ]; then
+if [ ! -f "$G/log.img" ] && [ $STANDALONE = 0 ]; then	# else the installer made it
 	truncate -s 16M "$G/log.img" &&
 		chroot /pmos /sbin/mke2fs -q -t ext4 -L gsilog "${G#/pmos}/log.img"
 fi
@@ -152,34 +192,75 @@ if mkdir -p /log && mount -t ext4 -o loop "$G/log.img" /log &&
 	setsid sh -c 'while :; do sync; sleep 1; done' & LOG2=$!
 fi
 
-# Kernel modules and device setup come from pmOS. Its root is the base for the
-# host services too (udevd, compositor, PipeWire: they run there in a chroot
-# for the whole session), so it keeps /proc, /sys, /dev (this devtmpfs, not
-# Android's /dev) and gets its own /run.
-for d in proc sys dev; do mount -o bind /$d /pmos/$d; done
-mount -t tmpfs -o mode=0755 tmpfs /pmos/run
-mkdir -p /pmos/run/xdg && chmod 0777 /pmos/run/xdg
-mp() { chroot /pmos /sbin/modprobe -q -b "$@"; }
-mp -a erofs libcomposite usb_f_ncm fuse
-log "erofs: $(grep -c erofs /proc/filesystems), modules: $(wc -l < /proc/modules)"
-
 # The vendor image holds the firmware (firmware_class.path=/vendor/firmware),
-# so mount it before any driver asks for some
-mkdir -p /vendor && mount -t erofs -o ro,loop "$G/vendor.img" /vendor 2>/dev/null ||
-	mount -o ro,loop "$G/vendor.img" /vendor || fail "mount vendor.img"
-# The kernel always searches /lib/firmware too
-mkdir -p /lib && ln -s /vendor/firmware /lib/firmware
+# so it is mounted before any driver asks for some
+mount_vendor() {
+	mkdir -p /vendor && mount -t erofs -o ro,loop "$G/vendor.img" /vendor 2>/dev/null ||
+		mount -o ro,loop "$G/vendor.img" /vendor || fail "mount vendor.img"
+	# The kernel always searches /lib/firmware too
+	mkdir -p /lib && ln -s /vendor/firmware /lib/firmware
+}
+if [ $STANDALONE = 1 ]; then
+	# The vendor image has the modules too, and links to the tablet's own
+	# firmware, which stays on its partitions: mounted read only here (ext4
+	# without journal replay) under /vendor/firmware/.part. The stock system
+	# partition has etc/firmware at its root, a system-as-root one under system/.
+	mount_vendor
+	FP=/vendor/firmware/.part
+	for n in apnhlos modem efs system; do
+		d=$(part_dev $n) || { log "no $n partition"; continue; }
+		case $n in
+		apnhlos|modem) mount -t vfat -o ro "$d" $FP/$n ;;
+		*) mkdir -p /fw/$n && mount -t ext4 -o ro,noload "$d" /fw/$n &&
+			if [ -d /fw/$n/system/etc ]; then mount --bind /fw/$n/system $FP/$n
+			else mount --bind /fw/$n $FP/$n; fi ;;
+		esac || log "$n partition not mounted"
+	done
+	# A small root for busybox's modprobe and mdev, with the modules and
+	# firmware where they look (/lib/modules, /lib/firmware), kept for the
+	# whole session (as /mnt/vendor/gsihost): Android's root has neither.
+	# Firmware a module asks for while it loads may be looked up in there.
+	H=/gsihost
+	mkdir -p $H && mount -t tmpfs -o mode=0755 tmpfs $H || fail "host root"
+	mkdir -p $H/bin $H/etc/modprobe.d $H/lib/modules $H/lib/firmware $H/proc $H/sys $H/dev
+	cp /bin/busybox $H/bin/ && ln -s busybox $H/bin/sh && ln -s busybox $H/bin/mdev || fail "host busybox"
+	mount --bind /vendor/lib/modules $H/lib/modules || fail "host modules"
+	mount --rbind /vendor/firmware $H/lib/firmware || fail "host firmware"
+	[ ! -d /vendor/etc/modprobe.d ] || mount --bind /vendor/etc/modprobe.d $H/etc/modprobe.d
+	for d in proc sys dev; do mount --bind /$d $H/$d; done
+	# mdev: the modules for devices that appear later, as udev would load them
+	echo '$MODALIAS=.* 0:0 660 @/bin/busybox modprobe -b -q "$MODALIAS"' > $H/etc/mdev.conf
+	mp() { chroot $H /bin/busybox modprobe -q -b "$@"; }
+	MD=/vendor/lib/modules/$(uname -r)
+	mp -a erofs libcomposite usb_f_ncm fuse
+else
+	# Kernel modules and device setup come from pmOS. Its root is the base for
+	# the host services too (udevd, compositor, PipeWire: they run there in a
+	# chroot for the whole session), so it keeps /proc, /sys, /dev (this
+	# devtmpfs, not Android's /dev) and gets its own /run.
+	for d in proc sys dev; do mount -o bind /$d /pmos/$d; done
+	mount -t tmpfs -o mode=0755 tmpfs /pmos/run
+	mkdir -p /pmos/run/xdg && chmod 0777 /pmos/run/xdg
+	mp() { chroot /pmos /sbin/modprobe -q -b "$@"; }
+	MD=/pmos/lib/modules/$(uname -r)
+	mp -a erofs libcomposite usb_f_ncm fuse
+	mount_vendor
+fi
+log "erofs: $(grep -c erofs /proc/filesystems), modules: $(wc -l < /proc/modules)"
 log "vendor: $(ls /vendor/firmware/qcom 2>/dev/null | wc -l) firmware entries in qcom/"
 
-# pmOS's udevd, kept running: it loads the modules for what the hardware asks
+# pmOS: pmOS's udevd, kept running: it loads the modules for what the hardware asks
 # for, also for devices that only appear later (the APR services once the ADSP
 # runs, the codec on SLIMbus: the sound card needs them), and keeps the udev
 # database pmOS's programs expect (WirePlumber ignores sound cards udev hasn't
 # initialized, libinput needs it too). systemd refuses to run in a chroot
 # unless told. Android's uevent listeners also see its broadcasts and log
 # "recvmsg failed (I/O error)" for each (they ignore non-kernel messages).
+# Standalone: busybox's mdev, which only loads modules.
 U="chroot /pmos /usr/bin/env SYSTEMD_IGNORE_CHROOT=1 PATH=/usr/sbin:/usr/bin:/sbin:/bin"
-if [ -x /pmos/usr/lib/systemd/systemd-udevd ]; then UDEVD=/usr/lib/systemd/systemd-udevd
+UDEVD=
+if [ $STANDALONE = 1 ]; then :
+elif [ -x /pmos/usr/lib/systemd/systemd-udevd ]; then UDEVD=/usr/lib/systemd/systemd-udevd
 elif [ -x /pmos/sbin/udevd ]; then UDEVD=/sbin/udevd
 fi
 if [ -n "$UDEVD" ] && $U $UDEVD --daemon; then
@@ -189,22 +270,28 @@ if [ -n "$UDEVD" ] && $U $UDEVD --daemon; then
 	for p in $(pidof systemd-udevd udevd); do echo -1000 > /proc/$p/oom_score_adj; done
 	log "udev: $UDEVD running"
 else
+	# mdev (standalone) first, for devices that appear from here on
+	if [ $STANDALONE = 1 ]; then
+		chroot $H /bin/mdev -d
+		for p in $(pidof mdev); do echo -1000 > /proc/$p/oom_score_adj; done
+	fi
 	# What the hardware asks for, as udev would load it (MODALIAS: not every
 	# bus has a modalias attribute, SLIMbus doesn't), twice for devices behind
 	# newly loaded buses
 	ma() { mp -a $(cat /sys/bus/*/devices/*/uevent 2>/dev/null | sed -n 's/^MODALIAS=//p' | sort -u); }
 	ma; sleep 2; ma
-	log "udev: none, loaded modules by modalias"
+	log "udev: none, loaded modules by modalias; mdev: $(pidof mdev)"
 fi
 [ "$VKMS" = 1 ] && { mp -a drm_kms_helper drm_shmem_helper; mp vkms || log "no vkms"; }
 # netd's (legacy) iptables loads x_tables/ip_tables itself, by running
 # modprobe from userspace, which netd can't (no CAP_SYS_MODULE), and netd
 # exits when its tables fail: load the iptables set here. The kernel requests
 # anything else through /proc/sys/kernel/modprobe (see /dev/gsi/modprobe).
-M=/pmos/lib/modules/$(uname -r)/kernel/net
+M=$MD/kernel/net
 mp -a $(ls $M/netfilter $M/ipv4/netfilter $M/ipv6/netfilter 2>/dev/null | sed -n 's/\.ko.*//p' |
 	grep -E '^(x_tables|ip_tables|ip6_tables|iptable_|ip6table_|xt_|ipt_|ip6t_)')
-# netd wants dummy0; systemd's modprobe.d sets numdummies=0, the argument wins
+# netd wants dummy0; pmOS's modprobe.d (systemd's) sets numdummies=0, the
+# argument wins
 mp dummy numdummies=1
 
 # zram swap: Android's swapon_all gives up on 7.x kernels (it writes zram's
@@ -229,13 +316,18 @@ done
 
 # Bluetooth (QCA6174 on the UART): hci0 stays an unconfigured controller until
 # it has a public address, and Android's btlinux HAL waits for a configured one
-# forever. pmOS's gts3-bdaddr reads Samsung's address from efs (read-only) and
-# sets it, which starts the controller's firmware download: here, while the
-# system is idle (under Android's boot load the UART download failed)
-if [ -x /pmos/usr/sbin/gts3-bdaddr ]; then
+# forever. gts3-bdaddr (ours in the vendor image, or pmOS's) reads Samsung's
+# address from efs (read-only) and sets it, which starts the controller's
+# firmware download: here, while the system is idle (under Android's boot load
+# the UART download failed)
+BDADDR=
+if [ $STANDALONE = 1 ]; then BDADDR="/vendor/bin/gts3-bdaddr $FP/efs/bluetooth/bt_addr"
+elif [ -x /pmos/usr/sbin/gts3-bdaddr ]; then BDADDR="$U /usr/sbin/gts3-bdaddr"
+fi
+if [ -n "$BDADDR" ]; then
 	i=0
 	while [ ! -e /sys/class/bluetooth/hci0 ] && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
-	if [ -e /sys/class/bluetooth/hci0 ] && $U /usr/sbin/gts3-bdaddr; then
+	if [ -e /sys/class/bluetooth/hci0 ] && $BDADDR; then
 		log "bluetooth: address set"
 	else
 		log "bluetooth: no address"
@@ -244,7 +336,9 @@ fi
 gadget
 
 # /data: an ext4 image next to the others
-if [ ! -f "$G/userdata.img" ]; then
+if [ $STANDALONE = 1 ]; then
+	[ -f "$G/userdata.img" ] || fail "no $G/userdata.img (the installer makes it)"
+elif [ ! -f "$G/userdata.img" ]; then
 	log "making $G/userdata.img ($DATA_SIZE)"
 	truncate -s "$DATA_SIZE" "$G/userdata.img" &&
 		chroot /pmos /sbin/mke2fs -q -t ext4 -L data "${G#/pmos}/userdata.img" ||
@@ -324,8 +418,9 @@ if [ -f $G/system-add/ADD ]; then
 	done < $G/system-add/ADD
 fi
 # Bind, not move: drivers that probe late (the GPU, after its SMMU) still
-# load firmware from this root until switch_root
-mount --bind /vendor $N/vendor || fail "bind vendor"
+# load firmware from this root until switch_root. Recursive: standalone, the
+# firmware partitions are mounted in it.
+mount --rbind /vendor $N/vendor || fail "bind vendor"
 # <dir>/vendor-bind: each path listed in its BIND file (relative to /vendor,
 # a file or directory the vendor image has) is bound over the vendor's, e.g.
 # lib64/egl for another Mesa; no vendor rebuild, delete the folder to undo
@@ -459,15 +554,31 @@ on property:init.svc.vendor.usb-gadget-hal-1-2=running
 on boot
     setprop bluetooth.core.le.vendor_capabilities.enabled false
 EOT
-	# A board without panel (gsi.vkms=1): point a DRM composer
-	# (drm_hwcomposer) at the virtual display, not at the MDP, whose DSI
-	# connector looks connected with nothing behind it
-	for c in /sys/class/drm/card[0-9]; do
-		[ "$VKMS" = 1 ] && [ "$(basename "$(readlink -f $c/device)")" = vkms ] || continue
-		printf 'on early-init\n    setprop vendor.hwc.drm.device /dev/%s\n' "dri/${c##*/}" \
-			>> $N/odm/etc/init/gsi-init.rc
-		log "vkms is ${c##*/}"
+	# The DRM composer (drm_hwcomposer) takes card0 unless told, and that is
+	# the GPU alone here: point it at the display controller's card (the one
+	# with connectors; it probes after the panel, so wait for it), or on a
+	# board without panel (gsi.vkms=1) at the virtual display, not at the
+	# MDP, whose DSI connector looks connected with nothing behind it
+	CARD=
+	for i in $(seq 20); do
+		for c in /sys/class/drm/card[0-9]; do
+			if [ "$VKMS" = 1 ]; then
+				[ "$(basename "$(readlink -f $c/device)")" = vkms ] || continue
+			else
+				ls -d $c-* >/dev/null 2>&1 || continue
+			fi
+			CARD=${c##*/}
+			break 2
+		done
+		sleep 0.5
 	done
+	if [ -n "$CARD" ]; then
+		printf 'on early-init\n    setprop vendor.hwc.drm.device /dev/dri/%s\n' $CARD \
+			>> $N/odm/etc/init/gsi-init.rc
+		log "display: $CARD"
+	else
+		log "display: no card with connectors"
+	fi
 	mkdir -p $N/odm/etc/permissions
 	# <dir>/odm: more board files (init rc, VINTF fragments, libraries,
 	# media codec lists, HALs) for this image set, no vendor rebuild
@@ -504,26 +615,30 @@ mount -t binder binder $D/binderfs -o stats=global && chmod 0755 $D/binderfs &&
 		ln -s /dev/binderfs/$b $D/$b
 	done
 mount -t tmpfs -o mode=0755,uid=0,gid=1000 tmpfs $N/mnt
-mkdir -p $N/mnt/vendor/pmos $N/mnt/vendor/gsilog $N/mnt/product
+mkdir -p $N$SMA $N/mnt/vendor/gsilog $N/mnt/product
 mount -t tmpfs -o mode=0755,uid=0,gid=0 tmpfs $N/debug_ramdisk
 for d in proc sys; do mount --move /$d $N/$d; done
-mount --move /pmos $N/mnt/vendor/pmos
+mount --move $SM $N$SMA
+[ $STANDALONE = 0 ] || { mkdir -p $N/mnt/vendor/gsihost && mount --move $H $N/mnt/vendor/gsihost; }
 mount --move /sys/kernel/config $N/config 2>/dev/null || mount -t configfs none $N/config
 
 # The kernel's own module requests (iptables tables and matches for netd,
 # crypto, filesystems...) run /proc/sys/kernel/modprobe from the root init
-# gets: Android's has none, so hand them to pmOS's modprobe in its root
+# gets: Android's has none, so hand them to modprobe in our host root (or
+# pmOS's)
+if [ $STANDALONE = 1 ]; then MPH="/mnt/vendor/gsihost /bin/busybox modprobe"
+else MPH="/mnt/vendor/pmos /sbin/modprobe"; fi
 mkdir -p $D/gsi
 cat > $D/gsi/modprobe <<EOT
 #!/vendor/bin/busybox sh
-exec /vendor/bin/busybox chroot /mnt/vendor/pmos /sbin/modprobe "\$@"
+exec /vendor/bin/busybox chroot $MPH "\$@"
 EOT
 chmod 0755 $D/gsi/modprobe
 echo /dev/gsi/modprobe > $N/proc/sys/kernel/modprobe
 
 # Debug shell and watchdog, rooted in the new root so they keep working
 B=/vendor/bin/busybox
-chroot $N $B setsid $B nc -lk -p 23 -e /vendor/bin/gsi-login &
+chroot $N $B setsid $B nc -lk -s 172.16.42.1 -p 23 -e /vendor/bin/gsi-login &
 echo -1000 > $N/proc/$!/oom_score_adj
 if [ -c $N/dev/watchdog ]; then
 	chroot $N $B setsid $B watchdog -F -t 5 -T 30 /dev/watchdog &
@@ -590,7 +705,7 @@ fi
 echo -1000 > $N/proc/$!/oom_score_adj
 
 if [ "$DEADMAN" -gt 0 ]; then
-	chroot $N $B setsid $B sh -c "$B sleep $((DEADMAN * 60)); [ -f /mnt/vendor/pmos$GSI_DIR/keep ] || $B reboot -f" &
+	chroot $N $B setsid $B sh -c "$B sleep $((DEADMAN * 60)); [ -f $SMA$GSI_DIR/keep ] || $B reboot -f" &
 	echo -1000 > $N/proc/$!/oom_score_adj
 fi
 
