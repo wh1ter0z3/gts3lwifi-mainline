@@ -7,7 +7,9 @@
 # package, the system image comes from the GSI you downloaded.
 #
 # usage: install-oneui.sh <GSI zip or system.img>
-#   with the tablet in lk2nd's fastboot mode, connected over USB
+#   with the tablet in lk2nd's fastboot mode, connected over USB, and the
+#   release's oneui-gts3-...-twrp.zip next to this script (or the package
+#   unpacked here)
 # Needs: fastboot, mke2fs (e2fsprogs 1.43 or newer), unzip, about 15 GB free
 # where it works (WORK=<dir>, default: next to this script). img2simg
 # (Debian/Ubuntu: android-sdk-libsparse-utils; Arch: android-tools) makes
@@ -30,7 +32,19 @@ v=$(mke2fs -V 2>&1 | sed -n 's/^mke2fs \([0-9]*\)\.\([0-9]*\).*/\1 \2/p')
 set -- $v
 [ "${1:-0}" -gt 1 ] || [ "${2:-0}" -ge 43 ] || die "mke2fs 1.43 or newer needed (has ${1:-?}.${2:-?})"
 
-cd "$HERE"
+# The package: unpacked next to this script, or the release's -twrp.zip next
+# to it (the same files, for TWRP)
+if [ -f "$HERE/vendor.img" ]; then
+	PKG=$HERE
+else
+	Z=$(ls "$HERE"/oneui-gts3-*-twrp.zip 2>/dev/null | tail -n 1)
+	[ -n "$Z" ] || die "put the release's oneui-gts3-...-twrp.zip next to this script"
+	echo "Unpacking ${Z##*/}..."
+	mkdir -p "$WORK" && rm -rf "${WORK:?}/pkg"
+	unzip -q "$Z" -d "$WORK/pkg" -x 'META-INF/*' || die "can't unpack $Z"
+	PKG=$WORK/pkg
+fi
+cd "$PKG"
 if [ -f SHA256SUMS ]; then
 	echo "Checking the package..."
 	sha256sum -c --quiet SHA256SUMS || die "package files damaged, download it again"

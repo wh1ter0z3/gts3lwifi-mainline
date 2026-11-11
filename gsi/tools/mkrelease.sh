@@ -2,7 +2,8 @@
 # Assembles the OneUI test package for the Tab S3 (standalone gsi-init, no
 # pmOS on the tablet): boot images for both models, the vendor image and board
 # files of a tested image directory, lk2nd, the installer (release/); and the
-# TWRP installer zip of the same files (<out dir>-twrp.zip).
+# TWRP installer zip of the same files (<out dir>-twrp.zip); and the
+# release's files side by side (<out dir>-assets/).
 # usage: mkrelease.sh <kernel arch/arm64/boot dir> <payload dir> <lk2nd dir> <out dir>
 #   payload: vendor.img (tools/mkvendor-standalone.sh), odm/, system-add/,
 #            vendor-bind/, system-hide: as in the image directory tested
@@ -37,4 +38,12 @@ fi
 	xargs sha256sum > SHA256SUMS)
 echo "package in $OUT ($(du -sh "$OUT" | cut -f1))"
 # The same for TWRP / OrangeFox, without a PC (release/twrp, unzip64/)
-sh "$HERE/tools/mktwrpzip.sh" "$OUT" "$HERE/unzip64/gsi-unzip" "$OUT-twrp.zip"
+sh "$HERE/tools/mktwrpzip.sh" "$OUT" "$HERE/unzip64/gsi-unzip" "${BUSYBOX:-$HERE/ramdisk-bin-busybox}" "$OUT-twrp.zip"
+# The release's files, each on its own: the -twrp.zip is the package (TWRP
+# flashes it, install-oneui.sh unpacks it), the images for whoever wants one
+A=$OUT-assets
+rm -rf "${A:?}" && mkdir -p "$A"
+cp "$OUT-twrp.zip" "$HERE/release/install-oneui.sh" "$HERE/release/README.txt" \
+	"$OUT"/boot-*.img "$OUT/vendor.img" "$OUT"/lk2nd-*.img "$OUT"/lk2nd-*-odin.tar "$A/"
+(cd "$A" && sha256sum $(ls | LC_ALL=C sort) > SHA256SUMS)
+echo "release files in $A"

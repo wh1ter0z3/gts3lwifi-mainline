@@ -1,18 +1,34 @@
 #!/sbin/sh
 # OneUI (a GSI) on the Galaxy Tab S3, SM-T820 or SM-T825: installer for
-# TWRP or OrangeFox (tested in awesometic's TWRP 3.7.0), the same as
-# install-oneui.sh does from a PC. Put this zip and the GSI (a .zip with the
-# system image inside, or the .img / .img.gz) in one folder on the microSD
-# card or a USB drive, then Install this zip.
+# TWRP or OrangeFox, old and new (tested in awesometic's TWRP 3.7.0), the
+# same as install-oneui.sh does from a PC. Put this zip and the GSI (a .zip
+# with the system image inside, or the .img / .img.gz) in one folder on the
+# microSD card or a USB drive, then Install this zip.
 # It ERASES the userdata partition (internal storage, all Android data, a
 # postmarketOS install), writes lk2nd to the boot partition and our boot
-# image after it (4 MiB in, where lk2nd looks; recovery's dd has no conv=,
-# none is needed on a block device), and fills userdata with the
+# image after it (4 MiB in, where lk2nd looks), and fills userdata with the
 # system image, our vendor image and board files, an empty /data.
+# It runs under its own busybox (tools/busybox, Alpine's busybox-static):
+# recoveries differ in their tools, and their mksh computes in 32 bits. From
+# the recovery it takes only unzip (to get busybox out), mke2fs, getprop and
+# simg2img (for a sparse system image).
 # Arguments (recovery's update-binary protocol): <api> <outfd> <zip>
 # Test overrides: MODEL, BOOT_DEV, DATA_DEV, GSI, GSI_MIN_MB, WORK
 OUTFD=$2
 ZIP=$3
+if [ -z "${GSI_BB:-}" ]; then
+	B=/tmp/gsi-bb
+	rm -rf "$B" && mkdir -p "$B" && cd "$B" &&
+		unzip -o "$ZIP" tools/busybox > /dev/null 2>&1 &&
+		chmod 0755 tools/busybox && "$B/tools/busybox" --install -s "$B" || {
+		echo "ui_print ERROR: can't unpack tools/busybox from $ZIP" >&"$OUTFD"
+		exit 1
+	}
+	# the recovery's ext4 tools, not busybox's (ext2 only)
+	rm -f "$B/mke2fs" "$B/mkfs.ext2" "$B/tune2fs" "$B/e2fsck" "$B/fsck"
+	export GSI_BB=$B PATH="$B:$PATH"
+	exec "$B/tools/busybox" sh "$0" "$@"
+fi
 BOOT_DEV=${BOOT_DEV:-/dev/block/bootdevice/by-name/boot}
 DATA_DEV=${DATA_DEV:-/dev/block/bootdevice/by-name/userdata}
 GSI_MIN_MB=${GSI_MIN_MB:-1024}
@@ -30,24 +46,33 @@ die() {
 	umount "$W/store" 2>/dev/null
 	exit 1
 }
-# the size of a file or block device, in MiB. Byte counts go through awk:
-# recovery's shell (mksh) computes in 32 bits
+# the size of a file or block device, in MiB
 size_mib() {
 	if [ -b "$1" ]; then blockdev --getsize64 "$1"; else stat -c %s "$1"; fi |
 		awk '{ printf "%d\n", $1 / 1048576 }'
 }
+# the recovery's mke2fs (an ext4 one: busybox's makes ext2 only)
+MKE2FS=
+for c in $(which -a mke2fs 2>/dev/null) /sbin/mke2fs /system/bin/mke2fs /system/xbin/mke2fs; do
+	case "$c" in "$GSI_BB"/*) continue ;; esac
+	[ -x "$c" ] && { MKE2FS=$c; break; }
+done
 
 ui "OneUI for the Galaxy Tab S3 (test build)"
+# The model: Samsung's bootloader tells it on the command line (any
+# recovery), else the recovery's device property
 M=${MODEL:-}
 if [ -z "$M" ]; then
-	case "$(getprop ro.product.device)" in
-	gts3lwifi|gts3llte) M=$(getprop ro.product.device) ;;
+	bl=$(tr ' ' '\n' < /proc/cmdline | sed -n 's/^androidboot.bootloader=//p')
+	[ -n "$bl" ] || bl=$(getprop ro.boot.bootloader 2>/dev/null)
+	case "$bl" in
+	T820*) M=gts3lwifi ;;
+	T825*) M=gts3llte ;;
 	esac
 fi
 if [ -z "$M" ]; then
-	case "$(getprop ro.boot.bootloader)" in
-	T820*) M=gts3lwifi ;;
-	T825*) M=gts3llte ;;
+	case "$(getprop ro.product.device 2>/dev/null)" in
+	gts3lwifi|gts3llte) M=$(getprop ro.product.device) ;;
 	esac
 fi
 case "$M" in
@@ -117,6 +142,7 @@ SIZE_M=$(size_mib "$DATA_DEV")
 [ -n "$SIZE_M" ] || die "no userdata partition"
 [ "$SIZE_M" -gt 16384 ] || die "userdata partition too small"
 [ -e "$BOOT_DEV" ] || die "no boot partition"
+[ -n "$MKE2FS" ] || die "this recovery has no mke2fs: use TWRP 3.x or OrangeFox"
 ui "userdata: $SIZE_M MiB"
 
 # Erase userdata: one ext4 file system, the last 16 KiB left out (recovery
@@ -126,7 +152,7 @@ umount /sdcard 2>/dev/null
 umount /data 2>/dev/null
 umount -l /data 2>/dev/null
 ERASED=1
-mke2fs -F -q -t ext4 -b 4096 -L gsistore -m 0 -i $MiB "$DATA_DEV" $(( SIZE_M * 256 - 4 )) ||
+"$MKE2FS" -F -q -t ext4 -b 4096 -L gsistore -m 0 -i $MiB "$DATA_DEV" $(( SIZE_M * 256 - 4 )) ||
 	die "formatting userdata failed"
 S=$W/store
 mkdir -p "$S"
@@ -168,9 +194,9 @@ data_m=$(( free_m - SIZE_M / 100 - 512 ))
 [ "$data_m" -gt 4096 ] || die "no room for /data (${data_m} MiB)"
 ui "/data: $data_m MiB"
 truncate -s ${data_m}M "$A/userdata.img" &&
-	mke2fs -F -q -t ext4 -L data "$A/userdata.img" &&
+	"$MKE2FS" -F -q -t ext4 -L data "$A/userdata.img" &&
 	truncate -s 16M "$A/log.img" &&
-	mke2fs -F -q -t ext4 -L gsilog "$A/log.img" &&
+	"$MKE2FS" -F -q -t ext4 -L gsilog "$A/log.img" &&
 	chmod 0644 "$A/userdata.img" "$A/log.img" || die "making the /data image failed"
 sync
 umount "$S" || die "unmounting userdata failed"

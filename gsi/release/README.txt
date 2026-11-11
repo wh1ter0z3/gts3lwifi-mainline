@@ -23,51 +23,55 @@ State (tested on a T820 board WITHOUT screen, so read "untested" carefully)
               battery faster than stock)
 
 You need
-  - lk2nd on the tablet (from the earlier postmarketOS test rounds, or below)
-  - a Linux PC with: fastboot, e2fsprogs (mke2fs 1.43+), unzip, and
-    img2simg if possible (faster flashing), about 15 GB free
-    (Debian/Ubuntu: apt install fastboot e2fsprogs unzip
-     android-sdk-libsparse-utils; Arch: pacman -S android-tools e2fsprogs unzip)
   - the GSI: Oneui-gts9wifi-16-X710ZCS5DZA1-AB-20260211-MysticGSI.zip
     (MysticGSI's OneUI 8 build), sha256
     af400e8702f35234d9b004175f18da1697acb320232bd86dd5fc78f5b794537a
+  - oneui-gts3-...-twrp.zip from this release: the whole package (boot
+    images, vendor image, board files, lk2nd)
+  - and either TWRP / OrangeFox on the tablet (way A, no PC) or a Linux PC
+    with lk2nd on the tablet (way B)
 
-1) lk2nd (skip if you have it from a test round)
-   Download mode: power off, hold Power + Volume Down + Home. Then
-     Linux:  heimdall flash --BOOT lk2nd-gts3lwifi.img   (SM-T825: gts3llte)
-     Odin:   lk2nd-gts3lwifi-odin.tar in the AP slot     (SM-T825: gts3llte)
-   Use the file for your model: the wrong one makes the bootloader loop.
+A) Without a PC: TWRP or OrangeFox (TWRP 3.x, old or new; tested with
+   awesometic's 3.7.0, the one LineageOS uses). The zip brings its own tools
+   and writes lk2nd itself.
+  1. Copy oneui-gts3-...-twrp.zip and the GSI (the MysticGSI zip, or a
+     system .img / .img.gz) into the same folder on the microSD card or a
+     USB drive. NOT internal storage: it gets erased.
+  2. Boot the recovery: power off, then hold Power + Volume Up + Home.
+     With lk2nd on the tablet: power on holding Volume Down, then in lk2nd's
+     menu choose Recovery (Volume keys move, Power selects; not EDL).
+  3. Install > oneui-gts3-...-twrp.zip, swipe. It takes some minutes.
+  4. Reboot > System.
 
-2) lk2nd's fastboot mode
-   Power off, then power on holding Volume Down only (never both volume
-   keys: that is the emergency download mode). Keep it held past the
-   Samsung logo until lk2nd's fastboot screen. (After a forced restart,
-   Power + Volume Down for 10 s, lk2nd ignores the keys: power off first.)
-   Check: fastboot devices
+B) From a Linux PC, with lk2nd
+  The PC needs fastboot, e2fsprogs (mke2fs 1.43+), unzip, and img2simg if
+  possible (faster flashing), about 15 GB free (Debian/Ubuntu: apt install
+  fastboot e2fsprogs unzip android-sdk-libsparse-utils; Arch: pacman -S
+  android-tools e2fsprogs unzip).
+  1. lk2nd (skip if you have it from a postmarketOS test round)
+     Download mode: power off, hold Power + Volume Down + Home. Then
+       Linux:  heimdall flash --BOOT lk2nd-gts3lwifi.img   (SM-T825: gts3llte)
+       Odin:   lk2nd-gts3lwifi-odin.tar in the AP slot     (SM-T825: gts3llte)
+     Use the file for your model: the wrong one makes the bootloader loop.
+  2. lk2nd's fastboot mode: power off, then power on holding Volume Down
+     only (never both volume keys: that is the emergency download mode).
+     Keep it held past the Samsung logo until lk2nd's fastboot screen.
+     (After a forced restart, Power + Volume Down for 10 s, lk2nd ignores
+     the keys: power off first.) Check: fastboot devices
+  3. Put install-oneui.sh and oneui-gts3-...-twrp.zip in one folder, then
+       ./install-oneui.sh ~/Downloads/Oneui-gts9wifi-16-X710ZCS5DZA1-AB-20260211-MysticGSI.zip
+     It detects the model, builds the userdata image on the PC, asks, then
+     flashes the boot image (after lk2nd) and userdata, and restarts.
 
-3) Install
-     ./install-oneui.sh ~/Downloads/Oneui-gts9wifi-16-X710ZCS5DZA1-AB-20260211-MysticGSI.zip
-   It detects the model, builds the userdata image on the PC, asks, then
-   flashes the boot image (after lk2nd) and userdata, and restarts.
-   The first start takes about 8 minutes: Samsung logo, a black screen for a
-   while, then OneUI's lock screen (swipe up). There is no setup wizard (this
-   OneUI build is a Chinese one: its wizard wants an online activation), and
-   OneUI starts in English. Then in Settings: Connections > Wi-Fi; General
-   management > Language for another language; Accounts and backup for a
-   Samsung account. A question about "S Share" and nearby devices may come
-   up: either answer is fine.
-
-Without a PC: TWRP or OrangeFox
-  With a custom recovery on the tablet (e.g. awesometic's TWRP 3.7.0, as
-  for LineageOS), the -twrp.zip of this release does what install-oneui.sh
-  does:
-  1. copy that zip and the GSI (the MysticGSI zip, or a system
-     .img / .img.gz) into the same folder on the microSD card or a USB
-     drive: NOT internal storage, it gets erased
-  2. boot the recovery (power off, then Power + Volume Up + Home)
-  3. Install > the -twrp.zip, swipe; it takes some minutes
-  4. Reboot > System
-  It writes lk2nd too (to the boot partition), for the model it detects.
+First start (both ways)
+  About 8 minutes: Samsung logo, a black screen for a while, then OneUI's
+  lock screen (swipe up). There is no setup wizard (this OneUI build is a
+  Chinese one: its wizard wants an online activation), and OneUI starts in
+  English. Then in Settings: Connections > Wi-Fi; General management >
+  Language for another language; Accounts and backup for a Samsung account.
+  A question about "S Share" and nearby devices may come up: either answer
+  is fine. A PIN or password screen shows black in scrcpy and screenshots
+  (Android hides it), but typing works.
 
 Report
   - first: does the screen show OneUI, does touch work; then rotation,

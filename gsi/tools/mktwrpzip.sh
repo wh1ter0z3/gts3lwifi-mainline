@@ -1,15 +1,16 @@
 #!/bin/sh
 # Makes the TWRP / OrangeFox installer zip from a release package directory
 # (tools/mkrelease.sh): the boot images, lk2nd images, vendor image and board
-# files, gsi-unzip (unzip64/) and release/twrp/update-binary.
-# usage: mktwrpzip.sh <package dir> <gsi-unzip binary> <out.zip>
+# files, gsi-unzip (unzip64/), a static busybox (Alpine's busybox-static, as
+# for the boot ramdisk) and release/twrp/update-binary.
+# usage: mktwrpzip.sh <package dir> <gsi-unzip binary> <busybox binary> <out.zip>
 set -eu
-[ $# -eq 3 ] || { echo "usage: $0 <package dir> <gsi-unzip> <out.zip>" >&2; exit 1; }
-PKG=$1 UNZIP=$2 OUT=$3
+[ $# -eq 4 ] || { echo "usage: $0 <package dir> <gsi-unzip> <busybox> <out.zip>" >&2; exit 1; }
+PKG=$1 UNZIP=$2 BB=$3 OUT=$4
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-python3 - "$PKG" "$UNZIP" "$HERE/release/twrp/update-binary" "$OUT" <<'PY'
+python3 - "$PKG" "$UNZIP" "$BB" "$HERE/release/twrp/update-binary" "$OUT" <<'PY'
 import hashlib, os, sys, zipfile
-pkg, unzip, ub, out = sys.argv[1:]
+pkg, unzip, bb, ub, out = sys.argv[1:]
 files = []
 for top in ['boot-gts3lwifi.img', 'boot-gts3llte.img', 'lk2nd-gts3lwifi.img', 'lk2nd-gts3llte.img',
             'vendor.img', 'system-hide', 'README.txt', 'odm', 'system-add', 'vendor-bind']:
@@ -33,8 +34,9 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, allowZip64=False) as z:
     for f in files:
         data = add(os.path.join(pkg, f), f, 0o644)
         sums.append('%s  %s\n' % (hashlib.sha256(data).hexdigest(), f))
-    data = add(unzip, 'tools/gsi-unzip', 0o755)
-    sums.append('%s  tools/gsi-unzip\n' % hashlib.sha256(data).hexdigest())
+    for src, name in ((unzip, 'tools/gsi-unzip'), (bb, 'tools/busybox')):
+        data = add(src, name, 0o755)
+        sums.append('%s  %s\n' % (hashlib.sha256(data).hexdigest(), name))
     z.writestr('SHA256SUMS', ''.join(sums))
-print('%s: %d files' % (out, len(files) + 3))
+print('%s: %d files' % (out, len(files) + 4))
 PY
