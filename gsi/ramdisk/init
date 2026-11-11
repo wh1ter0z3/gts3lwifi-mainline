@@ -11,6 +11,7 @@
 #   <dir>/product.img      optional, if system.img has a separate product
 #   <dir>/system_ext.img   optional, likewise
 #   <dir>/userdata.img     ext4 image for /data (made on first boot)
+#   <dir>/system-hide      optional, system image directories to hide
 #
 # Then it loads the kernel modules for the hardware (pmOS's udevd, modprobe and
 # /lib/modules, in a chroot), switches to the system image and runs Android's init at its
@@ -296,6 +297,17 @@ for p in product system_ext; do
 		{ mount -t erofs -o ro,loop "$G/$p.img" $N/$p 2>/dev/null ||
 		  mount -o ro,loop "$G/$p.img" $N/$p || fail "mount $p.img"; }
 done
+# <dir>/system-hide: directories of the system image (one per line, from its
+# root, e.g. system/priv-app/Foo) hidden behind an empty one, so Android sees
+# those apps as removed: for persistent apps that it starts even when disabled
+# (OneUI turns them on again at boot); delete the line to undo
+if [ -f $G/system-hide ]; then
+	while read -r p; do
+		case "$p" in ''|'#'*|*..*) continue ;; esac
+		[ -d "$N/$p" ] && mount -t tmpfs -o ro,size=4k,mode=0755 tmpfs "$N/$p" &&
+			log "system-hide: /$p" || log "system-hide: /$p failed"
+	done < $G/system-hide
+fi
 # Bind, not move: drivers that probe late (the GPU, after its SMMU) still
 # load firmware from this root until switch_root
 mount --bind /vendor $N/vendor || fail "bind vendor"

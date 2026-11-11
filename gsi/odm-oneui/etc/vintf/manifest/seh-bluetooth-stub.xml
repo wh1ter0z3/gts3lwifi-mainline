@@ -1,0 +1,7 @@
+<manifest version="8.0" type="device">
+    <hal format="aidl">
+        <name>vendor.samsung.hardware.bluetooth</name>
+        <version>1</version>
+        <fqname>ISehBluetooth/default</fqname>
+    </hal>
+</manifest>

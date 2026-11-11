@@ -1,0 +1,4 @@
+# ss_conn_daemon2 (DeX on PC, Samsung Flow) exits as soon as it starts on this
+# board, and init starts it again every 5 seconds: leave it stopped instead
+on property:init.svc.ss_conn_daemon2_service=restarting
+    stop ss_conn_daemon2_service

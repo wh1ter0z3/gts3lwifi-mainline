@@ -1,0 +1,10 @@
+# Samsung's ISehBluetooth (getProperty/readFile/setProperty/writeFile), as a stub:
+# OneUI's BluetoothManagerService waits for it without a timeout on a binder
+# thread for each such call (the Bluetooth agent makes one at start, then ANRs
+# after 20 minutes and is restarted), so every call costs system_server a
+# binder thread for good. The stub answers "" and false.
+service vendor.seh-bt-stub /vendor/bin/hw/vendor.samsung.hardware.seh-stubs vendor.samsung.hardware.bluetooth.ISehBluetooth
+    class hal
+    user system
+    group system
+    seclabel u:r:hal_health_default:s0

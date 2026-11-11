@@ -1,0 +1,8 @@
+# For <gsi dir>/system-hide (see ramdisk/init): OneUI (MysticGSI) apps that
+# run on this board although disabled, since OneUI enables them again at boot.
+# Samsung Device Health Manager: a NullPointerException at start, about 15
+# crashes per boot, each one followed by a bug report (dumpstate)
+system/priv-app/SamsungDeviceHealthManagerService
+# com.qti.qcc: waits for a Qualcomm HAL (IQccsyshal) this vendor doesn't have,
+# so it never finishes starting: an ANR, a stack dump and a restart every minute
+system/system_ext/app/QCC

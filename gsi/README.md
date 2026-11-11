@@ -209,14 +209,20 @@ Java tools (it lives in the mount namespace from before APEX activation).
   QCA6174 firmware claims them but doesn't answer `LE_ADV_FILTER` and the stack aborted.
 - A board without panel: add `video=DSI-1:d` to the command line, or the framebuffer
   console keeps committing to the MDP (pp done timeouts, a dozen a second).
-- OneUI daily use: a crash-looping `com.sec.android.sdhms` (persistent: `pm disable` as root;
-  disable-user and uninstall for a user don't stick, it still fails a dozen times at boot) fed
-  Samsung's bug report tool (`dmabuf_dump` at 100% CPU); `com.qti.qcc` polled a missing HAL
-  every second. Disabled (`pm disable-user`) to save RAM on a Wi-Fi tablet without camera:
-  Secure Folder, diagmon, CHN device management, beacon manager, smart suggestions, MCF,
-  VEX framework, SVE, SCPM, IMS. `odm-oneui/` (copy to `<dir>/odm/`): AOSP's thermal HAL as a
-  `seh-stubs` instance (no sensors, empty lists), which OneUI's system apps looked for every
-  few seconds. After many hard resets, `dumpsys batterystats --reset` ends system_server's
+- OneUI daily use: two persistent apps run although disabled (OneUI enables them again at
+  boot): `com.sec.android.sdhms` crashes about 15 times per boot, each crash followed by a
+  bug report (`dumpstate`, `dmabuf_dump` at 100% CPU); `com.qti.qcc` waits for a Qualcomm
+  HAL this vendor lacks, never finishes starting, and gets an ANR (stack dumps of the
+  system) and a restart every minute. `oneui-system-hide` (copy to `<dir>/system-hide`)
+  hides both from Android. Disabled (`pm disable-user`) to save RAM on a Wi-Fi tablet
+  without camera: Secure Folder, diagmon, CHN device management, beacon manager, smart
+  suggestions, MCF, VEX framework, SVE, SCPM, IMS. `odm-oneui/` (copy to `<dir>/odm/`):
+  `seh-stubs` instances for AOSP's thermal HAL (no sensors, empty lists), which OneUI's
+  system apps looked for every few seconds, and for Samsung's `ISehBluetooth` ("" and
+  false), which BluetoothManagerService waits for without a timeout (each call held a
+  binder thread for good, and the Bluetooth agent got an ANR every 20 minutes); an rc that
+  leaves `ss_conn_daemon2` (DeX on PC) stopped: it exits at once and init restarted it every
+  5 seconds. After many hard resets, `dumpsys batterystats --reset` ends system_server's
   "setState is called with an earlier timestamp" bursts (tens of thousands of lines).
 - OneUI's list cards showed square bites at their rounded corners with the vendor's
   Mesa 23.1.7: fixed with Mesa 26.2.6 (see "Mesa").
