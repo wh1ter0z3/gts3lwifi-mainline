@@ -54,6 +54,44 @@ pmOS root has room for all of it and 1 GB more; never shrunk), `gsi.deadman=MIN`
 panel), `gsi.selinux=permissive|enforcing`, and for the Waydroid vendor
 `gsi.compositor=cage|cage-headless` and `gsi.audio=pipewire` (cage and PipeWire from pmOS).
 
+## Standalone: no pmOS on the tablet
+
+Without `pmos_root_uuid=` (`mkgsiboot.sh ... - out.img`), gsi-init needs nothing from pmOS.
+It finds `<gsi.dir>/system.img` on the userdata partition, mounted as ext4, or failing that
+on a partition of a disk image there (so a pmOS tablet can test this from its root
+partition). The partition is mounted on `/mnt/vendor/store` while Android runs. In place of
+pmOS's pieces:
+
+- **Modules** are in the vendor image (`/vendor/lib/modules`, uncompressed: busybox's
+  `modprobe` reads no zstd). A small tmpfs root (`/mnt/vendor/gsihost`: busybox, modules,
+  firmware, `modprobe.d`) runs busybox's `modprobe` for coldplug (by modalias, twice), for
+  `mdev -d` (devices that appear later, e.g. the APR services once the ADSP runs), and for
+  the kernel's own requests.
+- **Firmware** stays on the tablet: apnhlos and modem (vfat), system and efs (ext4, without
+  journal replay) are mounted read only under `/vendor/firmware/.part/`. Links in the vendor
+  image give the names the drivers ask for, as pmOS's gts3-firmware package copies them:
+  GPU zap shader, Venus, SLPI, TrustZone apps, ADSP, MBA, modem, Wi-Fi board data
+  (`system/etc/firmware/bdwlan30.bin`), and the sensor registry with factory calibration.
+  The vendor image holds only redistributable firmware (linux-firmware's ath10k, QCA
+  Bluetooth, A530 microcode; wireless-regdb). `tools/mkvendor-standalone.sh` makes it from a
+  working vendor image and zeroes its free blocks, because the firmware it removes would
+  otherwise stay readable in them.
+- **Bluetooth address**: `bdaddr/` (a static tool, the kernel's management interface,
+  `MGMT_OP_SET_PUBLIC_ADDRESS`) reads it from efs.
+- **userdata.img and log.img** come with the installer. Without e2fsprogs at boot, nothing
+  is made or grown.
+
+The DRM composer is pointed at the display controller's card (the card with connectors;
+card0 is the GPU alone with `msm.separate_gpu_kms=1`), or at vkms with `gsi.vkms=1`. The
+debug shell listens on the USB link's address only.
+
+Test package: `tools/mkrelease.sh` collects boot images for both models, the tested vendor
+image and board files, lk2nd, and `release/` (`install-oneui.sh`, `README.txt`). On a Linux
+PC, the installer reads the model (`lk2nd:compatible`) and the userdata partition's size
+from lk2nd. It builds that partition's ext4 image (the GSI's `system.img` from the user's
+own download, our files, an empty `userdata.img` taking the rest), then flashes it and the
+boot image.
+
 ## Kernel
 
 The `android` kernel branch (7.3, `gts3-android.config`) plus `kernel/0187`..`0191`:
