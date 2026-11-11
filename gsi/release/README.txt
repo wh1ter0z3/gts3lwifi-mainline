@@ -43,6 +43,12 @@ A) Without a PC: TWRP or OrangeFox (TWRP 3.x, old or new; tested with
   3. Install > oneui-gts3-...-twrp.zip, swipe. It takes some minutes.
   4. Reboot > System.
 
+  Not TWRP's "Install Image" with the separate .img files of the release:
+  the boot image needs lk2nd in front of it, the tablet has no vendor
+  partition, the OneUI system image (6 GB) is bigger than the system
+  partition (4 GB), and the system partition must stay stock (Wi-Fi's
+  board data is read from it). Everything goes on the userdata partition.
+
 B) From a Linux PC, with lk2nd
   The PC needs fastboot, e2fsprogs (mke2fs 1.43+), unzip, and img2simg if
   possible (faster flashing), about 15 GB free (Debian/Ubuntu: apt install
