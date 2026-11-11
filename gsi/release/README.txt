@@ -67,6 +67,18 @@ Report
       dmesg > /data/local/tmp/dmesg.txt; logcat -d > /data/local/tmp/logcat.txt
     and the kernel log of the previous start: /mnt/vendor/store/android/boot.prev.log
 
+Sources and licenses
+  - kernel (Linux 7.3.1, GPL-2.0), gsi-init (the boot ramdisk), the
+    installer and our vendor parts: github.com/wh1ter0z3/gts3lwifi-mainline,
+    branch gsi (kernel: the android branch's patches plus gsi/kernel/)
+  - vendor image: GloDroid's Android 13 vendor (AOSP, Apache-2.0 and
+    others), Mesa 26.2.6 (MIT), Codec2 V4L2 libraries from GloDroid,
+    busybox 1.38.0 (GPL-2.0, Alpine's busybox-static package), firmware
+    from linux-firmware and wireless-regdb under their own licenses (the
+    ath10k notice is in vendor.img: firmware/ath10k/QCA6174/hw3.0)
+  - lk2nd: github.com/msm8916-mainline/lk2nd, the Tab S3 builds as in this
+    repository's lk2nd release
+
 Undo
   Flash the stock firmware (Odin), or lk2nd again plus your previous system.
   The userdata partition (all Android data, a postmarketOS install) is gone.
