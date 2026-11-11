@@ -16,3 +16,14 @@ service oneui-skip-setup /system/bin/sh /odm/bin/oneui-skip-setup.sh
     seclabel u:r:shell:s0
     oneshot
     disabled
+
+# Every start: oneui-fixes.sh
+on property:sys.boot_completed=1
+    start oneui-fixes
+
+service oneui-fixes /system/bin/sh /odm/bin/oneui-fixes.sh
+    user root
+    group root
+    seclabel u:r:shell:s0
+    oneshot
+    disabled

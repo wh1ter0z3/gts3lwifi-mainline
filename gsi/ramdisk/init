@@ -605,6 +605,13 @@ EOT
 		cp -a $G/odm/. $N/odm/ && chown -R 0:0 $N/odm && chmod -R go-w $N/odm &&
 			log "odm overlay: $(du -sh $G/odm | cut -f1)"
 	fi
+	# The panel (2048x1536) is landscape in a portrait tablet, its left edge at
+	# the top (the device tree's rotation = <270>, counter-clockwise):
+	# SurfaceFlinger's physical orientation, clockwise. Not for vkms.
+	if [ -n "$CARD" ] && [ "$VKMS" != 1 ]; then
+		echo "ro.surface_flinger.primary_display_orientation=ORIENTATION_90" >> $N/odm/etc/build.prop
+		chmod 0644 $N/odm/etc/build.prop
+	fi
 fi
 
 # What Android's first stage init leaves behind: a tmpfs /dev with the nodes

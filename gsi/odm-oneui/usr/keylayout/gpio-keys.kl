@@ -1,0 +1,8 @@
+# Galaxy Tab S3 (mainline device tree): Volume Up and Home on gpio-keys.
+# Home sends KEY_HOMEPAGE (172), as in other Samsung device trees; OneUI's
+# own gpio-keys.kl (in the system image) knows only Samsung's downstream
+# KEY_HOME (102). /odm wins over /system.
+key 115   VOLUME_UP
+key 114   VOLUME_DOWN
+key 172   HOME          WAKE
+key 102   HOME          WAKE
