@@ -246,7 +246,9 @@ Java tools (it lives in the mount namespace from before APEX activation).
   bug report (`dumpstate`, `dmabuf_dump` at 100% CPU); `com.qti.qcc` waits for a Qualcomm
   HAL this vendor lacks, never finishes starting, and gets an ANR (stack dumps of the
   system) and a restart every minute. `oneui-system-hide` (copy to `<dir>/system-hide`)
-  hides both from Android. Disabled (`pm disable-user`) to save RAM on a Wi-Fi tablet
+  hides both from Android, and two more persistent ones that kept running disabled, about
+  100 MB each (diagnostics agent, VEX framework). Not IMS: system_server's Telecom needs
+  it (a crash loop at boot, then init reboots to the bootloader). Disabled (`pm disable-user`) to save RAM on a Wi-Fi tablet
   without camera: Secure Folder, diagmon, CHN device management, beacon manager, smart
   suggestions, MCF, VEX framework, SVE, SCPM, IMS. `odm-oneui/` (copy to `<dir>/odm/`):
   `seh-stubs` instances for AOSP's thermal HAL (no sensors, empty lists), which OneUI's

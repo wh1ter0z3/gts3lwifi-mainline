@@ -6,3 +6,9 @@ system/priv-app/SamsungDeviceHealthManagerService
 # com.qti.qcc: waits for a Qualcomm HAL (IQccsyshal) this vendor doesn't have,
 # so it never finishes starting: an ANR, a stack dump and a restart every minute
 system/system_ext/app/QCC
+# Persistent too, so disabling them (to save RAM) left them running, about
+# 100 MB each: Samsung's diagnostics agent and the VEX framework (camera
+# effects). Not IMS (com.sec.imsservice): Samsung's Telecom in system_server
+# fails to bind without it, and system_server crash-loops at every boot
+system/priv-app/DiagMonAgent95
+system/priv-app/vexfwk_service
