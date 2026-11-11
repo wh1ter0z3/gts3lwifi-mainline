@@ -71,10 +71,10 @@ Logs (tablet on USB)
       sudo ip addr add 172.16.42.2/16 dev enx9e74304f0ee6
   The tablet has a root shell for logs on 172.16.42.1 port 23 (USB only,
   not on Wi-Fi). Save the logs:
-      printf 'dmesg\n' | timeout 20 nc 172.16.42.1 23 > dmesg.txt
-      printf 'logcat -d\n' | timeout 60 nc 172.16.42.1 23 > logcat.txt
+      printf 'dmesg; exit\n' | nc 172.16.42.1 23 > dmesg.txt
+      printf 'logcat -d; exit\n' | nc 172.16.42.1 23 > logcat.txt
   After a reset or freeze, the kernel log of the previous start:
-      printf 'cat /mnt/vendor/store/android/boot.prev.log\n' | timeout 30 nc 172.16.42.1 23 > boot.prev.log
+      printf 'cat /mnt/vendor/store/android/boot.prev.log; exit\n' | nc 172.16.42.1 23 > boot.prev.log
 
 Sources and licenses
   - kernel (Linux 7.3.1, GPL-2.0), gsi-init (the boot ramdisk), the
