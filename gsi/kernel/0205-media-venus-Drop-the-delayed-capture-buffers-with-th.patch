@@ -1,4 +1,4 @@
-From a3f82900533ccb40077a96dbee629836d5ac1c5d Mon Sep 17 00:00:00 2001
+From cf9fe22873063b4243e41f40d8cdac117e6c4f62 Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Wed, 11 Nov 2026 07:39:20 +0530
 Subject: [PATCH] media: venus: Drop the delayed capture buffers with the
@@ -15,19 +15,20 @@ video_decoder_utils.c), and the work then removed the buffer from the
 m2m queue a second time (v4l2_m2m_buf_remove_by_buf on LIST_POISON, an
 oops).
 
-Empty the list when the capture buffers are returned. A seek then
+Empty the list (the decoder's; encoders have none) when the capture
+buffers are returned. A seek then
 decodes on.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- drivers/media/platform/qcom/venus/helpers.c | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ drivers/media/platform/qcom/venus/helpers.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
 
 diff --git a/drivers/media/platform/qcom/venus/helpers.c b/drivers/media/platform/qcom/venus/helpers.c
-index 6b773ee42..4023a243c 100644
+index 6b773ee42..84640e54a 100644
 --- a/drivers/media/platform/qcom/venus/helpers.c
 +++ b/drivers/media/platform/qcom/venus/helpers.c
-@@ -2032,6 +2032,15 @@ void venus_helper_buffers_done(struct venus_inst *inst, unsigned int type,
+@@ -2032,6 +2032,17 @@ void venus_helper_buffers_done(struct venus_inst *inst, unsigned int type,
  		while ((buf = v4l2_m2m_src_buf_remove(inst->m2m_ctx)))
  			v4l2_m2m_buf_done(buf, state);
  	} else if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
@@ -36,10 +37,12 @@ index 6b773ee42..4023a243c 100644
 +		/*
 +		 * Buffers waiting for the firmware to let go of them go back
 +		 * too: else delayed_process_buf_func queues them again later,
-+		 * after a restart of the stream, or removes them twice
++		 * after a restart of the stream, or removes them twice (the
++		 * list is the decoder's only)
 +		 */
-+		list_for_each_entry_safe(vbuf, n, &inst->delayed_process, ref_list)
-+			list_del_init(&vbuf->ref_list);
++		if (inst->session_type == VIDC_SESSION_TYPE_DEC)
++			list_for_each_entry_safe(vbuf, n, &inst->delayed_process, ref_list)
++				list_del_init(&vbuf->ref_list);
  		while ((buf = v4l2_m2m_dst_buf_remove(inst->m2m_ctx)))
  			v4l2_m2m_buf_done(buf, state);
  	}
