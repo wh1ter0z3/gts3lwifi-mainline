@@ -57,6 +57,18 @@ You need
    Samsung account. A question about "S Share" and nearby devices may come
    up: either answer is fine.
 
+Without a PC: TWRP or OrangeFox
+  With a custom recovery on the tablet (e.g. awesometic's TWRP 3.7.0, as
+  for LineageOS), the -twrp.zip of this release does what install-oneui.sh
+  does:
+  1. copy that zip and the GSI (the MysticGSI zip, or a system
+     .img / .img.gz) into the same folder on the microSD card or a USB
+     drive: NOT internal storage, it gets erased
+  2. boot the recovery (power off, then Power + Volume Up + Home)
+  3. Install > the -twrp.zip, swipe; it takes some minutes
+  4. Reboot > System
+  It writes lk2nd too (to the boot partition), for the model it detects.
+
 Report
   - first: does the screen show OneUI, does touch work; then rotation,
     brightness, S-Pen, keyboard cover

@@ -1,0 +1,186 @@
+#!/sbin/sh
+# OneUI (a GSI) on the Galaxy Tab S3, SM-T820 or SM-T825: installer for
+# TWRP or OrangeFox (tested in awesometic's TWRP 3.7.0), the same as
+# install-oneui.sh does from a PC. Put this zip and the GSI (a .zip with the
+# system image inside, or the .img / .img.gz) in one folder on the microSD
+# card or a USB drive, then Install this zip.
+# It ERASES the userdata partition (internal storage, all Android data, a
+# postmarketOS install), writes lk2nd to the boot partition and our boot
+# image after it (4 MiB in, where lk2nd looks; recovery's dd has no conv=,
+# none is needed on a block device), and fills userdata with the
+# system image, our vendor image and board files, an empty /data.
+# Arguments (recovery's update-binary protocol): <api> <outfd> <zip>
+# Test overrides: MODEL, BOOT_DEV, DATA_DEV, GSI, GSI_MIN_MB, WORK
+OUTFD=$2
+ZIP=$3
+BOOT_DEV=${BOOT_DEV:-/dev/block/bootdevice/by-name/boot}
+DATA_DEV=${DATA_DEV:-/dev/block/bootdevice/by-name/userdata}
+GSI_MIN_MB=${GSI_MIN_MB:-1024}
+W=${WORK:-/tmp/gsi-install}
+MiB=1048576
+
+ui() {
+	echo "ui_print $*" >&"$OUTFD"
+	echo "ui_print" >&"$OUTFD"
+}
+die() {
+	ui "ERROR: $*"
+	[ -n "${ERASED:-}" ] && ui "userdata was erased: run this installer again" ||
+		ui "Nothing on the tablet was changed."
+	umount "$W/store" 2>/dev/null
+	exit 1
+}
+# the size of a file or block device, in MiB. Byte counts go through awk:
+# recovery's shell (mksh) computes in 32 bits
+size_mib() {
+	if [ -b "$1" ]; then blockdev --getsize64 "$1"; else stat -c %s "$1"; fi |
+		awk '{ printf "%d\n", $1 / 1048576 }'
+}
+
+ui "OneUI for the Galaxy Tab S3 (test build)"
+M=${MODEL:-}
+if [ -z "$M" ]; then
+	case "$(getprop ro.product.device)" in
+	gts3lwifi|gts3llte) M=$(getprop ro.product.device) ;;
+	esac
+fi
+if [ -z "$M" ]; then
+	case "$(getprop ro.boot.bootloader)" in
+	T820*) M=gts3lwifi ;;
+	T825*) M=gts3llte ;;
+	esac
+fi
+case "$M" in
+gts3lwifi) ui "Tablet: SM-T820" ;;
+gts3llte) ui "Tablet: SM-T825" ;;
+*) die "this is not a Galaxy Tab S3 (SM-T820 / SM-T825)" ;;
+esac
+
+rm -rf "$W" && mkdir -p "$W/pkg" || die "no room in $W"
+cd "$W/pkg" && unzip -oq "$ZIP" -x 'META-INF/*' || die "can't unpack $ZIP"
+for f in vendor.img "boot-$M.img" "lk2nd-$M.img" tools/gsi-unzip; do
+	[ -f "$f" ] || die "$f is missing from the zip"
+done
+chmod 0755 tools/*
+if [ -f SHA256SUMS ]; then
+	ui "Checking the package..."
+	sha256sum -c SHA256SUMS > /dev/null 2>&1 || die "package files damaged, download it again"
+fi
+U=$W/pkg/tools/gsi-unzip
+
+# The GSI: the one system image (over GSI_MIN_MB) next to this zip, plain
+# or gzipped or the largest .img in a zip
+DIR=$(dirname "$ZIP")
+SRC=${GSI:-}
+MEMBER=
+n=0
+if [ -z "$SRC" ]; then
+	for f in "$DIR"/*; do
+		[ -f "$f" ] && [ "$f" != "$ZIP" ] || continue
+		case "$f" in
+		*.img|*.img.gz)
+			[ "$(size_mib "$f")" -ge "$GSI_MIN_MB" ] || continue ;;
+		*.zip)
+			l=$($U -l "$f" 2>/dev/null | sort -n | tail -n 1 |
+				awk '{ printf "%d\n", $1 / 1048576 }')
+			[ -n "$l" ] && [ "$l" -ge "$GSI_MIN_MB" ] || continue ;;
+		*) continue ;;
+		esac
+		SRC=$f
+		n=$((n + 1))
+	done
+	[ $n -le 1 ] || die "$n system images in $DIR: leave only the one to install"
+fi
+[ -n "$SRC" ] || die "no GSI next to this zip in $DIR (a .zip with the system image, or the .img)"
+# Internal storage is the userdata partition, which gets erased
+case "$(readlink -f "$SRC")" in
+/data/*|/sdcard/*|/storage/emulated/*|/datadata/*)
+	die "the GSI is on internal storage, which gets erased: put it (and this zip) on the microSD card or a USB drive" ;;
+esac
+case "$SRC" in
+*.zip) MEMBER=$($U -l "$SRC" | sort -n | tail -n 1 | cut -d' ' -f2-) ;;
+esac
+ui "System image: ${SRC##*/}${MEMBER:+ ($MEMBER)}"
+
+# A plain .img can be checked before anything is erased: ext4, EROFS or
+# Android sparse
+magic_ok() {
+	[ "$(od -An -tx4 -N4 "$1" | tr -d ' ')" = ed26ff3a ] ||
+		[ "$(od -An -tx2 -j1080 -N2 "$1" | tr -d ' ')" = ef53 ] ||
+		[ "$(od -An -tx4 -j1024 -N4 "$1" | tr -d ' ')" = e0f5e1e2 ]
+}
+case "$SRC" in
+*.img) magic_ok "$SRC" || die "${SRC##*/} is not a system image" ;;
+esac
+
+SIZE_M=$(size_mib "$DATA_DEV")
+[ -n "$SIZE_M" ] || die "no userdata partition"
+[ "$SIZE_M" -gt 16384 ] || die "userdata partition too small"
+[ -e "$BOOT_DEV" ] || die "no boot partition"
+ui "userdata: $SIZE_M MiB"
+
+# Erase userdata: one ext4 file system, the last 16 KiB left out (recovery
+# keeps them for an encryption footer)
+ui "Erasing userdata..."
+umount /sdcard 2>/dev/null
+umount /data 2>/dev/null
+umount -l /data 2>/dev/null
+ERASED=1
+mke2fs -F -q -t ext4 -b 4096 -L gsistore -m 0 -i $MiB "$DATA_DEV" $(( SIZE_M * 256 - 4 )) ||
+	die "formatting userdata failed"
+S=$W/store
+mkdir -p "$S"
+if [ -b "$DATA_DEV" ]; then
+	mount -t ext4 -o rw,noatime "$DATA_DEV" "$S"
+else
+	mount -t ext4 -o loop,rw,noatime "$DATA_DEV" "$S"
+fi || die "mounting userdata failed"
+A=$S/android
+mkdir -p "$A"
+
+ui "Unpacking the system image (some minutes)..."
+case "$SRC" in
+*.zip) $U "$SRC" "$A/system.img" "$MEMBER" 2> "$W/unzip.log" ||
+		die "unpacking failed: $(tail -n 1 "$W/unzip.log")" ;;
+*.img.gz) gunzip -c "$SRC" > "$A/system.img" || die "unpacking failed" ;;
+*) cp "$SRC" "$A/system.img" || die "copying failed" ;;
+esac
+if [ "$(od -An -tx4 -N4 "$A/system.img" | tr -d ' ')" = ed26ff3a ]; then
+	ui "Converting the sparse image..."
+	simg2img "$A/system.img" "$A/system.raw" && mv "$A/system.raw" "$A/system.img" ||
+		die "converting the sparse image failed"
+fi
+magic_ok "$A/system.img" || die "the system image is neither ext4 nor EROFS"
+
+ui "Adding the vendor image and board files..."
+cp "$W/pkg/vendor.img" "$A/" || die "copying vendor.img failed"
+for d in odm system-add vendor-bind; do
+	[ -d "$W/pkg/$d" ] && { cp -R "$W/pkg/$d" "$A/" || die "copying $d failed"; }
+done
+[ -f "$W/pkg/system-hide" ] && cp "$W/pkg/system-hide" "$A/"
+chown -R 0:0 "$A"
+chmod -R u+rwX,go+rX,go-w "$A"
+
+# /data: an ext4 image that may grow to what the partition has left, less a
+# margin for the partition's own file system
+free_m=$(stat -f -c '%a %S' "$S" | awk '{ printf "%d\n", $1 * $2 / 1048576 }')
+data_m=$(( free_m - SIZE_M / 100 - 512 ))
+[ "$data_m" -gt 4096 ] || die "no room for /data (${data_m} MiB)"
+ui "/data: $data_m MiB"
+truncate -s ${data_m}M "$A/userdata.img" &&
+	mke2fs -F -q -t ext4 -L data "$A/userdata.img" &&
+	truncate -s 16M "$A/log.img" &&
+	mke2fs -F -q -t ext4 -L gsilog "$A/log.img" &&
+	chmod 0644 "$A/userdata.img" "$A/log.img" || die "making the /data image failed"
+sync
+umount "$S" || die "unmounting userdata failed"
+
+ui "Writing lk2nd and the boot image..."
+dd if="$W/pkg/lk2nd-$M.img" of="$BOOT_DEV" bs=$MiB 2>"$W/dd.log" &&
+	dd if="$W/pkg/boot-$M.img" of="$BOOT_DEV" bs=$MiB seek=4 2>>"$W/dd.log" ||
+	die "writing the boot partition failed: $(tail -n 1 "$W/dd.log")"
+sync
+rm -rf "$W"
+ui "Done. Reboot to System: the first start takes about 8 minutes (Samsung"
+ui "logo, a black screen for a while, then OneUI's lock screen)."
+exit 0

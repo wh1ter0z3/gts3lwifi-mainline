@@ -1,7 +1,8 @@
 #!/bin/sh
 # Assembles the OneUI test package for the Tab S3 (standalone gsi-init, no
 # pmOS on the tablet): boot images for both models, the vendor image and board
-# files of a tested image directory, lk2nd, the installer (release/).
+# files of a tested image directory, lk2nd, the installer (release/); and the
+# TWRP installer zip of the same files (<out dir>-twrp.zip).
 # usage: mkrelease.sh <kernel arch/arm64/boot dir> <payload dir> <lk2nd dir> <out dir>
 #   payload: vendor.img (tools/mkvendor-standalone.sh), odm/, system-add/,
 #            vendor-bind/, system-hide: as in the image directory tested
@@ -35,3 +36,5 @@ fi
 (cd "$OUT" && find . -type f ! -name SHA256SUMS | sed 's|^\./||' | LC_ALL=C sort |
 	xargs sha256sum > SHA256SUMS)
 echo "package in $OUT ($(du -sh "$OUT" | cut -f1))"
+# The same for TWRP / OrangeFox, without a PC (release/twrp, unzip64/)
+sh "$HERE/tools/mktwrpzip.sh" "$OUT" "$HERE/unzip64/gsi-unzip" "$OUT-twrp.zip"
