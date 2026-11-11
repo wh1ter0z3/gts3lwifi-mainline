@@ -436,6 +436,10 @@ fi
 # /data: mounted here (fs_mgr ignored the fstab entry for a loop device);
 # init's post-fs-data then owns it. Android expects it unencrypted.
 mount -t ext4 -o rw,noatime,nosuid,nodev /dev/loop7 $N/data || fail "mount userdata.img"
+# Nothing in it yet: Android's first start on this /data, for board files that
+# set up a new system once (ro.boot.gsi.firstboot=1)
+FIRSTBOOT=0
+[ -n "$(ls -A $N/data | grep -v '^lost+found$')" ] || { FIRSTBOOT=1; log "/data is new: first start"; }
 
 # Services from pmOS for the host-integration HALs of a Waydroid vendor:
 # a Wayland compositor (composer HAL) and PipeWire with its PulseAudio server
@@ -476,6 +480,7 @@ A="androidboot.hardware=gts3 androidboot.selinux=$SELINUX"
 A="$A androidboot.boot_devices=soc@0/7464900.mmc androidboot.serialno=gts3gsi"
 # Not "bootloader" (init's default): S-Boot may take that to Download mode
 A="$A androidboot.init_fatal_reboot_target=gsi-fatal androidboot.verifiedbootstate=orange"
+[ $FIRSTBOOT = 0 ] || A="$A androidboot.gsi.firstboot=1"
 printf '%s %s\n' "$(cat /proc/cmdline)" "$A" > /tmp/cmdline
 mount --bind /tmp/cmdline /proc/cmdline || fail "bind /proc/cmdline"
 

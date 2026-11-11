@@ -1,0 +1,18 @@
+# OneUI's first start on a new /data (gsi-init sets ro.boot.gsi.firstboot). The
+# system image (MysticGSI) is a China build: its CSC, applied by Samsung's scs
+# when init loads the persistent properties (before zygote), sets Chinese, and
+# its setup wizard asks for an online activation at the Wi-Fi step. Instead:
+# English (the user picks a language in Settings), and no wizard (Wi-Fi and
+# accounts in Settings).
+on property:persist.sys.locale=zh-Hans-CN && property:ro.boot.gsi.firstboot=1
+    setprop persist.sys.locale en-US
+
+on property:sys.boot_completed=1 && property:ro.boot.gsi.firstboot=1
+    start oneui-skip-setup
+
+service oneui-skip-setup /system/bin/sh /odm/bin/oneui-skip-setup.sh
+    user root
+    group root
+    seclabel u:r:shell:s0
+    oneshot
+    disabled

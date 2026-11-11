@@ -116,5 +116,5 @@ read -r ok
 fastboot flash boot "$BOOT"
 fastboot flash userdata "$IMG"
 fastboot reboot
-echo "Done. The first start takes several minutes (the Samsung logo, then"
-echo "a black screen for a while, then OneUI's setup)."
+echo "Done. The first start takes about 8 minutes (the Samsung logo, then a"
+echo "black screen for a while, then OneUI's lock screen: swipe up)."

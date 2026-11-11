@@ -49,8 +49,13 @@ You need
      ./install-oneui.sh ~/Downloads/Oneui-gts9wifi-16-X710ZCS5DZA1-AB-20260211-MysticGSI.zip
    It detects the model, builds the userdata image on the PC, asks, then
    flashes the boot image (after lk2nd) and userdata, and restarts.
-   The first start takes several minutes: Samsung logo, a black screen for a
-   while, then OneUI's setup.
+   The first start takes about 8 minutes: Samsung logo, a black screen for a
+   while, then OneUI's lock screen (swipe up). There is no setup wizard (this
+   OneUI build is a Chinese one: its wizard wants an online activation), and
+   OneUI starts in English. Then in Settings: Connections > Wi-Fi; General
+   management > Language for another language; Accounts and backup for a
+   Samsung account. A question about "S Share" and nearby devices may come
+   up: either answer is fine.
 
 Report
   - does the screen show OneUI, does touch work, rotation, brightness
