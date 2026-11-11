@@ -1,0 +1,235 @@
+From 574cf9e8bd028fbf8ce6ab92f7ec74769a0ac70a Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 07:22:08 +0530
+Subject: [PATCH 204/204] media: venus: vdec: Visible size from the H.264 SPS
+
+The HFI v3 firmware (msm8996) reports no crop with the sequence change
+event for H.264, and the fallback, the size userspace set on the OUTPUT
+queue, isn't there when userspace doesn't know it (Android sets none),
+so a 1080p stream had 1088 visible lines.
+
+The decoder holds the codec specific data (the parameter sets in front
+of the first picture): read the coded size and the frame cropping from
+its SPS there, and take that rectangle when the firmware has none and
+the event's coded size is the SPS's.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/core.h    |   3 +
+ drivers/media/platform/qcom/venus/helpers.c | 163 ++++++++++++++++++++
+ drivers/media/platform/qcom/venus/vdec.c    |   4 +
+ 3 files changed, 170 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index 9e4d70cfc..7a57d596a 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -494,6 +494,9 @@ struct venus_inst {
+ 	u8 *csd;
+ 	u32 csd_len;
+ 	bool in_qbuf;
++	struct v4l2_rect sps_crop;
++	u32 sps_width;
++	u32 sps_height;
+ 	struct list_head delayed_process;
+ 	struct work_struct delayed_process_work;
+ 	bool nonblock;
+diff --git a/drivers/media/platform/qcom/venus/helpers.c b/drivers/media/platform/qcom/venus/helpers.c
+index 84347bcfe..6b773ee42 100644
+--- a/drivers/media/platform/qcom/venus/helpers.c
++++ b/drivers/media/platform/qcom/venus/helpers.c
+@@ -675,6 +675,168 @@ static bool is_codec_config(struct venus_inst *inst, struct vb2_buffer *vb)
+ 
+ #define VENUS_CSD_MAX	SZ_4K
+ 
++/* Bits of an H.264 RBSP (emulation prevention bytes already taken out) */
++struct sps_bits {
++	const u8 *p;
++	u32 len;	/* in bytes */
++	u32 pos;	/* in bits */
++	bool bad;
++};
++
++static u32 sps_u(struct sps_bits *b, unsigned int n)
++{
++	u32 v = 0;
++
++	while (n--) {
++		if (b->pos >= b->len * 8) {
++			b->bad = true;
++			return 0;
++		}
++		v = v << 1 | (b->p[b->pos / 8] >> (7 - b->pos % 8) & 1);
++		b->pos++;
++	}
++
++	return v;
++}
++
++static u32 sps_ue(struct sps_bits *b)
++{
++	unsigned int zeros = 0;
++
++	while (!sps_u(b, 1) && !b->bad)
++		if (++zeros > 31) {
++			b->bad = true;
++			return 0;
++		}
++
++	return (1U << zeros) - 1 + sps_u(b, zeros);
++}
++
++static s32 sps_se(struct sps_bits *b)
++{
++	u32 v = sps_ue(b);
++
++	return v & 1 ? (s32)((v + 1) / 2) : -(s32)(v / 2);
++}
++
++/*
++ * The coded size and the cropping of an H.264 SPS (NAL unit without its
++ * header byte): this firmware reports no crop with the sequence change
++ * event, so a client that set no size would get the coded size, with the
++ * padding rows (1088 lines for 1080p)
++ */
++static void h264_sps_crop(struct venus_inst *inst, const u8 *nal, u32 len)
++{
++	u8 rbsp[256];
++	struct sps_bits b = { .p = rbsp };
++	u32 i, zeros = 0, chroma = 1, w, h, frame_mbs, cx, cy;
++	u32 crop_l = 0, crop_r = 0, crop_t = 0, crop_b = 0;
++	u8 profile;
++
++	for (i = 0; i < len && b.len < sizeof(rbsp); i++) {
++		if (zeros >= 2 && nal[i] == 3) {
++			zeros = 0;
++			continue;
++		}
++		zeros = nal[i] ? 0 : zeros + 1;
++		rbsp[b.len++] = nal[i];
++	}
++
++	profile = sps_u(&b, 8);
++	sps_u(&b, 16);		/* constraint flags, level */
++	sps_ue(&b);		/* seq_parameter_set_id */
++	if (profile == 100 || profile == 110 || profile == 122 || profile == 244 ||
++	    profile == 44 || profile == 83 || profile == 86 || profile == 118 ||
++	    profile == 128 || profile == 138 || profile == 139 || profile == 134 ||
++	    profile == 135) {
++		chroma = sps_ue(&b);
++		if (chroma == 3)
++			sps_u(&b, 1);	/* separate_colour_plane_flag */
++		sps_ue(&b);		/* bit depths */
++		sps_ue(&b);
++		sps_u(&b, 1);
++		if (sps_u(&b, 1)) {	/* seq_scaling_matrix_present_flag */
++			for (i = 0; i < (chroma == 3 ? 12 : 8) && !b.bad; i++) {
++				s32 last = 8, next = 8, j;
++
++				if (!sps_u(&b, 1))
++					continue;
++				for (j = 0; j < (i < 6 ? 16 : 64) && !b.bad; j++) {
++					if (next)
++						next = (last + sps_se(&b) + 256) % 256;
++					last = next ? next : last;
++				}
++			}
++		}
++	}
++	sps_ue(&b);			/* log2_max_frame_num_minus4 */
++	switch (sps_ue(&b)) {		/* pic_order_cnt_type */
++	case 0:
++		sps_ue(&b);
++		break;
++	case 1: {
++		u32 n;
++
++		sps_u(&b, 1);
++		sps_se(&b);
++		sps_se(&b);
++		n = sps_ue(&b);
++		for (i = 0; i < n && i < 256 && !b.bad; i++)
++			sps_se(&b);
++		break;
++	}
++	}
++	sps_ue(&b);			/* max_num_ref_frames */
++	sps_u(&b, 1);
++	w = (sps_ue(&b) + 1) * 16;
++	h = sps_ue(&b) + 1;
++	frame_mbs = sps_u(&b, 1);
++	if (!frame_mbs)
++		sps_u(&b, 1);		/* mb_adaptive_frame_field_flag */
++	h *= (2 - frame_mbs) * 16;
++	sps_u(&b, 1);			/* direct_8x8_inference_flag */
++	if (sps_u(&b, 1)) {
++		crop_l = sps_ue(&b);
++		crop_r = sps_ue(&b);
++		crop_t = sps_ue(&b);
++		crop_b = sps_ue(&b);
++	}
++	if (b.bad)
++		return;
++
++	/* crop units: chroma subsampling, and fields for field coding */
++	cx = chroma == 1 || chroma == 2 ? 2 : 1;
++	cy = (chroma == 1 ? 2 : 1) * (2 - frame_mbs);
++	if ((crop_l + crop_r) * cx >= w || (crop_t + crop_b) * cy >= h)
++		return;
++
++	inst->sps_width = w;
++	inst->sps_height = h;
++	inst->sps_crop.left = crop_l * cx;
++	inst->sps_crop.top = crop_t * cy;
++	inst->sps_crop.width = w - (crop_l + crop_r) * cx;
++	inst->sps_crop.height = h - (crop_t + crop_b) * cy;
++}
++
++static void dec_parse_codec_config(struct venus_inst *inst, const u8 *p, u32 len)
++{
++	u32 i, sps = 0;
++
++	if (inst->fmt_out->pixfmt != V4L2_PIX_FMT_H264)
++		return;
++	for (i = 0; i + 3 < len; i++) {
++		if (p[i] || p[i + 1] || p[i + 2] != 1)
++			continue;
++		if (sps)
++			break;
++		if ((p[i + 3] & 0x1f) == 7)
++			sps = i + 4;
++		i += 3;
++	}
++	if (sps)
++		h264_sps_crop(inst, p + sps, (i + 3 < len ? i : len) - sps);
++}
++
+ /*
+  * Parameter sets in a buffer of their own still count as pictures for the
+  * firmware, and the picture after them then waits for capture buffers:
+@@ -698,6 +860,7 @@ static int dec_hold_codec_config(struct venus_inst *inst,
+ 		return -1;
+ 
+ 	memcpy(inst->csd + inst->csd_len, vb2_plane_vaddr(vb, 0) + start, len);
++	dec_parse_codec_config(inst, inst->csd + inst->csd_len, len);
+ 	inst->csd_len += len;
+ 	v4l2_m2m_src_buf_remove_by_buf(inst->m2m_ctx, vbuf);
+ 	v4l2_m2m_buf_done(vbuf, VB2_BUF_STATE_DONE);
+diff --git a/drivers/media/platform/qcom/venus/vdec.c b/drivers/media/platform/qcom/venus/vdec.c
+index 2ca96100b..15a5cf155 100644
+--- a/drivers/media/platform/qcom/venus/vdec.c
++++ b/drivers/media/platform/qcom/venus/vdec.c
+@@ -1618,6 +1618,10 @@ static void vdec_event_change(struct venus_inst *inst,
+ 		inst->crop.top = ev_data->input_crop.top;
+ 		inst->crop.width = ev_data->input_crop.width;
+ 		inst->crop.height = ev_data->input_crop.height;
++	} else if (inst->sps_crop.width && inst->sps_width == ev_data->width &&
++		   inst->sps_height == ev_data->height) {
++		/* the codec specific data's SPS, for this coded size */
++		inst->crop = inst->sps_crop;
+ 	} else if (inst->user_width && inst->user_height &&
+ 		   inst->user_width <= ev_data->width &&
+ 		   inst->user_height <= ev_data->height &&
+-- 
+2.53.0
+

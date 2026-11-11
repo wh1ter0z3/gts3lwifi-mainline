@@ -1,0 +1,230 @@
+From aa942034bbba08b4086894d63e3e159d23b1fb32 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 07:10:48 +0530
+Subject: [PATCH 201/202] media: venus: vdec: Parameter sets in front of the
+ first picture
+
+Android's codecs queue a stream's codec specific data (H.264 SPS and
+PPS, HEVC VPS, SPS and PPS) in input buffers of their own. Without the
+codec config flag, which V4L2 has no way to pass, the HFI v3 firmware
+drops such a buffer as a broken picture (H264_CONFIG_FLAG_MISSING).
+Flagged, it takes the parameter sets, but still counts each buffer as a
+picture, and the first real picture then waits for capture buffers
+instead of raising the sequence change event; the client allocates
+those only after that event, so nothing is ever decoded. A stream whose
+first buffer holds the parameter sets and the picture together (as
+FFmpeg queues it) gets the event at once.
+
+So, for H.264 and HEVC: keep the data of an input buffer that holds
+parameter sets and no slice (done at once), and put it in front of the
+data of the next buffer. Parameter sets beyond the space kept for them
+(4 KiB) go as they are, flagged as codec config; a next buffer without
+room drops them, with a warning. The held data goes with the OUTPUT
+queue's stop.
+
+With this, Android's v4l2_codec2 decodes on msm8996 (1080p H.264, to a
+surface or to byte buffers, frames as the software decoder's).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/core.h    |   2 +
+ drivers/media/platform/qcom/venus/helpers.c | 121 ++++++++++++++++++++
+ drivers/media/platform/qcom/venus/vdec.c    |   7 +-
+ 3 files changed, 128 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index 5fc0b325e..30fbd307a 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -491,6 +491,8 @@ struct venus_inst {
+ 	unsigned int num_bounce;
+ 	u32 bounce_size;
+ 	spinlock_t bounce_lock;
++	u8 *csd;
++	u32 csd_len;
+ 	struct list_head delayed_process;
+ 	struct work_struct delayed_process_work;
+ 	bool nonblock;
+diff --git a/drivers/media/platform/qcom/venus/helpers.c b/drivers/media/platform/qcom/venus/helpers.c
+index bc9fdd6fc..84347bcfe 100644
+--- a/drivers/media/platform/qcom/venus/helpers.c
++++ b/drivers/media/platform/qcom/venus/helpers.c
+@@ -625,6 +625,116 @@ void venus_helper_get_ts_metadata(struct venus_inst *inst, u64 timestamp_us,
+ }
+ EXPORT_SYMBOL_GPL(venus_helper_get_ts_metadata);
+ 
++/*
++ * Whether a decoder input buffer holds parameter sets and no picture: H.264
++ * SPS/PPS or HEVC VPS/SPS/PPS, maybe with SEI or delimiters, as Android's
++ * codecs queue the stream's codec specific data. Unflagged, the firmware
++ * drops such a buffer as a broken picture ("H264_CONFIG_FLAG_MISSING").
++ */
++static bool is_codec_config(struct venus_inst *inst, struct vb2_buffer *vb)
++{
++	u32 pixfmt = inst->fmt_out->pixfmt;
++	u32 start = vb->planes[0].data_offset;
++	u32 end = vb2_get_plane_payload(vb, 0);
++	unsigned int sets = 0;
++	const u8 *p;
++	u32 i;
++
++	if (pixfmt != V4L2_PIX_FMT_H264 && pixfmt != V4L2_PIX_FMT_HEVC)
++		return false;
++	/* parameter sets are small: leave pictures unread */
++	if (end <= start || end - start > SZ_4K)
++		return false;
++	p = vb2_plane_vaddr(vb, 0);
++	if (!p)
++		return false;
++
++	for (i = start; i + 3 < end; i++) {
++		u8 type;
++
++		if (p[i] || p[i + 1] || p[i + 2] != 1)
++			continue;
++		i += 3;
++		if (pixfmt == V4L2_PIX_FMT_H264) {
++			type = p[i] & 0x1f;
++			if ((type >= 1 && type <= 5) || type == 20 || type == 21)
++				return false;	/* slice */
++			if (type == 7 || type == 8)
++				sets++;
++		} else {
++			type = (p[i] >> 1) & 0x3f;
++			if (type < 32)
++				return false;	/* slice */
++			if (type <= 34)
++				sets++;
++		}
++	}
++
++	return sets > 0;
++}
++
++#define VENUS_CSD_MAX	SZ_4K
++
++/*
++ * Parameter sets in a buffer of their own still count as pictures for the
++ * firmware, and the picture after them then waits for capture buffers:
++ * only a stream whose first buffer has the picture gets the sequence change
++ * event. Keep them instead (their buffer is done at once) and put them in
++ * front of the next buffer's data. Returns 1 if kept, -1 for parameter sets
++ * that don't fit (sent as they are, flagged), 0 for other data.
++ */
++static int dec_hold_codec_config(struct venus_inst *inst,
++				 struct vb2_v4l2_buffer *vbuf)
++{
++	struct vb2_buffer *vb = &vbuf->vb2_buf;
++	u32 start = vb->planes[0].data_offset;
++	u32 len = vb2_get_plane_payload(vb, 0) - start;
++
++	if (!is_codec_config(inst, vb))
++		return 0;
++	if (!inst->csd)
++		inst->csd = kmalloc(VENUS_CSD_MAX, GFP_KERNEL);
++	if (!inst->csd || inst->csd_len + len > VENUS_CSD_MAX)
++		return -1;
++
++	memcpy(inst->csd + inst->csd_len, vb2_plane_vaddr(vb, 0) + start, len);
++	inst->csd_len += len;
++	v4l2_m2m_src_buf_remove_by_buf(inst->m2m_ctx, vbuf);
++	v4l2_m2m_buf_done(vbuf, VB2_BUF_STATE_DONE);
++
++	return 1;
++}
++
++static void dec_put_codec_config(struct venus_inst *inst, struct vb2_buffer *vb)
++{
++	struct dma_buf *dbuf = vb->planes[0].dbuf;
++	u32 start = vb->planes[0].data_offset;
++	u32 end = vb2_get_plane_payload(vb, 0);
++	u32 len = inst->csd_len;
++	u8 *p;
++
++	if (!len)
++		return;
++	inst->csd_len = 0;
++	/* an empty buffer is the end of the stream: no picture follows */
++	if (end <= start)
++		return;
++	p = vb2_plane_vaddr(vb, 0);
++	if (!p || end + len > vb2_plane_size(vb, 0)) {
++		dev_warn(inst->core->dev_dec,
++			 "no room for the parameter sets, dropped\n");
++		return;
++	}
++
++	if (dbuf)
++		dma_buf_begin_cpu_access(dbuf, DMA_BIDIRECTIONAL);
++	memmove(p + start + len, p + start, end - start);
++	memcpy(p + start, inst->csd, len);
++	if (dbuf)
++		dma_buf_end_cpu_access(dbuf, DMA_BIDIRECTIONAL);
++	vb2_set_plane_payload(vb, 0, end + len);
++}
++
+ static int
+ session_process_buf(struct venus_inst *inst, struct vb2_v4l2_buffer *vbuf)
+ {
+@@ -632,6 +742,8 @@ session_process_buf(struct venus_inst *inst, struct vb2_v4l2_buffer *vbuf)
+ 	struct vb2_buffer *vb = &vbuf->vb2_buf;
+ 	unsigned int type = vb->type;
+ 	struct hfi_frame_data fdata;
++	bool csd_only = false;
++	int ret;
+ 
+ 	memset(&fdata, 0, sizeof(fdata));
+ 	fdata.alloc_len = buf->size;
+@@ -642,6 +754,13 @@ session_process_buf(struct venus_inst *inst, struct vb2_v4l2_buffer *vbuf)
+ 	fdata.clnt_data = vbuf->vb2_buf.index;
+ 
+ 	if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
++		if (inst->session_type == VIDC_SESSION_TYPE_DEC) {
++			ret = dec_hold_codec_config(inst, vbuf);
++			if (ret > 0)
++				return 0;
++			csd_only = ret < 0;
++			dec_put_codec_config(inst, vb);
++		}
+ 		fdata.buffer_type = HFI_BUFFER_INPUT;
+ 		fdata.filled_len = vb2_get_plane_payload(vb, 0);
+ 		fdata.offset = vb->planes[0].data_offset;
+@@ -650,6 +769,8 @@ session_process_buf(struct venus_inst *inst, struct vb2_v4l2_buffer *vbuf)
+ 			fdata.flags |= HFI_BUFFERFLAG_EOS;
+ 
+ 		if (inst->session_type == VIDC_SESSION_TYPE_DEC) {
++			if (csd_only)
++				fdata.flags |= HFI_BUFFERFLAG_CODECCONFIG;
+ 			put_ts_metadata(inst, vbuf, fdata.timestamp);
+ 		} else if (inst->enc_fw_ts && fdata.filled_len) {
+ 			/*
+diff --git a/drivers/media/platform/qcom/venus/vdec.c b/drivers/media/platform/qcom/venus/vdec.c
+index 92334bfbe..fd36e6171 100644
+--- a/drivers/media/platform/qcom/venus/vdec.c
++++ b/drivers/media/platform/qcom/venus/vdec.c
+@@ -1322,10 +1322,12 @@ static void vdec_stop_streaming(struct vb2_queue *q)
+ 
+ 	mutex_lock(&inst->lock);
+ 
+-	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
++	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+ 		ret = vdec_stop_capture(inst);
+-	else
++	} else {
+ 		ret = vdec_stop_output(inst);
++		inst->csd_len = 0;
++	}
+ 
+ 	venus_helper_buffers_done(inst, q->type, VB2_BUF_STATE_ERROR);
+ 
+@@ -1848,6 +1850,7 @@ static int vdec_close(struct file *file)
+ 	ida_destroy(&inst->dpb_ids);
+ 	vdec_pm_put(inst, false);
+ 
++	kfree(inst->csd);
+ 	kfree(inst);
+ 	return 0;
+ }
+-- 
+2.53.0
+

@@ -12,6 +12,7 @@
 #   <dir>/system_ext.img   optional, likewise
 #   <dir>/userdata.img     ext4 image for /data (made on first boot)
 #   <dir>/system-hide      optional, system image directories to hide
+#   <dir>/system-add/      optional, files to add to system image directories
 #
 # Then it loads the kernel modules for the hardware (pmOS's udevd, modprobe and
 # /lib/modules, in a chroot), switches to the system image and runs Android's init at its
@@ -307,6 +308,20 @@ if [ -f $G/system-hide ]; then
 		[ -d "$N/$p" ] && mount -t tmpfs -o ro,size=4k,mode=0755 tmpfs "$N/$p" &&
 			log "system-hide: /$p" || log "system-hide: /$p failed"
 	done < $G/system-hide
+fi
+# <dir>/system-add: files added to directories of the system image, as a
+# read-only overlay: each directory listed in its ADD file (from the image's
+# root, e.g. system/system_ext/lib64) also shows what <dir>/system-add/<that
+# directory> holds, e.g. a library for the system's own search path; delete
+# the line to undo
+if [ -f $G/system-add/ADD ]; then
+	mp overlay
+	while read -r p; do
+		case "$p" in ''|'#'*|*..*) continue ;; esac
+		[ -d "$G/system-add/$p" ] && [ -d "$N/$p" ] &&
+			mount -t overlay overlay -o "ro,lowerdir=$G/system-add/$p:$N/$p" "$N/$p" &&
+			log "system-add: /$p" || log "system-add: /$p failed"
+	done < $G/system-add/ADD
 fi
 # Bind, not move: drivers that probe late (the GPU, after its SMMU) still
 # load firmware from this root until switch_root

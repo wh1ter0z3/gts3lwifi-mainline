@@ -1,0 +1,52 @@
+From 5b9edb6ace7bee96386d10e8feb89aa14eabca18 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 07:22:08 +0530
+Subject: [PATCH 203/204] media: venus: vdec: Keep the visible rectangle across
+ a capture S_FMT
+
+The sequence change event sets the stream's visible rectangle, which
+G_SELECTION gives for the compose target. Any S_FMT reset it to the
+format's size, also the capture S_FMT that a client makes after the
+event with the coded size (Android's v4l2_codec2 does): a 1080p stream
+then showed its 1088 coded lines.
+
+Keep the rectangle when the capture format is set during the capture
+setup or a resolution change and the rectangle fits it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/vdec.c | 18 ++++++++++++++----
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/venus/vdec.c b/drivers/media/platform/qcom/venus/vdec.c
+index bb62a720d..2ca96100b 100644
+--- a/drivers/media/platform/qcom/venus/vdec.c
++++ b/drivers/media/platform/qcom/venus/vdec.c
+@@ -391,10 +391,20 @@ static int vdec_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
+ 
+ 	inst->width = format.fmt.pix_mp.width;
+ 	inst->height = format.fmt.pix_mp.height;
+-	inst->crop.top = 0;
+-	inst->crop.left = 0;
+-	inst->crop.width = inst->width;
+-	inst->crop.height = inst->height;
++	/*
++	 * The capture format a client sets after a sequence change (the coded
++	 * size) leaves the stream's visible rectangle, which came with it
++	 */
++	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE ||
++	    (inst->codec_state != VENUS_DEC_STATE_CAPTURE_SETUP &&
++	     inst->codec_state != VENUS_DEC_STATE_DRC) ||
++	    inst->crop.left + inst->crop.width > inst->width ||
++	    inst->crop.top + inst->crop.height > inst->height) {
++		inst->crop.top = 0;
++		inst->crop.left = 0;
++		inst->crop.width = inst->width;
++		inst->crop.height = inst->height;
++	}
+ 
+ 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+ 		inst->fmt_out = fmt;
+-- 
+2.53.0
+

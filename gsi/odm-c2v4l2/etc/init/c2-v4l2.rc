@@ -9,3 +9,9 @@ service vendor.media.c2-v4l2 /odm/bin/hw/android.hardware.media.c2@1.0-service-v
     task_profiles ProcessCapacityHigh
     setenv LD_LIBRARY_PATH /odm/lib64/c2v4l2
     seclabel u:r:mediacodec:s0
+
+# The decoder takes its output pools from the plugin's allocators (21 to a
+# surface, 22 for byte buffers; the app side gets them from c2plugin-shim):
+# let CCodec have them made (the vendor's mask allows 18 and 19 only)
+on boot
+    setprop debug.stagefright.c2-poolmask 0x6c0000

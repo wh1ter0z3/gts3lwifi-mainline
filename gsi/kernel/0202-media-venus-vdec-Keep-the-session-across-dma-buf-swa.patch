@@ -1,0 +1,99 @@
+From 30ddd82b3288279988c92a4ab64ee44d1e01f2c1 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 07:11:09 +0530
+Subject: [PATCH 202/202] media: venus: vdec: Keep the session across dma-buf
+ swaps
+
+Queueing a DMABUF buffer with another dma-buf than it had, vb2 drops
+the old one (buf_cleanup) and then takes the new one (buf_init). The
+decoder ends its session when the last buffer goes, so with a single
+buffer attached, which happens at the start of a stream (Android's
+v4l2_codec2 queues its codec specific data first, done at once), such a
+swap ended the session in the middle of a QBUF; the firmware then
+failed the next command with HFI_ERR_SESSION_INVALID_SESSION_ID. About
+one start in three failed so.
+
+Don't end the session for a buffer cleaned up by QBUF or PREPARE_BUF:
+only REQBUFS and close free buffers for good.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/core.h |  1 +
+ drivers/media/platform/qcom/venus/vdec.c | 35 ++++++++++++++++++++++--
+ 2 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index 30fbd307a..9e4d70cfc 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -493,6 +493,7 @@ struct venus_inst {
+ 	spinlock_t bounce_lock;
+ 	u8 *csd;
+ 	u32 csd_len;
++	bool in_qbuf;
+ 	struct list_head delayed_process;
+ 	struct work_struct delayed_process_work;
+ 	bool nonblock;
+diff --git a/drivers/media/platform/qcom/venus/vdec.c b/drivers/media/platform/qcom/venus/vdec.c
+index fd36e6171..bb62a720d 100644
+--- a/drivers/media/platform/qcom/venus/vdec.c
++++ b/drivers/media/platform/qcom/venus/vdec.c
+@@ -625,6 +625,35 @@ vdec_decoder_cmd(struct file *file, void *fh, struct v4l2_decoder_cmd *cmd)
+ 	return ret;
+ }
+ 
++/*
++ * Queueing a buffer with another dma-buf than before, vb2 drops the old one
++ * (buf_cleanup) and takes the new one (buf_init): the buffer count may touch
++ * zero then, which must not end the session (see vdec_buf_cleanup)
++ */
++static int vdec_qbuf(struct file *file, void *fh, struct v4l2_buffer *b)
++{
++	struct venus_inst *inst = to_inst(file);
++	int ret;
++
++	inst->in_qbuf = true;
++	ret = v4l2_m2m_ioctl_qbuf(file, fh, b);
++	inst->in_qbuf = false;
++
++	return ret;
++}
++
++static int vdec_prepare_buf(struct file *file, void *fh, struct v4l2_buffer *b)
++{
++	struct venus_inst *inst = to_inst(file);
++	int ret;
++
++	inst->in_qbuf = true;
++	ret = v4l2_m2m_ioctl_prepare_buf(file, fh, b);
++	inst->in_qbuf = false;
++
++	return ret;
++}
++
+ static const struct v4l2_ioctl_ops vdec_ioctl_ops = {
+ 	.vidioc_querycap = vdec_querycap,
+ 	.vidioc_enum_fmt_vid_cap = vdec_enum_fmt,
+@@ -639,8 +668,8 @@ static const struct v4l2_ioctl_ops vdec_ioctl_ops = {
+ 	.vidioc_reqbufs = v4l2_m2m_ioctl_reqbufs,
+ 	.vidioc_querybuf = v4l2_m2m_ioctl_querybuf,
+ 	.vidioc_create_bufs = v4l2_m2m_ioctl_create_bufs,
+-	.vidioc_prepare_buf = v4l2_m2m_ioctl_prepare_buf,
+-	.vidioc_qbuf = v4l2_m2m_ioctl_qbuf,
++	.vidioc_prepare_buf = vdec_prepare_buf,
++	.vidioc_qbuf = vdec_qbuf,
+ 	.vidioc_expbuf = v4l2_m2m_ioctl_expbuf,
+ 	.vidioc_dqbuf = v4l2_m2m_ioctl_dqbuf,
+ 	.vidioc_streamon = v4l2_m2m_ioctl_streamon,
+@@ -1403,7 +1432,7 @@ static void vdec_buf_cleanup(struct vb2_buffer *vb)
+ 	mutex_unlock(&inst->lock);
+ 
+ 	inst->buf_count--;
+-	if (!inst->buf_count)
++	if (!inst->buf_count && !inst->in_qbuf)
+ 		vdec_session_release(inst);
+ }
+ 
+-- 
+2.53.0
+

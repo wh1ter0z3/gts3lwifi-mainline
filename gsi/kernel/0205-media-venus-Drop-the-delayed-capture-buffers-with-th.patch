@@ -1,0 +1,48 @@
+From a3f82900533ccb40077a96dbee629836d5ac1c5d Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 07:39:20 +0530
+Subject: [PATCH] media: venus: Drop the delayed capture buffers with the
+ others
+
+A decoded buffer that the firmware still holds as a reference (read
+only) waits on inst->delayed_process until the firmware lets go of it.
+When all capture buffers go back to userspace (stream off, an error),
+it stayed on that list, and delayed_process_buf_func queued it to the
+firmware again once both queues streamed again, while the client queued
+it itself too. Android's seek (streamoff and streamon of both queues)
+did that on msm8996: the firmware failed (Err_Fatal in
+video_decoder_utils.c), and the work then removed the buffer from the
+m2m queue a second time (v4l2_m2m_buf_remove_by_buf on LIST_POISON, an
+oops).
+
+Empty the list when the capture buffers are returned. A seek then
+decodes on.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/helpers.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/venus/helpers.c b/drivers/media/platform/qcom/venus/helpers.c
+index 6b773ee42..4023a243c 100644
+--- a/drivers/media/platform/qcom/venus/helpers.c
++++ b/drivers/media/platform/qcom/venus/helpers.c
+@@ -2032,6 +2032,15 @@ void venus_helper_buffers_done(struct venus_inst *inst, unsigned int type,
+ 		while ((buf = v4l2_m2m_src_buf_remove(inst->m2m_ctx)))
+ 			v4l2_m2m_buf_done(buf, state);
+ 	} else if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
++		struct venus_buffer *vbuf, *n;
++
++		/*
++		 * Buffers waiting for the firmware to let go of them go back
++		 * too: else delayed_process_buf_func queues them again later,
++		 * after a restart of the stream, or removes them twice
++		 */
++		list_for_each_entry_safe(vbuf, n, &inst->delayed_process, ref_list)
++			list_del_init(&vbuf->ref_list);
+ 		while ((buf = v4l2_m2m_dst_buf_remove(inst->m2m_ctx)))
+ 			v4l2_m2m_buf_done(buf, state);
+ 	}
+-- 
+2.53.0
+

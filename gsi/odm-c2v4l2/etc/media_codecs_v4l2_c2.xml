@@ -2,7 +2,8 @@
 <!-- Venus (MSM8996) H.264 encoder through Codec2 V4L2, ahead of the software
      one (rank 1: MediaCodecList sorts by rank, createEncoderByType takes the
      first). Needs Venus runtime PM off (gsi-init does it): its power-down froze
-     the board. The decoder stays unlisted until it is tested. -->
+     the board. The decoder (c2.v4l2.avc.decoder) works but stays unlisted: a
+     seek while it decodes to a surface stalls (see the README). -->
 <MediaCodecs>
     <Encoders>
         <MediaCodec name="c2.v4l2.avc.encoder" type="video/avc" rank="1">

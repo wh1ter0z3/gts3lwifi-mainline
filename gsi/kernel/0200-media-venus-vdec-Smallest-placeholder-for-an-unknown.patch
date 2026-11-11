@@ -1,0 +1,54 @@
+From bf1d9a298b72263b82249c312cfcffaea7a9c406 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 11 Nov 2026 07:10:37 +0530
+Subject: [PATCH 200/202] media: venus: vdec: Smallest placeholder for an
+ unknown coded size
+
+Android's v4l2_codec2 sets the OUTPUT format before it knows the stream,
+with ui::Size(), which is -1x-1. Clamped, that becomes the largest coded
+size, and the session starts with outputs larger than any stream: HFI v3
+firmware (msm8996) fails a secondary output that would have to upscale
+("Output2 upscale not supported"), and firmware without the
+sufficient-resources sequence change event (older than 5.4.51) never
+reports a stream that fits, so the client waits for that event while
+the firmware waits for capture buffers.
+
+Treat a size beyond the maximum as unknown and keep the smallest, as if
+the client had set none: any stream then comes with the sequence change
+event that carries its size.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/media/platform/qcom/venus/vdec.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/venus/vdec.c b/drivers/media/platform/qcom/venus/vdec.c
+index a16984761..92334bfbe 100644
+--- a/drivers/media/platform/qcom/venus/vdec.c
++++ b/drivers/media/platform/qcom/venus/vdec.c
+@@ -332,6 +332,22 @@ static int vdec_s_fmt(struct file *file, void *fh, struct v4l2_format *f)
+ 	if (vb2_is_busy(q))
+ 		return -EBUSY;
+ 
++	/*
++	 * A coded size out of range means the client doesn't know it (Android's
++	 * v4l2_codec2 sets -1x-1): keep the smallest, as if it set none, so the
++	 * stream's size always comes as a sequence change event. Clamped to the
++	 * largest instead, the session starts with outputs larger than any
++	 * stream: HFI v3 firmware fails a secondary output that would upscale,
++	 * and firmware without the sufficient-resources event never reports a
++	 * stream that fits.
++	 */
++	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
++	    (pixmp->width > frame_width_max(inst) ||
++	     pixmp->height > frame_height_max(inst))) {
++		pixmp->width = frame_width_min(inst);
++		pixmp->height = frame_height_min(inst);
++	}
++
+ 	orig_pixmp = *pixmp;
+ 
+ 	fmt = vdec_try_fmt_common(inst, f);
+-- 
+2.53.0
+
