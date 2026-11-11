@@ -1,6 +1,8 @@
 #!/bin/sh
-# Builds gralloc.gts3.so (-> <dir>/odm/lib64/hw/) and yuvtest (a YUV EGLImage
-# import check: adb push, run from adb shell) with the Android NDK.
+# Builds gralloc.gts3.so (-> <dir>/odm/lib64/hw/), yuvtest (a YUV EGLImage
+# import check: adb push, run from adb shell) and vidimport (a decoded frame,
+# imported as SurfaceFlinger does: run it from /data/local/tests/system) with
+# the Android NDK.
 # usage: NDK=<android-ndk dir> MESA=<mesa source dir> sh build.sh
 set -eu
 NDK=${NDK:-$HOME/Tools/android-ndk-r30}
@@ -10,4 +12,5 @@ cd "$(dirname "$0")"
 "$CC" -O2 -Wall -Wextra -fPIC -shared -fvisibility=hidden -I"$MESA/include/android_stub" \
 	-o gralloc.gts3.so gralloc_cros_info.c -llog
 "$CC" -O2 -Wall -o yuvtest yuvtest.c -lEGL -lGLESv2 -landroid -lnativewindow
-echo "built gralloc.gts3.so yuvtest"
+"$CC" -O2 -Wall -o vidimport vidimport.c -lEGL -lGLESv2 -landroid -lnativewindow -lmediandk -ldl
+echo "built gralloc.gts3.so yuvtest vidimport"

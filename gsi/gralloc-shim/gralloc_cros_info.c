@@ -45,6 +45,17 @@ struct cros_gralloc0_buffer_info {
 
 #define FOURCC(a, b, c, d) ((uint32_t)(a) | ((uint32_t)(b) << 8) | ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
 
+/*
+ * minigbm keeps Android's YV12 (16-aligned strides) as a private fourcc and
+ * gives the standard one in its own buffer info (drv_get_standard_fourcc)
+ */
+#define DRM_FORMAT_YVU420_ANDROID FOURCC('9', '9', '9', '7')
+
+static uint32_t standard_fourcc(uint32_t f)
+{
+	return f == DRM_FORMAT_YVU420_ANDROID ? FOURCC('Y', 'V', '1', '2') : f;
+}
+
 static int planes_of(uint32_t f)
 {
 	switch (f) {
@@ -84,7 +95,7 @@ static int buffer_info(buffer_handle_t h, struct cros_gralloc0_buffer_info *info
 	}
 
 	memset(info, 0, sizeof(*info));
-	info->drm_fourcc = rd32(nh, OFF_FORMAT);
+	info->drm_fourcc = standard_fourcc(rd32(nh, OFF_FORMAT));
 	memcpy(&info->modifier, (const char *)nh + OFF_MODIFIER, sizeof(info->modifier));
 	planes = planes_of(info->drm_fourcc);
 	info->num_fds = planes;

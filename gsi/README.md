@@ -156,7 +156,14 @@ frame and the picture is scrambled.
   got back only 2 of its buffers after a flush, so a seek stalled; with 21 unknown CCodec
   uses 22 for a surface too and attaches the decoded buffers to it;
 - `debug.stagefright.c2-poolmask` with bit 22 (`0x6c0000`, set by the rc in
-  `odm-c2v4l2/`), else CCodec doesn't have that pool made.
+  `odm-c2v4l2/`), else CCodec doesn't have that pool made;
+- GPU texture usage for the decoder's buffers: its pool allocates them for the decoder and
+  the CPU only (it doesn't take the consumer usage CCodec passes on), and SurfaceFlinger
+  draws a buffer without GPU usage black ("blacked out as buffer is not gpu readable").
+  `c2-gpu-usage/` (`NDK=... sh build.sh`) is an `LD_PRELOAD` for the service that adds it
+  where the service's libcodec2_vndk allocates (`C2AllocatorGralloc::Impl::
+  newGraphicAllocation`, through the PLT); `libc2_gpu_usage.so` goes to
+  `<dir>/odm/lib64/c2v4l2/`, the rc preloads it.
 
 Frames come out as the software decoder's, bit for bit (H.264 High and Main, 480p with an
 854-pixel width, 720p60, 1080p, 2160p, a 360p to 720p switch; `dectest/dectest.c`, NDK,
@@ -195,7 +202,13 @@ gralloc0 module named "CrOS Gralloc" that answers the one call Mesa's minigbm ba
 makes (`CROS_GRALLOC_DRM_GET_BUFFER_INFO`) from the minigbm handle itself (the magic
 checked at byte 116, as the vendor's minigbm does); `sh gralloc-shim/build.sh`, then
 `gralloc.gts3.so` to `<dir>/odm/lib64/hw/`. Mesa logs "Using gralloc0 CrOS API";
-`yuvtest` (same folder) imports a YUV buffer and reads back the expected grey.
+`yuvtest` (same folder) imports a YUV buffer and reads back the expected grey. It gives the
+standard fourcc for minigbm's private YV12 one (`DRM_FORMAT_YVU420_ANDROID`, '9997'), as
+minigbm's own buffer info does: without that the software decoders' YV12 frames didn't
+import, and SurfaceFlinger aborted at the first video frame ("Failed to create a valid
+texture"), restarting Android's UI. `vidimport` (same folder: `vidimport <file> <codec>`)
+decodes into an ImageReader with SurfaceFlinger's usage and imports a frame as RenderEngine
+does.
 
 ## OneUI notes
 

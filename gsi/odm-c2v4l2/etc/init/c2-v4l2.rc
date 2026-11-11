@@ -8,6 +8,9 @@ service vendor.media.c2-v4l2 /odm/bin/hw/android.hardware.media.c2@1.0-service-v
     ioprio rt 4
     task_profiles ProcessCapacityHigh
     setenv LD_LIBRARY_PATH /odm/lib64/c2v4l2
+    # GPU texture usage for the decoder's buffers (c2-gpu-usage/): without
+    # it SurfaceFlinger draws the decoded video black
+    setenv LD_PRELOAD /odm/lib64/c2v4l2/libc2_gpu_usage.so
     seclabel u:r:mediacodec:s0
 
 # The decoder takes its output pools from the plugin's allocators (21 to a
