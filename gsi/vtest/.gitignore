@@ -1,3 +1,4 @@
 .build/
 .key.jks
 vtest.apk
+vtest.apk.idsig
