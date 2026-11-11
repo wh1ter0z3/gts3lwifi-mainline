@@ -1,0 +1,2 @@
+# Samsung's fingerprint HAL reads the chip name (stock: MSM8996)
+ro.hardware.chipname=MSM8996

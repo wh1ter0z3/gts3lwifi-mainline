@@ -1,0 +1,20 @@
+# Samsung's fingerprint HAL (Android 9, Egis ET510 sensor) as the tablet's own
+# stock system partition has it (gsi-init mounts that on
+# /vendor/firmware/.part/system), with the Android 9 libraries it was built
+# against: /odm/lib64/fp holds links to them on the same partition, and our
+# libQSEEComAPI for the mainline /dev/qseecom (the TrustZone apps dualfp and
+# authhat come from apnhlos, see qcom_qseecom_dev)
+on post-fs-data
+    mkdir /data/vendor/biometrics 0770 system system
+    mkdir /data/vendor/biometrics/fp 0770 system system
+    mkdir /data/vendor/biometrics/fp/User_0 0770 system system
+    mkdir /data/vendor/biometrics/ta 0770 system system
+    mkdir /data/vendor/biometrics/meta 0770 system system
+    mkdir /data/vendor/biometrics/bk 0770 system system
+
+service vendor.fps_hal /vendor/firmware/.part/system/vendor/bin/hw/vendor.samsung.hardware.biometrics.fingerprint@2.1-service
+    class late_start
+    user system
+    group system input
+    setenv LD_LIBRARY_PATH /odm/lib64/fp
+    seclabel u:r:hal_fingerprint_default:s0

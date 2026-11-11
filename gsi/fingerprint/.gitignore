@@ -1,0 +1,4 @@
+out/
+ce1clk/*
+!ce1clk/ce1clk.c
+!ce1clk/Kbuild

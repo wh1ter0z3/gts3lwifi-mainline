@@ -1,0 +1,1 @@
+obj-m := ce1clk.o

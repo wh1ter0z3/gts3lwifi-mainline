@@ -293,6 +293,9 @@ mp -a $(ls $M/netfilter $M/ipv4/netfilter $M/ipv6/netfilter 2>/dev/null | sed -n
 # netd wants dummy0; pmOS's modprobe.d (systemd's) sets numdummies=0, the
 # argument wins
 mp dummy numdummies=1
+# /dev/qseecom: TrustZone apps for Samsung's HALs (fingerprint); nothing asks
+# for the module by alias
+mp qcom_qseecom_dev
 
 # zram swap: Android's swapon_all gives up on 7.x kernels (it writes zram's
 # max_comp_streams, which is gone), and OneUI on 4 GB without swap spends its
@@ -513,6 +516,8 @@ if mount -t tmpfs -o mode=0755 tmpfs $N/odm 2>/dev/null; then
 /dev/uinput			0660	system	bluetooth
 /dev/tun			0660	system	vpn
 /dev/watchdog			0600	root	root
+/dev/qseecom			0660	system	system
+/dev/esfp0			0660	system	system
 EOT
 	cat > $N/odm/etc/init/gsi-init.rc <<'EOT'
 # Galaxy Tab S3 (gsi-init): board bits for any system/vendor image
@@ -588,8 +593,10 @@ EOT
 	# <dir>/odm: more board files (init rc, VINTF fragments, libraries,
 	# media codec lists, HALs) for this image set, no vendor rebuild
 	if [ -d $G/odm ]; then
-		# root's, whoever owned the files where they were packed
-		cp -a $G/odm/. $N/odm/ && chown -R 0:0 $N/odm &&
+		# root's, whoever owned the files where they were packed, and not
+		# writable by group or others: init skips such rc and
+		# property files ("insecure file")
+		cp -a $G/odm/. $N/odm/ && chown -R 0:0 $N/odm && chmod -R go-w $N/odm &&
 			log "odm overlay: $(du -sh $G/odm | cut -f1)"
 	fi
 fi
