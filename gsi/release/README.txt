@@ -58,14 +58,23 @@ You need
    up: either answer is fine.
 
 Report
-  - does the screen show OneUI, does touch work, rotation, brightness
-  - Wi-Fi, Bluetooth, sound, charging, video playback
-  - with the tablet on USB, the PC sees a network interface (172.16.42.2);
-    a root shell for logs is on 172.16.42.1 port 23 (USB only, not on
-    Wi-Fi):
-      nc 172.16.42.1 23
-      dmesg > /data/local/tmp/dmesg.txt; logcat -d > /data/local/tmp/logcat.txt
-    and the kernel log of the previous start: /mnt/vendor/store/android/boot.prev.log
+  - first: does the screen show OneUI, does touch work; then rotation,
+    brightness, S-Pen, keyboard cover
+  - Wi-Fi, Bluetooth, sound (speakers, headphones), charging, video
+    playback, anything that freezes, restarts or crashes (and when)
+
+Logs (tablet on USB)
+  The PC gets a USB network interface and the address 172.16.42.2 from the
+  tablet by DHCP (no gateway, no DNS: the PC's internet is not affected).
+  If the PC doesn't take addresses by DHCP on new interfaces, set it by hand
+  (the interface name from `ip -br link`, an enx... one):
+      sudo ip addr add 172.16.42.2/16 dev enx9e74304f0ee6
+  The tablet has a root shell for logs on 172.16.42.1 port 23 (USB only,
+  not on Wi-Fi). Save the logs:
+      printf 'dmesg\n' | timeout 20 nc 172.16.42.1 23 > dmesg.txt
+      printf 'logcat -d\n' | timeout 60 nc 172.16.42.1 23 > logcat.txt
+  After a reset or freeze, the kernel log of the previous start:
+      printf 'cat /mnt/vendor/store/android/boot.prev.log\n' | timeout 30 nc 172.16.42.1 23 > boot.prev.log
 
 Sources and licenses
   - kernel (Linux 7.3.1, GPL-2.0), gsi-init (the boot ramdisk), the

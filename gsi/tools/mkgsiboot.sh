@@ -10,6 +10,7 @@ KERNEL=$1 DTB=$2 UUID=$3 OUT=$4
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 MKBOOTIMG=${MKBOOTIMG:-$HOME/Projects/samsung-tab-s3/lk2nd/lk2nd/scripts/mkbootimg}
 BUSYBOX=${BUSYBOX:-$HERE/ramdisk-bin-busybox}
+DHCPD=${DHCPD:-$HERE/dhcpd/gsi-dhcpd}	# dhcpd/build.sh
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 
 dtc -q -I dtb -O dts -o "$W/board.dts" "$DTB"
@@ -36,7 +37,8 @@ cat "$KERNEL" "$W/board.dtb" > "$W/kernel"
 mkdir -p "$W/rd/bin"
 cp "$HERE/ramdisk/init" "$W/rd/init"
 cp "$BUSYBOX" "$W/rd/bin/busybox"
-chmod 0755 "$W/rd/init" "$W/rd/bin/busybox"
+cp "$DHCPD" "$W/rd/bin/gsi-dhcpd"
+chmod 0755 "$W/rd/init" "$W/rd/bin/busybox" "$W/rd/bin/gsi-dhcpd"
 (cd "$W/rd" && find . | cpio -o -H newc -R 0:0 --quiet | gzip -9) > "$W/ramdisk"
 
 CMDLINE="console=tty0 clk_ignore_unused pd_ignore_unused msm.separate_gpu_kms=1"

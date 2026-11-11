@@ -26,8 +26,9 @@ init:
    iptables can't load them) and points the kernel's module requests at pmOS's `modprobe`
    (`/dev/gsi/modprobe`), and sets up zram swap (lz4, three quarters of the RAM: OneUI's
    pages compress about 5:1; Android's `swapon_all` fails on 7.x);
-3. USB NCM gadget (same IDs and address as pmOS: 172.16.42.1), a root shell on TCP port 23
-   (`nc 172.16.42.1 23`), hardware watchdog feeder, kernel log streamed to `log.img`,
+3. USB NCM gadget (same IDs and address as pmOS: 172.16.42.1; `dhcpd/`, a one-client DHCP
+   server in the ramdisk, gives the PC 172.16.42.2 without gateway or DNS), a root shell on
+   TCP port 23 (`nc 172.16.42.1 23`, that address only), hardware watchdog feeder, kernel log streamed to `log.img`,
    dead-man timer for tests (`gsi.deadman=MIN`: reboots unless `<dir>/keep` exists by then;
    left out for daily use), a keeper for the USB link's routes (netd's routing policy would
    cut it);

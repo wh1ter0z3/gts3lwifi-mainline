@@ -65,7 +65,7 @@ exec </dev/null >/dev/kmsg 2>&1
 
 log() { echo "<4>gsi-init: $*" > /dev/kmsg; }	# warning level: survives loglevel=4
 
-# USB NCM debug link, as pmOS sets it up
+# USB NCM debug link, as pmOS sets it up (172.16.42.1 here, the PC 172.16.42.2)
 gadget() {
 	C=/sys/kernel/config
 	mount -t configfs none $C 2>/dev/null
@@ -97,6 +97,12 @@ gadget() {
 	echo "$U" > $g/UDC
 	sleep 1
 	ifconfig gsi0 172.16.42.1 netmask 255.255.0.0 up
+	# The PC's address, 172.16.42.2, by DHCP (gsi-dhcpd: one client, no router,
+	# no DNS); it outlives switch_root, which deletes only its file
+	if [ -x /bin/gsi-dhcpd ]; then
+		setsid /bin/gsi-dhcpd gsi0 172.16.42.1 172.16.42.2 &
+		echo -1000 > /proc/$!/oom_score_adj
+	fi
 }
 
 # Without a working system: offer a shell for 5 minutes, then reboot (to
