@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..bb9c64341d 100644
+index 601fa9f44e..dfbf28df05 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -9,7 +9,7 @@ index 601fa9f44e..bb9c64341d 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=6
++pkgrel=7
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -18,7 +18,7 @@ index 601fa9f44e..bb9c64341d 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,12 +28,210 @@ makedepends="
+@@ -28,12 +28,211 @@ makedepends="
  "
  
  # Source
@@ -226,13 +226,14 @@ index 601fa9f44e..bb9c64341d 100644
 +	0184-clk-qcom-gcc-msm8996-no-parent-for-the-modem-gpll0-vote.patch
 +	0185-clk-qcom-smd-rpm-release-unused-handoff-votes-in-sleep-set.patch
 +	0186-drm-msm-mdp5-drop-bandwidth-vote-while-runtime-suspended.patch
++	0187-drm-msm-enable-thp-for-gem-buffers.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
  
  prepare() {
  	default_prepare
-@@ -61,6 +259,205 @@ package() {
+@@ -61,6 +260,206 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -439,4 +440,5 @@ index 601fa9f44e..bb9c64341d 100644
 +9c6093d435d8d577af12565ddc4bacc979b935c6af419d5a283a16535bb3d43cfb4f5cc05eb726ced28b3ba6089d9b70109181034990c7cfa4162442cf0281eb  0184-clk-qcom-gcc-msm8996-no-parent-for-the-modem-gpll0-vote.patch
 +36378deb8d09a40eb5babe44eb897c98887d8c9cf57587fc1926f5bdbf626b83b5f6ec4392b7bb9489382cee281845cd0d9a70c14b9d990f2cd312da1941f48d  0185-clk-qcom-smd-rpm-release-unused-handoff-votes-in-sleep-set.patch
 +bf72a7a40b9134fdf446babd8e2ceabd03b6ac7e9f62aec0ac9168dbaadeb49d8d9871710cb19b15c2d73f37bc6401f9db260978b2c92b0d7f949aeb1584dd84  0186-drm-msm-mdp5-drop-bandwidth-vote-while-runtime-suspended.patch
++fd0cbb553ab9bf3ce9ba716d238941930e2a2296092b586b619722e761b13e6f30e31063caa2a6b54c53d11fbc55a8e9bf514879f3cfc6cb0c1b0432be5e7854  0187-drm-msm-enable-thp-for-gem-buffers.patch
  "

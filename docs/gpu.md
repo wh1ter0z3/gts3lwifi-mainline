@@ -99,6 +99,31 @@ In a single run of opening Plasma panels, KWin's GPU time per frame went from 45
 Not tested: a T825, a built package, sleep current. The deep sleep test kernels carried this
 patch and still reached VDD minimisation.
 
+## Huge pages for GEM buffers (0187)
+
+Patch 0187 is mainline's bbe4401e118c ("drm/msm: Enable THP for GEM buffers",
+in Linus' tree, in no release we use yet): msm gives its GEM buffers a private tmpfs mount with
+`huge=within_size`, so a buffer of 2 MB or more gets transparent huge pages. That
+leaves `/sys/kernel/mm/transparent_hugepage/shmem_enabled` alone (`never` in our
+config). `msm.transparent_hugepage=0` turns it off.
+
+Tested on an SM-T820, booted from RAM on 2026-11-14 (7.3.1 with this patch, and two
+msm fixes this package doesn't carry yet: CP_RB_WPTR written under `preempt_lock` on
+A5xx, and stable's a1fe31028a, the vm_bo use-after-free in the shrinker):
+
+- msm logs `Using Transparent Hugepage`; just after Plasma started, its GEM
+  buffers held 166 MB of huge pages;
+- with the GPU pinned at 624 MHz, clears of 2048x1536 targets took about 15 % less
+  GPU time, MSAA resolves 20-27 % less and depth clears and copies 5-26 % less;
+  none of the 41 timed scenes got slower;
+- about 210,000 GPU test cases (clears, render passes, copies, MSAA) gave the same
+  results as without the patch, with no GPU hangs and no new faults;
+- after each test run the huge pages held by GEM went back to where they started
+  (peak about 290 MB above it), and so did free memory.
+
+Not tested yet: a long soak under Plasma, memory pressure (reclaim of huge GEM
+pages, zram), the T825, a built package.
+
 ## Next
 
 - Move the GPU nodes into the main DTS once the regulator choice is settled
