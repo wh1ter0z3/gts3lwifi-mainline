@@ -6,7 +6,9 @@ With `dts/test/test-charger.dts` (merged into the main DTS on 2026-10-28) (which
 kernel patches 0012-0017 there are two power supplies and an extcon device:
 
 - `sm5705-battery`, the fuel gauge (`CONFIG_FUEL_GAUGE_SM5705=m`): state of
-  charge, voltage, open-circuit voltage, current, temperature, and the
+  charge, voltage, open-circuit voltage, current, temperature (from the
+  battery's thermistor since patch 0173, see
+  [below](#battery-temperature-from-the-thermistors-0172-0174)), and the
   battery's design data;
 - `sm5705-charger`, the charger (`CONFIG_CHARGER_SM5705=m`, on an
   `i2c-gpio` bus, so also `CONFIG_I2C_GPIO=m`): USB power present, USB
@@ -141,7 +143,8 @@ its status from it.
 ## Battery temperature guard
 
 Kernel patch 0021. The SM5705 charger only protects its own die
-(THEMREG/THEMSHDN); the battery's temperature comes from the fuel gauge.
+(THEMREG/THEMSHDN); the battery's temperature comes from the fuel gauge,
+which reads the battery's thermistor since patch 0173 (next section).
 The charger driver reads the temperature of the battery it supplies every
 30 seconds and applies Samsung's limits for this battery
 (`battery,temp_*_normal` and `battery,swelling_*` in the stock DT):
@@ -163,6 +166,70 @@ Tested with a module whose upper limit was moved to 30 C: with the battery
 at 37 C it switched charging off within the first check (CNTL 0x05 ->
 0x04, health Overheat, status Not charging); the real module switched it
 back on at load.
+
+## Battery temperature from the thermistors (0172-0174)
+
+**Why.** Until patch 0173 the gauge reported its temperature register (0x09).
+That register reads the SM5705 itself, which also holds the charger, not the
+battery. On a 9 V charger it moved 6-8 C within seconds each time charging
+started or stopped, and went from 24.9 to 41.3 C within 12 seconds of the
+charger starting, with the other thermal zones at 24-28 C. The guard above
+took that for a warm battery: on a 9 V PD charger the register read 49.5 C
+at +2.47 A, the charger went to health Warm and cut to 4.10 V and 1.35 A,
+and minutes later it read 42.2 C at +1.38 A. That is the current, not heat.
+
+**What stock does.** Samsung's `sec_battery.c` reads the battery from a
+thermistor on PM8994 VADC channel LR_MUX5_PU1_AMUX_THM2 (0x74) and turns the
+raw code into a temperature with `battery,temp_table_adc` and `_data`
+(msm8996-sec-gts3llte-common-battery.dtsi); it uses the gauge's register only
+inside the gauge's own compensation. A second thermistor next to the charger,
+on LR_MUX8_PU1_AMUX_THM4 (0x77, `battery,chg_temp_table_adc` and `_data`),
+makes stock lower the input voltage above 50 C (`battery,chg_high_temp`),
+until it is back under 47 C (`_recovery`): 9 V AFC to 5 V, or the next lower
+PD profile, with at most 10 W on the lowest.
+
+**The patches.**
+
+- 0172: bindings, `io-channels` and a `temperature-lookup-table` for both
+  SM5705 nodes;
+- 0173: the fuel gauge reports the thermistor when the board has one, and
+  falls back to the register when it doesn't;
+- 0174: the charger can't lower its input voltage, so above 50 C on the
+  charger-area thermistor it limits the charge current to 1.4 A, until it
+  is back under 47 C. 1.4 A is Samsung's `battery,chg_charging_limit_current`, which
+  stock reads but doesn't use for wired charging, so the current cap is our
+  choice, and the kernel log says so (`charger area at ... C: at most 1.4 A`).
+
+The board DT adds both VADC channels (ratiometric, 200 us settle) and stock's
+two tables. The SM-T825 DT includes the SM-T820 one, so it gets them too.
+
+**Stock's numbers on this tablet** (TWRP, stock kernel 3.18, on USB, cool):
+
+| | Battery (0x74) | Charger area (0x77) | Gauge register |
+|---|---|---|---|
+| 7 readings, idle and with the GPU loaded, -389 to +466 mA | 19.9-23.5 C at raw 34285-35134 | 24.8-27.9 C at raw 33448-34112 | 26.7-29.3 C |
+
+The two tables turn stock's raw codes into stock's temperatures, to 0.1 C.
+
+**Tested on an SM-T820** (7.3.1 with 0172-0174 booted from RAM, 2026-11-14):
+
+| | Battery (0x74) | Charger area (0x77) | Health |
+|---|---|---|---|
+| At rest on the PC's USB-C, 100 % | 24.7 C at raw 33951; the table gives the same to 0.1 C | 34.6 C | Good |
+| Input limit 3 A → 100 mA → back, a 1.3-1.45 A swing | moved 0.2 C per amp (the register moved 6-8) | | Good |
+| 9 V / 3 A PD charger from 80 %, 13 minutes at about +1.5 A | 24.4-24.6 C | 40.9 C at most | Good |
+
+The same PD charger, before the patches, read 42.2 C at +1.38 A and had sent
+the charger to Warm. Stock's kernel in TWRP read 24.8 C (`batt_temp`) two
+minutes before this kernel read 25.1 C.
+
+On that charger the battery took about 1.5 A, not the 2.7 A charge current:
+with a 9 V contract the input limit is 1.65 A (Samsung's 9 V setting), and
+1.5 A into the battery is about what 1.65 A gives at 5 V, not 9 V. These
+patches don't touch either limit; why, isn't known yet.
+
+Not tested: a warm battery, the 1.4 A limit firing (charger area over 50 C),
+the SM-T825, a built package.
 
 ## Fast charging: AFC and QC 2.0 at 9 V (opt-in)
 
@@ -306,7 +373,7 @@ Layout and formulas from Samsung's `sm5705_fuelgauge.c`:
 | 0x06 | OCV | bits 13:11 volts, 10:0 1/2048 V | 0x2305 = 4.377 V |
 | 0x07 | VOLTAGE | as OCV | 0x2307 = 4.378 V |
 | 0x08 | CURRENT | bit 15 sign (set = discharging), 12:11 amps, 10:0 1/2048 A | 0x800a = -4.9 mA |
-| 0x09 | TEMPERATURE | bit 15 sign, 14:8 degrees, 7:4 1/16 degree | 0x2590 = 37.5 °C |
+| 0x09 | TEMPERATURE | bit 15 sign, 14:8 degrees, 7:4 1/16 degree; the SM5705's own temperature, not the battery's (used only without a thermistor, 0173) | 0x2590 = 37.5 °C |
 | 0x10 | FG_OP_STATUS | bit 4 set: battery model loaded | 0x0010 |
 
 The current sign was checked on the tablet. Right after a reboot the charger

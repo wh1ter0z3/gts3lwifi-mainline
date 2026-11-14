@@ -1,0 +1,204 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Tue, 3 Nov 2026 04:36:17 -0700
+Subject: [PATCH] power: supply: sm5705_charger: Limit the current when the
+ board gets hot
+
+The board has a second thermistor, next to the charger, on PM8994 VADC
+channel LR_MUX8_PU1_AMUX_THM4, with its own table in Samsung's device
+tree (battery,chg_temp_table_adc and _data in
+msm8996-sec-gts3llte-common-battery.dtsi). Samsung's kernel acts on it
+above 50 C, until the reading is back under 47 C (battery,chg_high_temp
+and _recovery), by asking the charger for a lower voltage: 9 V AFC down
+to 5 V, or the next lower PD profile, with at most 10 W on the lowest.
+
+This driver can't change the input voltage. Limit the charge current
+to 1.4 A instead, at the same thresholds. 1.4 A is Samsung's
+battery,chg_charging_limit_current, which its kernel reads but doesn't
+use for wired charging.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ drivers/power/supply/Kconfig          |   1 +
+ drivers/power/supply/sm5705_charger.c | 100 ++++++++++++++++++++++++++
+ 2 files changed, 101 insertions(+)
+
+diff --git a/drivers/power/supply/Kconfig b/drivers/power/supply/Kconfig
+index ceca87f508..7d6c85b8df 100644
+--- a/drivers/power/supply/Kconfig
++++ b/drivers/power/supply/Kconfig
+@@ -1224,6 +1224,7 @@ config MACSMC_POWER
+ config CHARGER_SM5705
+ 	tristate "Silicon Mitus SM5705 charger driver"
+ 	depends on I2C
++	depends on IIO
+ 	select REGMAP_I2C
+ 	help
+ 	  Say Y here to enable the charger of the Silicon Mitus SM5705
+diff --git a/drivers/power/supply/sm5705_charger.c b/drivers/power/supply/sm5705_charger.c
+index 6e07b292a2..a3556a183e 100644
+--- a/drivers/power/supply/sm5705_charger.c
++++ b/drivers/power/supply/sm5705_charger.c
+@@ -22,7 +22,9 @@
+ #include <linux/devm-helpers.h>
+ #include <linux/extcon.h>
+ #include <linux/extcon/sm5705-muic.h>
++#include <linux/fixp-arith.h>
+ #include <linux/i2c.h>
++#include <linux/iio/consumer.h>
+ #include <linux/interrupt.h>
+ #include <linux/leds.h>
+ #include <linux/module.h>
+@@ -124,6 +126,14 @@
+ #define SM5705_COOL_CURRENT_UA		900000
+ #define SM5705_TEMP_POLL		(30 * HZ)
+ 
++/*
++ * A board thermistor next to the charger, after Samsung's battery,chg_high_temp,
++ * _recovery and battery,chg_charging_limit_current, in tenths of a degree.
++ */
++#define SM5705_THERM_HOT		500
++#define SM5705_THERM_RECOVERY		470
++#define SM5705_THERM_CURRENT_UA		1400000
++
+ enum sm5705_temp_zone {
+ 	SM5705_ZONE_NORMAL,
+ 	SM5705_ZONE_COOL,
+@@ -164,6 +174,12 @@ struct sm5705_chg {
+ 	enum sm5705_temp_zone zone;
+ 	int temp_min, temp_max;		/* tenths of a degree */
+ 	int cfg_voltage, cfg_current;	/* limits outside the guard */
++
++	/* thermistor next to the charger */
++	struct iio_channel *therm;
++	s32 *therm_table;		/* millidegrees and ADC code, code rising */
++	int therm_points;
++	bool therm_hot;
+ };
+ 
+ /* VBUS input current limit: 100 mA + 25 mA steps */
+@@ -752,6 +768,9 @@ static int sm5705_chg_apply_zone(struct sm5705_chg *chg)
+ 		break;
+ 	}
+ 
++	if (chg->therm_hot)
++		current_ua = min(current_ua, SM5705_THERM_CURRENT_UA);
++
+ 	if (voltage > 0)
+ 		sm5705_chg_set_charge_voltage(chg, voltage);
+ 	if (current_ua > 0)
+@@ -838,6 +857,45 @@ static int sm5705_chg_read_bat_temp(struct power_supply *psy, void *data)
+ 	return 0;
+ }
+ 
++/* Clamped to the table; tenths of a degree */
++static int sm5705_chg_therm_temp(struct sm5705_chg *chg, int *val)
++{
++	const s32 *t = chg->therm_table;
++	int i, code, ret;
++
++	ret = iio_read_channel_raw(chg->therm, &code);
++	if (ret < 0)
++		return ret;
++
++	for (i = 1; i < chg->therm_points - 1 && code > t[2 * i + 1]; i++)
++		;
++	code = clamp(code, t[1], t[2 * chg->therm_points - 1]);
++	*val = fixp_linear_interpolate(t[2 * i - 1], t[2 * i - 2],
++				       t[2 * i + 1], t[2 * i], code) / 100;
++	return 0;
++}
++
++static void sm5705_chg_check_therm(struct sm5705_chg *chg)
++{
++	int temp;
++	bool hot;
++
++	if (!chg->therm || sm5705_chg_therm_temp(chg, &temp))
++		return;
++
++	hot = chg->therm_hot ? temp >= SM5705_THERM_RECOVERY : temp > SM5705_THERM_HOT;
++	if (hot == chg->therm_hot)
++		return;
++
++	dev_info(chg->dev, "charger area at %d.%d C: %s\n", temp / 10, abs(temp % 10),
++		 hot ? "at most 1.4 A" : "limit off");
++
++	mutex_lock(&chg->lock);
++	chg->therm_hot = hot;
++	sm5705_chg_apply_zone(chg);
++	mutex_unlock(&chg->lock);
++}
++
+ static void sm5705_chg_temp_work(struct work_struct *work)
+ {
+ 	struct sm5705_chg *chg = container_of(work, struct sm5705_chg,
+@@ -846,6 +904,8 @@ static void sm5705_chg_temp_work(struct work_struct *work)
+ 	enum sm5705_temp_zone zone;
+ 	bool found;
+ 
++	sm5705_chg_check_therm(chg);
++
+ 	found = power_supply_for_each_psy(&bt, sm5705_chg_read_bat_temp) > 0;
+ 	if (found) {
+ 		mutex_lock(&chg->lock);
+@@ -991,6 +1051,41 @@ static const struct regmap_config sm5705_chg_regmap_config = {
+ 	.max_register = 0x3e,
+ };
+ 
++static int sm5705_chg_get_therm(struct sm5705_chg *chg)
++{
++	static const char prop[] = "temperature-lookup-table";
++	struct device *dev = chg->dev;
++	int i, n, ret;
++
++	chg->therm = devm_iio_channel_get(dev, "therm");
++	if (IS_ERR(chg->therm)) {
++		ret = PTR_ERR(chg->therm);
++		chg->therm = NULL;
++		if (ret == -ENODEV)
++			return 0;
++		return dev_err_probe(dev, ret, "failed to get the thermistor\n");
++	}
++
++	n = device_property_count_u32(dev, prop);
++	if (n < 4 || n % 2)
++		return dev_err_probe(dev, -EINVAL, "bad %s\n", prop);
++
++	chg->therm_table = devm_kcalloc(dev, n, sizeof(*chg->therm_table), GFP_KERNEL);
++	if (!chg->therm_table)
++		return -ENOMEM;
++
++	ret = device_property_read_u32_array(dev, prop, (u32 *)chg->therm_table, n);
++	if (ret)
++		return dev_err_probe(dev, ret, "failed to read %s\n", prop);
++
++	for (i = 3; i < n; i += 2)
++		if (chg->therm_table[i] <= chg->therm_table[i - 2])
++			return dev_err_probe(dev, -EINVAL, "%s: codes must rise\n", prop);
++
++	chg->therm_points = n / 2;
++	return 0;
++}
++
+ static int sm5705_chg_probe(struct i2c_client *client)
+ {
+ 	/*
+@@ -1015,6 +1110,10 @@ static int sm5705_chg_probe(struct i2c_client *client)
+ 	chg->temp_min = SM5705_TEMP_ALERT_MIN;
+ 	chg->temp_max = SM5705_TEMP_ALERT_MAX;
+ 
++	ret = sm5705_chg_get_therm(chg);
++	if (ret)
++		return ret;
++
+ 	ret = devm_mutex_init(dev, &chg->lock);
+ 	if (ret)
+ 		return ret;
+@@ -1164,4 +1263,5 @@ static struct i2c_driver sm5705_chg_driver = {
+ module_i2c_driver(sm5705_chg_driver);
+ 
+ MODULE_DESCRIPTION("Silicon Mitus SM5705 charger driver");
++MODULE_IMPORT_NS("IIO_CONSUMER");
+ MODULE_LICENSE("GPL");

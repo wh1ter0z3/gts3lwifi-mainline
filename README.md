@@ -89,6 +89,11 @@ from either model help, the SM-T825 most of all:
   (PR #14), **GPU memory clock** (PR #15): tested on an SM-T820 from RAM
   boots; still to check as installed packages, and on an SM-T825.
 - **HEVC decode** (PR #12): the SM-T825, and 10-bit video.
+- **Battery temperature from its thermistor** (patches 0172-0174): the
+  tables reproduce the stock kernel's readings, and on an SM-T820 the battery
+  read 24.4-24.6 C charging at +1.5 A from a 9 V PD charger (health Good; the
+  register read 42.2 C there). Still to check: a warm battery, the 1.4 A
+  limit near the charger, the SM-T825 ([battery](docs/battery.md#battery-temperature-from-the-thermistors-0172-0174)).
 - **Video on the SM-T825**: `tests/venus-stress.sh` (makes its own clips;
   run as root; about an hour, `SOAK=20` shortens it).
 - **The SM-T825's modem** (branch `t825-modem`, not in `main`): that it boots

@@ -65,6 +65,25 @@ properties:
       The boost converter driving VBUS at 5.1 V, the supply of a USB OTG or
       USB Type-C source port.
 
+  io-channels:
+    maxItems: 1
+    description: ADC channel of a board thermistor next to the charger
+
+  io-channel-names:
+    const: therm
+
+  temperature-lookup-table:
+    $ref: /schemas/types.yaml#/definitions/int32-matrix
+    description:
+      The ADC's raw code at each temperature, with the codes rising.
+    items:
+      items:
+        - description: temperature in millidegrees Celsius
+        - description: raw ADC code
+
+dependencies:
+  io-channels: [ io-channel-names, temperature-lookup-table ]
+
 required:
   - compatible
   - reg

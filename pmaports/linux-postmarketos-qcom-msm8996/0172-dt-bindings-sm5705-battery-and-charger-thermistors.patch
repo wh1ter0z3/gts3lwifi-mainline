@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Tue, 3 Nov 2026 04:36:16 -0700
+Subject: [PATCH] dt-bindings: sm5705: Add the battery and charger thermistors
+
+The temperature register of the fuel gauge reads the SM5705 itself, not the
+battery. Boards can wire a battery thermistor, and another next to the
+charger, to an ADC. Describe those, with a table of raw codes.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ .../supply/siliconmitus,sm5705-charger.yaml   | 19 ++++++++++++++
+ .../siliconmitus,sm5705-fuel-gauge.yaml       | 25 +++++++++++++++++--
+ 2 files changed, 42 insertions(+), 2 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml
+index 41aebad4e4..dfff2a321a 100644
+--- a/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml
++++ b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-charger.yaml
+@@ -65,6 +65,25 @@ properties:
+       The boost converter driving VBUS at 5.1 V, the supply of a USB OTG or
+       USB Type-C source port.
+ 
++  io-channels:
++    maxItems: 1
++    description: ADC channel of a board thermistor next to the charger
++
++  io-channel-names:
++    const: therm
++
++  temperature-lookup-table:
++    $ref: /schemas/types.yaml#/definitions/int32-matrix
++    description:
++      The ADC's raw code at each temperature, with the codes rising.
++    items:
++      items:
++        - description: temperature in millidegrees Celsius
++        - description: raw ADC code
++
++dependencies:
++  io-channels: [ io-channel-names, temperature-lookup-table ]
++
+ required:
+   - compatible
+   - reg
+diff --git a/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-fuel-gauge.yaml b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-fuel-gauge.yaml
+index 9b6464e056..e57941cb35 100644
+--- a/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-fuel-gauge.yaml
++++ b/Documentation/devicetree/bindings/power/supply/siliconmitus,sm5705-fuel-gauge.yaml
+@@ -11,8 +11,10 @@ maintainers:
+ 
+ description:
+   The fuel gauge part of the SM5705 charger and fuel gauge IC. It sits on
+-  its own I2C address and measures the battery voltage, current and
+-  temperature and computes the state of charge.
++  its own I2C address and measures the battery voltage and current and
++  computes the state of charge. Its temperature register reads the IC, which
++  also holds the charger, so a board with a battery thermistor on an ADC should
++  describe that.
+ 
+ allOf:
+   - $ref: power-supply.yaml#
+@@ -32,6 +34,25 @@ properties:
+ 
+   power-supplies: true
+ 
++  io-channels:
++    maxItems: 1
++    description: ADC channel of the battery thermistor
++
++  io-channel-names:
++    const: therm
++
++  temperature-lookup-table:
++    $ref: /schemas/types.yaml#/definitions/int32-matrix
++    description:
++      The ADC's raw code at each temperature, with the codes rising.
++    items:
++      items:
++        - description: temperature in millidegrees Celsius
++        - description: raw ADC code
++
++dependencies:
++  io-channels: [ io-channel-names, temperature-lookup-table ]
++
+ required:
+   - compatible
+   - reg

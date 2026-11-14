@@ -59,10 +59,10 @@ index 15e2dd65bb..ae48760bb7 100644
  dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-sony-xperia-tone-keyaki.dtb
 diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
 new file mode 100644
-index 0000000000..34d358b515
+index 0000000000..9cd733b272
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
-@@ -0,0 +1,2216 @@
+@@ -0,0 +1,2255 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Samsung Galaxy Tab S3 Wi-Fi (SM-T820), codename gts3lwifi, board rev 05
@@ -363,6 +363,18 @@ index 0000000000..34d358b515
 +			monitored-battery = <&battery>;
 +			extcon = <&muic>;
 +			power-supplies = <&typec>;
++
++			io-channels = <&pm8994_vadc VADC_LR_MUX8_PU1_AMUX_THM4>;
++			io-channel-names = "therm";
++			/* battery,chg_temp_table_adc and _data in the stock DT */
++			temperature-lookup-table = <
++				90000 26206  85000 26298  80000 26569  75000 26888
++				70000 27291  65000 27620  60000 28146  55000 28725
++				50000 29375  45000 30179  40000 31036  35000 31721
++				30000 32982  25000 34048  20000 35118  15000 36013
++				10000 37021  5000 37831  0 38856  (-5000) 39629
++				(-10000) 40307  (-15000) 40938  (-20000) 41425
++			>;
 +
 +			/*
 +			 * Rear camera flash on FLED1, as a torch over I2C. Stock
@@ -1753,6 +1765,17 @@ index 0000000000..34d358b515
 +
 +	fuel-gauge@71 {
 +		compatible = "siliconmitus,sm5705-fuel-gauge";
++		io-channels = <&pm8994_vadc VADC_LR_MUX5_PU1_AMUX_THM2>;
++		io-channel-names = "therm";
++		/* battery,temp_table_adc and _data in the stock DT, with sec_battery.c's channel */
++		temperature-lookup-table = <
++			90000 25990  85000 26364  80000 26586  75000 26852
++			70000 27234  65000 27669  60000 28157  55000 28722
++			50000 29385  45000 30145  40000 31002  35000 31886
++			30000 32810  25000 33900  20000 35109  15000 36041
++			10000 37075  5000 38044  0 38876  (-5000) 39669
++			(-10000) 40359  (-15000) 40936  (-20000) 41366
++		>;
 +		reg = <0x71>;
 +		monitored-battery = <&battery>;
 +		power-supplies = <&charger>;
@@ -2277,6 +2300,22 @@ index 0000000000..34d358b515
 +		function = "gpio";
 +		drive-strength = <8>;
 +		bias-pull-up;
++	};
++};
++
++/* The battery's thermistor, read by the fuel gauge */
++&pm8994_vadc {
++	channel@74 {
++		reg = <VADC_LR_MUX5_PU1_AMUX_THM2>;
++		qcom,ratiometric;
++		qcom,hw-settle-time = <200>;
++	};
++
++	/* Next to the charger, read by the charger */
++	channel@77 {
++		reg = <VADC_LR_MUX8_PU1_AMUX_THM4>;
++		qcom,ratiometric;
++		qcom,hw-settle-time = <200>;
 +	};
 +};
 diff --git a/arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts b/arch/arm64/boot/dts/qcom/msm8996-samsung-gts3llte.dts

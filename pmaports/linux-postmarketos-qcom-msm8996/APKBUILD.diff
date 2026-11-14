@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..dfbf28df05 100644
+index 601fa9f44e..ecc00dd8a3 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -9,7 +9,7 @@ index 601fa9f44e..dfbf28df05 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=7
++pkgrel=8
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -18,7 +18,7 @@ index 601fa9f44e..dfbf28df05 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,12 +28,211 @@ makedepends="
+@@ -28,12 +28,214 @@ makedepends="
  "
  
  # Source
@@ -221,6 +221,9 @@ index 601fa9f44e..dfbf28df05 100644
 +	0168-asoc-wcd9335-micbias2-voltage.patch
 +	0169-asoc-apq8096-headset-jack.patch
 +	0170-arm64-dts-msm8996-gpu-opp-ddr.patch
++	0172-dt-bindings-sm5705-battery-and-charger-thermistors.patch
++	0173-power-supply-sm5705-fuel-gauge-battery-thermistor.patch
++	0174-power-supply-sm5705-charger-limit-current-when-hot.patch
 +	0182-media-venus-vdec-crop-to-stream-size.patch
 +	0183-irqchip-qcom-mpm-program-the-vmpm-wake-up-timer.patch
 +	0184-clk-qcom-gcc-msm8996-no-parent-for-the-modem-gpll0-vote.patch
@@ -233,7 +236,7 @@ index 601fa9f44e..dfbf28df05 100644
  
  prepare() {
  	default_prepare
-@@ -61,6 +260,206 @@ package() {
+@@ -61,6 +263,209 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -311,7 +314,7 @@ index 601fa9f44e..dfbf28df05 100644
 +55728038f8518d35b8f191f8c61c465931bebfee629dc46a67c7a32cdbb9c030aaf22928ecc7f3e2f51dc8bee3969448f9615e32b690311c9355d0c3205b51dc  m069-iio-add-qualcomm-sensor-manager-driver.patch
 +99c812263fdd1459c1f8ade474d0f67d2674c7a4840b271eeeac7624a6994fc0a374ad9ed8e927f6e733cf415a4f9857b8f0db1f724c37968e5892c65b063ca7  m070-soc-qcom-add-in-kernel-sensors-registry-implementation.patch
 +cbb3e21bb9d760e1a79563215465be1a1f0608ba42745d412f27b6397e11363ca52067e1b471adc992edacd58befd99443894d75437867f8cbcdb7580f18d481  m071-remoteproc-qcom-enable-in-kernel-sns-reg.patch
-+efcce163af06693a472364124ed27e1916595a263a3119d89a2f42d8915c09eb060f0eac518338f72362787ccdafedf12f2bd154892af10b4a1908ebc5d61e89  0001-add-samsung-gts3lwifi-dts.patch
++64489e22aaeccb84e7a61501739ca0014f3e3620d6146765c8e9e295a61c672ebedffeea9a3a98224c2c67177a39423b4d9fca074de16c40ecbc110e7b482a1f  0001-add-samsung-gts3lwifi-dts.patch
 +964a367bc0e25ed4bcc414d7a184e519169796cc91de2b2a8838cf505ee006e7f6d84db89ed298ecbab99be2fcd9060deaed840be574ccfb08f6be0dc001a1d5  0002-drm-panel-add-samsung-ams968hh01.patch
 +22818c232f0be8233a0550e4a470295c1c99969ed089610603033d0409e310461b5a719e5ca6f9eb338a877ab8fe691d345de2d93d5daceebcb3689449f64731  0003-drm-msm-mdp5-split-display-bonded-dsi.patch
 +4521cbc37842219bedae736850e6199892dfe92fdf7f7e516c17cc12dc951835aba20a973db673d0a20205f416d4fa3d44c18bd87f0807df4a833427d3cc8986  0004-drm-msm-dpu-msm8996-split-display-ctls.patch
@@ -435,6 +438,9 @@ index 601fa9f44e..dfbf28df05 100644
 +4ae4f6f5e5eeb9f40100d0e7696f0abf9272067a6ac1a085c3493256f9f14fae88049d064d934024ed93a3a09eb676f78d17009d35d86eee14405df63debc992  0168-asoc-wcd9335-micbias2-voltage.patch
 +82f3acd6e228245c12c4abcfbd8e3727e89e1c4a8d79e252b695be8a83a961e7be132cf6ce64303c07a12eda05ef62e2f9d2cb7dc390c7bf69480dba7fec182a  0169-asoc-apq8096-headset-jack.patch
 +50dc1d7a57d223322fa8771f9b6a01a26c357e6d9a8b15a33e304b2f6a6dca823192db2f76082fb5ee9a028f63916756c88e0e8f22cc685633ed02a5430aafb8  0170-arm64-dts-msm8996-gpu-opp-ddr.patch
++f5956fefb4ecc2d132453f1c6c9fb7461a93c3e7a66e66d0e79142ba3e353ca740415a17ee82adc2363f1a86461736346e7e0122ad20ef7edc4f5fe2fc0644e5  0172-dt-bindings-sm5705-battery-and-charger-thermistors.patch
++2601da8645e75f5ace095d5f45867068312d02fd34e7c1c49431a2945f38a2a8593942cea1684178c094e8bd979da3118a998ccfd31f709ac2328ff31c0817f1  0173-power-supply-sm5705-fuel-gauge-battery-thermistor.patch
++110693eb9e73b4151ed88e2b7adc8f8d7e22de021f85a379dc340163c8460dd0c2803ecf49d671238016598fa7d0ce9d64e8ba496f18735b3fcb0a5f9404319d  0174-power-supply-sm5705-charger-limit-current-when-hot.patch
 +92fcd7cd2729b29f3116ee84ec39d9ad95330ed1eb17127acdbf4b673052145b37e238349d143ae62ca48babcb7467ec466d1e6b9f5a48e10df237509bcca489  0182-media-venus-vdec-crop-to-stream-size.patch
 +a1fcedc2b9f01a09bba777ce3e80a179fd2c3ae9ce4c6dcf1732c05e1d7b30153ef65a4e1676d0544795da8b98002aa684762202c41abdcbf30bf4e1dc133ea7  0183-irqchip-qcom-mpm-program-the-vmpm-wake-up-timer.patch
 +9c6093d435d8d577af12565ddc4bacc979b935c6af419d5a283a16535bb3d43cfb4f5cc05eb726ced28b3ba6089d9b70109181034990c7cfa4162442cf0281eb  0184-clk-qcom-gcc-msm8996-no-parent-for-the-modem-gpll0-vote.patch

@@ -2,8 +2,9 @@
 /*
  * Silicon Mitus SM5705 fuel gauge
  *
- * Read-only: reports the state of charge, voltage, current and temperature
- * that the gauge computes itself. The gauge runs from the battery and keeps
+ * Read-only: reports the state of charge, voltage and current that the
+ * gauge computes itself, and the battery temperature from a thermistor if the
+ * board wires one to an ADC. The gauge runs from the battery and keeps
  * its battery model across reboots, so once the vendor firmware has set it
  * up its readings stay valid. Loading the model is not implemented; the
  * driver warns when the gauge reports that it lost its setup.
@@ -14,7 +15,9 @@
  * Register layout from the Samsung vendor driver (sm5705_fuelgauge.c).
  */
 
+#include <linux/fixp-arith.h>
 #include <linux/i2c.h>
+#include <linux/iio/consumer.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -42,6 +45,9 @@ struct sm5705_fg {
 	struct delayed_work work;
 	int last_capacity;
 	int last_status;
+	struct iio_channel *therm;
+	s32 *therm_table;	/* pairs of millidegrees and ADC code, code rising */
+	int therm_points;
 };
 
 static int sm5705_fg_read(struct sm5705_fg *fg, u8 reg)
@@ -87,11 +93,37 @@ static int sm5705_fg_current(struct sm5705_fg *fg, int *val)
 	return 0;
 }
 
-/* sign in bit 15, degrees in bits 14:8, 1/16 degree in bits 7:4; tenths */
+/* The battery's thermistor, in tenths of a degree; clamped to the table */
+static int sm5705_fg_therm_temp(struct sm5705_fg *fg, int *val)
+{
+	const s32 *t = fg->therm_table;
+	int i, code, ret;
+
+	ret = iio_read_channel_raw(fg->therm, &code);
+	if (ret < 0)
+		return ret;
+
+	for (i = 1; i < fg->therm_points - 1 && code > t[2 * i + 1]; i++)
+		;
+	code = clamp(code, t[1], t[2 * fg->therm_points - 1]);
+	*val = fixp_linear_interpolate(t[2 * i - 1], t[2 * i - 2],
+				       t[2 * i + 1], t[2 * i], code) / 100;
+	return 0;
+}
+
+/*
+ * Without a thermistor: the register reads the SM5705 itself, which also holds
+ * the charger, so it rises within seconds of charging starting.
+ * Sign in bit 15, degrees in bits 14:8, 1/16 degree in bits 7:4; tenths.
+ */
 static int sm5705_fg_temp(struct sm5705_fg *fg, int *val)
 {
-	int ret = sm5705_fg_read(fg, SM5705_REG_TEMPERATURE);
+	int ret;
 
+	if (fg->therm)
+		return sm5705_fg_therm_temp(fg, val);
+
+	ret = sm5705_fg_read(fg, SM5705_REG_TEMPERATURE);
 	if (ret < 0)
 		return ret;
 
@@ -201,6 +233,41 @@ static void sm5705_fg_cancel_work(void *data)
 	cancel_delayed_work_sync(&fg->work);
 }
 
+static int sm5705_fg_get_therm(struct sm5705_fg *fg)
+{
+	static const char prop[] = "temperature-lookup-table";
+	struct device *dev = &fg->client->dev;
+	int i, n, ret;
+
+	fg->therm = devm_iio_channel_get(dev, "therm");
+	if (IS_ERR(fg->therm)) {
+		ret = PTR_ERR(fg->therm);
+		fg->therm = NULL;
+		if (ret == -ENODEV)
+			return 0;
+		return dev_err_probe(dev, ret, "failed to get the thermistor\n");
+	}
+
+	n = device_property_count_u32(dev, prop);
+	if (n < 4 || n % 2)
+		return dev_err_probe(dev, -EINVAL, "bad %s\n", prop);
+
+	fg->therm_table = devm_kcalloc(dev, n, sizeof(*fg->therm_table), GFP_KERNEL);
+	if (!fg->therm_table)
+		return -ENOMEM;
+
+	ret = device_property_read_u32_array(dev, prop, (u32 *)fg->therm_table, n);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to read %s\n", prop);
+
+	for (i = 3; i < n; i += 2)
+		if (fg->therm_table[i] <= fg->therm_table[i - 2])
+			return dev_err_probe(dev, -EINVAL, "%s: codes must rise\n", prop);
+
+	fg->therm_points = n / 2;
+	return 0;
+}
+
 static int sm5705_fg_probe(struct i2c_client *client)
 {
 	struct power_supply_config cfg = {};
@@ -225,6 +292,10 @@ static int sm5705_fg_probe(struct i2c_client *client)
 	if (!(op & SM5705_FG_OP_INIT_DONE))
 		dev_warn(dev, "gauge lost its battery model (op status %#06x), readings may be wrong\n",
 			 op);
+
+	ret = sm5705_fg_get_therm(fg);
+	if (ret)
+		return ret;
 
 	cfg.drv_data = fg;
 	cfg.fwnode = dev_fwnode(dev);
@@ -259,4 +330,5 @@ static struct i2c_driver sm5705_fg_driver = {
 module_i2c_driver(sm5705_fg_driver);
 
 MODULE_DESCRIPTION("Silicon Mitus SM5705 fuel gauge driver");
+MODULE_IMPORT_NS("IIO_CONSUMER");
 MODULE_LICENSE("GPL");

@@ -299,6 +299,18 @@
 			extcon = <&muic>;
 			power-supplies = <&typec>;
 
+			io-channels = <&pm8994_vadc VADC_LR_MUX8_PU1_AMUX_THM4>;
+			io-channel-names = "therm";
+			/* battery,chg_temp_table_adc and _data in the stock DT */
+			temperature-lookup-table = <
+				90000 26206  85000 26298  80000 26569  75000 26888
+				70000 27291  65000 27620  60000 28146  55000 28725
+				50000 29375  45000 30179  40000 31036  35000 31721
+				30000 32982  25000 34048  20000 35118  15000 36013
+				10000 37021  5000 37831  0 38856  (-5000) 39629
+				(-10000) 40307  (-15000) 40938  (-20000) 41425
+			>;
+
 			/*
 			 * Rear camera flash on FLED1, as a torch over I2C. Stock
 			 * drives it through TLMM 11 (torch) / 12 (flash) instead;
@@ -1688,6 +1700,17 @@
 
 	fuel-gauge@71 {
 		compatible = "siliconmitus,sm5705-fuel-gauge";
+		io-channels = <&pm8994_vadc VADC_LR_MUX5_PU1_AMUX_THM2>;
+		io-channel-names = "therm";
+		/* battery,temp_table_adc and _data in the stock DT, with sec_battery.c's channel */
+		temperature-lookup-table = <
+			90000 25990  85000 26364  80000 26586  75000 26852
+			70000 27234  65000 27669  60000 28157  55000 28722
+			50000 29385  45000 30145  40000 31002  35000 31886
+			30000 32810  25000 33900  20000 35109  15000 36041
+			10000 37075  5000 38044  0 38876  (-5000) 39669
+			(-10000) 40359  (-15000) 40936  (-20000) 41366
+		>;
 		reg = <0x71>;
 		monitored-battery = <&battery>;
 		power-supplies = <&charger>;
@@ -2212,5 +2235,21 @@
 		function = "gpio";
 		drive-strength = <8>;
 		bias-pull-up;
+	};
+};
+
+/* The battery's thermistor, read by the fuel gauge */
+&pm8994_vadc {
+	channel@74 {
+		reg = <VADC_LR_MUX5_PU1_AMUX_THM2>;
+		qcom,ratiometric;
+		qcom,hw-settle-time = <200>;
+	};
+
+	/* Next to the charger, read by the charger */
+	channel@77 {
+		reg = <VADC_LR_MUX8_PU1_AMUX_THM4>;
+		qcom,ratiometric;
+		qcom,hw-settle-time = <200>;
 	};
 };
