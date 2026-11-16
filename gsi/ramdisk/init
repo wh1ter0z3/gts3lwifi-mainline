@@ -677,10 +677,11 @@ EOT
 chmod 0755 $D/gsi/modprobe
 echo /dev/gsi/modprobe > $N/proc/sys/kernel/modprobe
 
-# Debug shell (on the USB link only) and watchdog, rooted in the new root so
+# Debug shell (on the USB link only; /sys is in the new root by now) and
+# watchdog, rooted in the new root so
 # they keep working
 B=/vendor/bin/busybox
-if [ -e /sys/class/net/gsi0 ]; then
+if [ -e $N/sys/class/net/gsi0 ]; then
 	chroot $N $B setsid $B nc -lk -s 172.16.42.1 -p 23 -e /vendor/bin/gsi-login &
 	echo -1000 > $N/proc/$!/oom_score_adj
 fi
