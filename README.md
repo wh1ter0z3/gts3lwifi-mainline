@@ -1,0 +1,71 @@
+# OrangeFox for the Galaxy Tab S3 (SM-T820, SM-T825)
+
+OrangeFox Recovery (`fox_12.1`) for the Galaxy Tab S3, made for the Treble
+layout of the gts3lwifi-mainline project: system and vendor partitions that a
+GSI and our open vendor image are flashed to by name. It works on the stock
+layout too (there is just no vendor partition to show).
+
+From awesometic's TWRP device trees
+([gts3lwifi](https://github.com/awesometic/android_device_samsung_gts3lwifi-twrp),
+[gts3llte](https://github.com/awesometic/android_device_samsung_gts3llte-twrp),
+Apache-2.0) and his prebuilt kernels (Linux 3.18.140, source:
+[android_kernel_samsung_msm8996](https://github.com/awesometic/android_kernel_samsung_msm8996)).
+What's different:
+
+- **Vendor partition**: Backup, Wipe and Install Image ("Vendor Image") know it,
+  and "System Image" takes a GSI's system.img.
+- **Open source only**: no decryption, so none of his Samsung/Qualcomm
+  libraries or `qseecomd`. Our Android's /data isn't encrypted.
+- **lk2nd stays safe**: the boot partition (lk2nd at its start, Android's boot
+  image 4 MiB in) is backed up but never flashed whole, the Magisk addon and
+  OrangeFox's boot image patching are left out.
+- OrangeFox extras on: bash, nano, GNU tar and sed, xz.
+
+## Layout
+
+```
+common/     BoardConfigCommon.mk, recovery.fstab, recovery/root (init)
+gts3lwifi/  SM-T820: product, board config, prebuilt kernel
+gts3llte/   SM-T825: the same
+tools/      screen.sh: the recovery's screen on the PC over adb
+```
+
+## Building
+
+The OrangeFox sync tools, then this tree at `device/samsung/gts3l-recovery`:
+
+```bash
+git clone https://gitlab.com/OrangeFox/sync.git
+cd sync && ./orangefox_sync.sh --branch 12.1 --path /path/to/fox_12.1
+cd /path/to/fox_12.1
+git clone <this repo> device/samsung/gts3l-recovery
+export ALLOW_MISSING_DEPENDENCIES=true LC_ALL=C FOX_BUILD_DEVICE=gts3lwifi
+source build/envsetup.sh
+lunch twrp_gts3lwifi-eng          # twrp_gts3llte-eng for the SM-T825
+mka adbd recoveryimage
+```
+
+The image: `out/target/product/gts3lwifi/OrangeFox-*.img`.
+
+## Installing
+
+- From TWRP or OrangeFox: Install → Install Image → the .img → Recovery.
+- From a PC in download mode (Power + Volume Down + Home):
+  `heimdall flash --RECOVERY OrangeFox-...img`, or Odin with the image in a
+  tar (`tar -H ustar -cf recovery.tar recovery.img`) in the AP slot.
+- Start it: Power + Volume Up + Home, or lk2nd's menu → Recovery.
+
+## Seeing it without a screen
+
+There is no scrcpy in a recovery: scrcpy streams from Android's own screen
+and encoder, which a recovery doesn't run. `tools/screen.sh` takes a
+screenshot about once a second over adb (`fb2png`) and keeps it in a PNG that
+an image viewer reloads. Commands work without a screen too: `adb shell twrp
+help` (install, wipe, backup, restore, mount, print).
+
+## Testing order
+
+1. SM-T820 bare board (the developer's): starts, adb, partitions listed,
+   backup of boot/efs to the microSD card, screenshots.
+2. Stock layout and Treble layout, on the T820 first.
+3. A tester with a screen: touch, rotation, brightness, then the T825.
