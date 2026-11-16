@@ -40,12 +40,13 @@ TARGET_NO_RECOVERY := true
 BOARD_USES_RECOVERY_AS_BOOT := false
 
 # --- Images ---
-# The vendor image is a file on the userdata partition (gsi-init loop-mounts
-# it): no partition to fit, so the build sizes it from its content. ext4, so
+# 1 GiB: the size of the vendor partition of the Treble layout
+# (docs/partitions.md), so the same image can be flashed there; until then
+# gsi-init loop-mounts it from the userdata partition (unsparsed). ext4, so
 # tools/mkvendor-standalone.sh can still add the kernel modules and the
 # firmware links of one kernel build after it.
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
-BOARD_VENDORIMAGE_PARTITION_RESERVED_SIZE := 67108864
+BOARD_VENDORIMAGE_PARTITION_SIZE := 1073741824
 TARGET_COPY_OUT_VENDOR := vendor
 TARGET_USERIMAGES_USE_EXT4 := true
 
