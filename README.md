@@ -58,7 +58,7 @@ repo sync -c -j8 --no-tags
 mkdir -p device/samsung && cp -a <this tree> device/samsung/gts3
 device/samsung/gts3/patches/apply.sh
 source build/envsetup.sh
-lunch aosp_gts3-trunk_staging-userdebug
+lunch aosp_gts3-bp1a-userdebug
 m vendorimage
 ```
 
@@ -70,4 +70,4 @@ First-build checks (unknowns until the tree has been built once):
   their dependencies;
 - the J5 patches were made on LineageOS 22.0 and may need rebasing;
 - health HAL v1 at target-level 202404 (else v3);
-- whether the release config is `trunk_staging` on this tag (`lunch` lists it).
+- the release config: `bp1a` on android-15.0.0_r36.

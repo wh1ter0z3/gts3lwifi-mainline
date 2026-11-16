@@ -52,9 +52,9 @@ TARGET_USERIMAGES_USE_EXT4 := true
 # Android 15 vendor API (target-level 202404), but presented to a GSI as API 34
 # (VNDK v34): Android 16 GSIs derive the VNDK apex to mount from
 # ro.board.api_level, 202404 maps to v35, and no VNDK apex above v34 exists, so
-# linkerconfig aborts and the GSI never boots. Needs patches/07-build-make.patch
-# where the build has no BOARD_API_LEVEL_PROP_OVERRIDE yet. (From SamuraiArtem's
-# j5xnlte tree, where Android 15-17 GSIs boot on the same scheme.)
+# linkerconfig aborts and the GSI never boots. AOSP 15 r36's build has the
+# override. (From SamuraiArtem's j5xnlte tree, where Android 15-17 GSIs boot on
+# the same scheme.)
 BOARD_API_LEVEL_PROP_OVERRIDE := 34
 
 # --- VINTF ---

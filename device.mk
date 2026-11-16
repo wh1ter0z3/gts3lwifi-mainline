@@ -108,11 +108,11 @@ PRODUCT_VENDOR_PROPERTIES += \
     ro.vendor.v4l2_codec2.encode_concurrent_instances=4
 
 # --- Audio: AIDL default HAL on the q6 card "S3" (WCD9335, RT5508 amps) ---
-# patches/03-hardware-interfaces-audio.patch lets the primary module open the
-# card and PCM devices named below; bin/gts3-audio-init.sh sets the mixer
-# routes at boot (from postmarketOS's UCM profile). Speakers and built-in mics
-# only for now: headphones (PCM 1) and the headset mic (PCM 3) need routing
-# on jack events, still to do.
+# The primary module opens the PCM named in each device port's address
+# (CARD_<card>_DEV_<pcm>, primary_audio_policy_configuration.xml);
+# bin/gts3-audio-init.sh sets the mixer routes at boot (from postmarketOS's
+# UCM profile). Speakers and built-in mics for now; headphones (PCM 1) and
+# the headset mic (PCM 3) become device ports of their own with jack events.
 PRODUCT_PACKAGES += \
     com.android.hardware.audio \
     tinymix \
@@ -131,14 +131,10 @@ PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/audio/default_volume_tables.xml:$(TARGET_COPY_OUT_VENDOR)/etc/default_volume_tables.xml \
     $(DEVICE_PATH)/audio/surround_sound_configuration_5_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/surround_sound_configuration_5_0.xml
 
-# The card and its PCMs (audio.gts3.xml of the tinyhal setup): playback on
-# PCM 0 (MultiMedia1 -> both speaker pairs), capture on PCM 2 (MultiMedia3 <-
-# main and sub mic). 40 ms periods: shorter ones underran before the ADSP took
-# its first buffer.
+# Speakers on PCM 0 (MultiMedia1 -> both speaker pairs), built-in mics on
+# PCM 2 (MultiMedia3 <- main and sub mic): the device ports' addresses.
+# 40 ms periods: shorter ones underran before the ADSP took its first buffer.
 PRODUCT_VENDOR_PROPERTIES += \
-    ro.audio.primary.alsa_card=0 \
-    ro.audio.primary.alsa_playback_device=0 \
-    ro.audio.primary.alsa_capture_device=2 \
     persist.vendor.audio.primary.latency_ms=40 \
     ro.audio.alsa.silence_on_underrun=true
 

@@ -11,10 +11,9 @@ are; they were written against LineageOS 22.0 and may need rebasing on AOSP 15.
 
 | Patch | Project | What for |
 |---|---|---|
-| 02 | external/drm_hwcomposer | MDP5: plane flattening, VSync worker fixes, solid fill (the same display controller as ours) |
-| 03 (audio part) | hardware/interfaces | AIDL default audio HAL: card/PCM device properties for the primary module, service registration retries; the software Gatekeeper's file context |
+| pending-02 | external/drm_hwcomposer | MDP5: plane flattening, VSync worker fixes, solid fill (the same display controller as ours). Made for LineageOS 22's copy; doesn't apply to AOSP 15's yet: rebased for the real-screen phase |
+| 03 (audio part) | hardware/interfaces | AIDL default audio HAL: service registration retries, the effects configuration in its APEX. (AOSP 15 already picks the PCM from the device port's address and labels the software Gatekeeper, so those hunks are gone) |
 | 05 | external/minigbm | the msm backend's AIDL allocator service and mapper |
-| 07 | build/make | `BOARD_API_LEVEL_PROP_OVERRIDE` (see BoardConfig.mk), where the build doesn't have it yet |
 | 09 | system/media | ALSA device proxy (libalsautils, used by the audio HAL) |
 | 14 | external/libdrm | root headers for vendor modules |
 | 16 | external/tinyalsa | tinymix and friends on the vendor partition |

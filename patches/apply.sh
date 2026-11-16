@@ -22,10 +22,8 @@ while read -r p dir; do
 		git -C "$d" apply "$HERE/$p" && echo "$p: applied to $dir"
 	fi
 done <<'LIST'
-02-external-drm_hwcomposer.patch external/drm_hwcomposer
 03-hardware-interfaces-audio.patch hardware/interfaces
 05-external-minigbm.patch external/minigbm
-07-build-make.patch build/make
 09-system-media.patch system/media
 14-external-libdrm.patch external/libdrm
 16-external-tinyalsa.patch external/tinyalsa
