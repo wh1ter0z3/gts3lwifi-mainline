@@ -117,10 +117,10 @@ PRODUCT_VENDOR_PROPERTIES += \
 # AOSP's vendor APEX; only the policy files below are ours.
 PRODUCT_PACKAGES += \
     com.android.hardware.audio \
-    tinymix \
-    tinyplay \
-    tinycap \
-    tinypcminfo
+    tinymix.vendor \
+    tinyplay.vendor \
+    tinycap.vendor \
+    tinypcminfo.vendor
 
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/audio/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
