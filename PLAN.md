@@ -94,6 +94,14 @@ touch, S-Pen, touch keys, keyboard cover, microSD, brightness on it.
 - Partitions (one-time, a TWRP zip with sgdisk; undo = the stock PIT in
   Odin): `vendor` 1 GB, `system` grown to 8 GB (OneUI 8's system image is
   6.3 GB; stock system is 4 GB), the rest stays `userdata`.
+  For the record, Valera1978's 2018 Treble project for the SM-T825 did not
+  repartition: it put `system.img` and `vendor.img` as ext4 files inside the
+  stock system partition and loop-mounted them at early init, with a TWRP
+  that treated the two files as partitions. That is our gsi-init store
+  (on userdata, with room for a 6 GB system image) in all but the location.
+  Real partitions are the step beyond it: standard first-stage init, fastboot
+  and TWRP flashing by partition name, OTA for the LineageOS ROM, no loop
+  mounts for Magisk-like tools to trip over (he had to patch Magisk).
 - A standard boot image behind lk2nd: Android's first-stage init, fstab
   (system, vendor, userdata, the firmware partitions read only at
   `/vendor/firmware_mnt`, zram), modules by ueventd from `/vendor/lib/modules`.
