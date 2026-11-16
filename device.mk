@@ -113,6 +113,8 @@ PRODUCT_VENDOR_PROPERTIES += \
 # bin/gts3-audio-init.sh sets the mixer routes at boot (from postmarketOS's
 # UCM profile). Speakers and built-in mics for now; headphones (PCM 1) and
 # the headset mic (PCM 3) become device ports of their own with jack events.
+# The HAL, its init script and its VINTF declaration (audio core v3) come in
+# AOSP's vendor APEX; only the policy files below are ours.
 PRODUCT_PACKAGES += \
     com.android.hardware.audio \
     tinymix \
@@ -121,8 +123,6 @@ PRODUCT_PACKAGES += \
     tinypcminfo
 
 PRODUCT_COPY_FILES += \
-    $(DEVICE_PATH)/audio/android.hardware.audio.service-aidl.example.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/android.hardware.audio.service-aidl.example.rc \
-    $(DEVICE_PATH)/audio/android.hardware.audio.service-aidl.xml:$(TARGET_COPY_OUT_VENDOR)/etc/vintf/manifest/android.hardware.audio.service-aidl.xml \
     $(DEVICE_PATH)/audio/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
     $(DEVICE_PATH)/audio/primary_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/primary_audio_policy_configuration.xml \
     $(DEVICE_PATH)/audio/r_submix_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/r_submix_audio_policy_configuration.xml \
