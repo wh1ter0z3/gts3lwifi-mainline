@@ -64,6 +64,10 @@ BOARD_HAS_LARGE_FILESYSTEM := true
 BOARD_SUPPRESS_SECURE_ERASE := true
 TARGET_USERIMAGES_USE_EXT4 := true
 TARGET_USERIMAGES_USE_F2FS := true
+# The Treble layout's vendor partition: a real /vendor mount point in the
+# recovery, not the /system/vendor link a vendor-less device gets
+BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
+TARGET_COPY_OUT_VENDOR := vendor
 
 # --- Recovery ---
 TARGET_RECOVERY_FSTAB := $(COMMON_PATH)/recovery.fstab
