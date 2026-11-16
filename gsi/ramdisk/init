@@ -583,6 +583,12 @@ on early-boot
     umount /dev/usb-ffs/ptp
 on property:init.svc.vendor.usb-gadget-hal-1-2=running
     stop vendor.usb-gadget-hal-1-2
+
+# The debug link must stay up: no system suspend while it's ours (with the
+# screen off Android suspends, and USB goes down with it). gsi.usb=android
+# leaves suspend to Android.
+on boot
+    write /sys/power/wake_lock gsi_debug_link
 EOT
 	# The DRM composer (drm_hwcomposer) takes card0 unless told, and that is
 	# the GPU alone here: point it at the display controller's card (the one
