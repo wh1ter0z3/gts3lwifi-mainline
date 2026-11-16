@@ -1,9 +1,10 @@
 #!/bin/sh
 # Build the boot image that starts Android from image files (see ramdisk/init).
-# usage: [WDT=1] [VKMS=1] [EXTRA_CMDLINE=...] mkgsiboot.sh <Image.gz> <board.dtb> <pmos root uuid|-> <out.img>
+# usage: [WDT=1] [VKMS=1] [USB=android] [EXTRA_CMDLINE=...] mkgsiboot.sh <Image.gz> <board.dtb> <pmos root uuid|-> <out.img>
 #   -        standalone: images on the userdata partition, no pmOS (see ramdisk/init)
 #   WDT=1    add the APSS watchdog node (gsi-init feeds it)
 #   VKMS=1   gsi.vkms=1: virtual display, for a board without panel
+#   USB=android  gsi.usb=android: USB for Android (adb, MTP), no debug link
 set -eu
 [ $# -eq 4 ] || { echo "usage: $0 <Image.gz> <board.dtb> <pmos root uuid|-> <out.img>" >&2; exit 1; }
 KERNEL=$1 DTB=$2 UUID=$3 OUT=$4
@@ -52,6 +53,7 @@ CMDLINE="$CMDLINE loglevel=4 log_buf_len=8M"
 # ...) and skip its mainline device tree fixups. gsi-init adds the androidboot
 # parameters itself (see ramdisk/init).
 [ "${VKMS:-0}" = 1 ] && CMDLINE="$CMDLINE gsi.vkms=1"
+[ -z "${USB:-}" ] || CMDLINE="$CMDLINE gsi.usb=$USB"
 [ -z "${EXTRA_CMDLINE:-}" ] || CMDLINE="$CMDLINE $EXTRA_CMDLINE"
 
 python3 "$MKBOOTIMG" --kernel "$W/kernel" --ramdisk "$W/ramdisk" --cmdline "$CMDLINE" \

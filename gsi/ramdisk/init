@@ -44,9 +44,15 @@
 #                     (selinux.permissive_lock), since the init of a user
 #                     build switches to enforcing whatever androidboot.selinux
 #                     says, and our vendor policy isn't made for any GSI
+#   gsi.usb=net|android
+#                     net (default): USB is our NCM debug link, Android's own
+#                     gadget is kept off it; android: no debug link, USB is
+#                     Android's (adb, MTP), and androidboot.gsi.usb=android
+#                     tells the vendor to set up its gadget
 # While Android runs, TCP port 23 on 172.16.42.1 is a root shell (no tty; e.g.
 # `nc 172.16.42.1 23`) on the USB NCM link pmOS also sets up (that address
-# only: not on Wi-Fi), and the partition with the images is mounted on
+# only: not on Wi-Fi; not with gsi.usb=android), and the partition with the
+# images is mounted on
 # /mnt/vendor/store (standalone) or /mnt/vendor/pmos (vold unmounts
 # everything else under /mnt).
 #
@@ -116,7 +122,7 @@ fail() {
 	reboot -f
 }
 
-ROOT_UUID=; GSI_DIR=/android; VKMS=0; DATA_SIZE=8G; DEADMAN=0; COMPOSITOR=; AUDIO=; SELINUX=permissive
+ROOT_UUID=; GSI_DIR=/android; VKMS=0; DATA_SIZE=8G; DEADMAN=0; COMPOSITOR=; AUDIO=; SELINUX=permissive; USB=net
 for w in $(cat /proc/cmdline); do
 	case $w in
 	pmos_root_uuid=*) ROOT_UUID=${w#*=} ;;
@@ -127,6 +133,7 @@ for w in $(cat /proc/cmdline); do
 	gsi.compositor=*) COMPOSITOR=${w#*=} ;;
 	gsi.audio=*) AUDIO=${w#*=} ;;
 	gsi.selinux=*) SELINUX=${w#*=} ;;
+	gsi.usb=*) USB=${w#*=} ;;
 	esac
 done
 # Without pmos_root_uuid, standalone: no pmOS on the tablet. The images are in
@@ -342,7 +349,9 @@ if [ -n "$BDADDR" ]; then
 		log "bluetooth: no address"
 	fi
 fi
-gadget
+# gsi.usb=android: USB stays free for Android's own gadget (fail() still
+# brings the debug link up when there is no Android to hand it to)
+[ "$USB" = android ] || gadget
 
 # /data: an ext4 image next to the others
 if [ $STANDALONE = 1 ]; then
@@ -490,6 +499,8 @@ A="$A androidboot.boot_devices=soc@0/7464900.mmc androidboot.serialno=gts3gsi"
 # Not "bootloader" (init's default): S-Boot may take that to Download mode
 A="$A androidboot.init_fatal_reboot_target=gsi-fatal androidboot.verifiedbootstate=orange"
 [ $FIRSTBOOT = 0 ] || A="$A androidboot.gsi.firstboot=1"
+# Who owns USB: our vendor sets up Android's gadget only for "android"
+A="$A androidboot.gsi.usb=$USB"
 printf '%s %s\n' "$(cat /proc/cmdline)" "$A" > /tmp/cmdline
 mount --bind /tmp/cmdline /proc/cmdline || fail "bind /proc/cmdline"
 
@@ -552,23 +563,26 @@ on early-init
 on property:sys.use_memfd=false
     setprop sys.use_memfd true
 
-# USB belongs to our network gadget. Android's own can never bind and retries
-# several times a second (adbd's FunctionFS, the vendor gadget HAL writing
-# g1/UDC): a uevent storm, and once it took the link down. adb runs over TCP
-# (persist.adb.tcp.port). The vendor mounts the FunctionFS at early-boot; this
-# file is parsed after the vendor's, so its early-boot runs later
+# Bluetooth: the QCA6174's firmware claims Android's vendor HCI capabilities
+# but doesn't answer their commands (LE_ADV_FILTER 0xfd57 times out and the
+# stack aborts): don't use them
+on boot
+    setprop bluetooth.core.le.vendor_capabilities.enabled false
+EOT
+	# gsi.usb=net: USB belongs to our network gadget. Android's own can never
+	# bind and retries several times a second (adbd's FunctionFS, the vendor
+	# gadget HAL writing g1/UDC): a uevent storm, and once it took the link
+	# down. adb runs over TCP (persist.adb.tcp.port). The vendor mounts the
+	# FunctionFS at early-boot; this file is parsed after the vendor's, so its
+	# early-boot runs later
+	[ "$USB" = android ] || cat >> $N/odm/etc/init/gsi-init.rc <<'EOT'
+
 on early-boot
     umount /dev/usb-ffs/adb
     umount /dev/usb-ffs/mtp
     umount /dev/usb-ffs/ptp
 on property:init.svc.vendor.usb-gadget-hal-1-2=running
     stop vendor.usb-gadget-hal-1-2
-
-# Bluetooth: the QCA6174's firmware claims Android's vendor HCI capabilities
-# but doesn't answer their commands (LE_ADV_FILTER 0xfd57 times out and the
-# stack aborts): don't use them
-on boot
-    setprop bluetooth.core.le.vendor_capabilities.enabled false
 EOT
 	# The DRM composer (drm_hwcomposer) takes card0 unless told, and that is
 	# the GPU alone here: point it at the display controller's card (the one
@@ -663,10 +677,13 @@ EOT
 chmod 0755 $D/gsi/modprobe
 echo /dev/gsi/modprobe > $N/proc/sys/kernel/modprobe
 
-# Debug shell and watchdog, rooted in the new root so they keep working
+# Debug shell (on the USB link only) and watchdog, rooted in the new root so
+# they keep working
 B=/vendor/bin/busybox
-chroot $N $B setsid $B nc -lk -s 172.16.42.1 -p 23 -e /vendor/bin/gsi-login &
-echo -1000 > $N/proc/$!/oom_score_adj
+if [ -e /sys/class/net/gsi0 ]; then
+	chroot $N $B setsid $B nc -lk -s 172.16.42.1 -p 23 -e /vendor/bin/gsi-login &
+	echo -1000 > $N/proc/$!/oom_score_adj
+fi
 if [ -c $N/dev/watchdog ]; then
 	chroot $N $B setsid $B watchdog -F -t 5 -T 30 /dev/watchdog &
 	echo -1000 > $N/proc/$!/oom_score_adj
