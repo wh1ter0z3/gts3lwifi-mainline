@@ -171,8 +171,8 @@ Only open source goes to the cloud or to Actions.
 
 ## 6. Unknowns to settle early
 
-- Mesa in-tree: removing AOSP's `external/mesa3d` may break other modules;
-  if so keep AOSP's and build ours beside it.
+- Mesa in-tree: settled. AOSP's `external/mesa3d` stays (gfxstream needs it);
+  upstream Mesa builds beside it at `external/mesa3d-upstream`.
 - The J5 patches were made on LineageOS 22; they may need rebasing on AOSP 15.
 - Jack detection route: extcon (system_server reads it with no system
   change) vs input events (needs a system overlay a GSI won't have).

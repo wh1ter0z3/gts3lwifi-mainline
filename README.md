@@ -66,8 +66,8 @@ m vendorimage
 for the kernel modules and the firmware links of one kernel build.
 
 First-build checks (unknowns until the tree has been built once):
-- removing AOSP's `external/mesa3d` must not leave other modules without
-  their dependencies;
+- upstream Mesa beside AOSP's `external/mesa3d` (gfxstream subset, no name
+  clashes): settled on the first build;
 - the J5 patches were made on LineageOS 22.0 and may need rebasing;
 - health HAL v1 at target-level 202404 (else v3);
 - the release config: `bp1a` on android-15.0.0_r36.

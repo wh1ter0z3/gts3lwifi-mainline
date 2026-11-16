@@ -63,7 +63,7 @@ DEVICE_MANIFEST_FILE := $(DEVICE_PATH)/vintf/manifest.xml
 # --- SELinux ---
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor
 
-# --- Graphics: upstream Mesa (manifests/gts3.xml puts it at external/mesa3d) ---
+# --- Graphics: upstream Mesa (manifests/gts3.xml: external/mesa3d-upstream) ---
 # Mesa's own AOSP build (android/Android.mk runs meson with the platform's
 # toolchain): freedreno for the Adreno 530, EGL/GLES with the platform's
 # IMapper, so it knows every buffer layout (no gralloc shim as with the NDK

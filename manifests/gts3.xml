@@ -8,9 +8,10 @@
   <remote name="fdo" fetch="https://gitlab.freedesktop.org/" />
 
   <!-- Upstream Mesa (freedreno knows the A530; its own AOSP build in
-       android/Android.mk) in place of AOSP's copy. -->
-  <remove-project name="platform/external/mesa3d" />
-  <project path="external/mesa3d" name="mesa/mesa" remote="fdo"
+       android/Android.mk), next to AOSP's external/mesa3d: that one is a
+       gfxstream subset the emulator projects need, its module names
+       (mesa_util, ...) don't clash with upstream's (libEGL_mesa, ...). -->
+  <project path="external/mesa3d-upstream" name="mesa/mesa" remote="fdo"
            revision="refs/tags/mesa-26.3.0" clone-depth="1" />
 
   <!-- This tree goes to device/samsung/gts3 (not published yet: copied in). -->
