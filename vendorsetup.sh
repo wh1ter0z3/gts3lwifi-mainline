@@ -17,6 +17,8 @@ gts3lwifi|gts3llte)
 	export FOX_SAMSUNG_DEVICE=1
 	export FOX_USE_SAMSUNG_SPECIAL=1
 	export FOX_VANILLA_BUILD=1
+	# LZMA ramdisk (see BoardConfigCommon.mk)
+	export OF_USE_LZMA_COMPRESSION=1
 	# Extras
 	export FOX_USE_BASH_SHELL=1
 	export FOX_USE_NANO_EDITOR=1

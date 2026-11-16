@@ -105,6 +105,10 @@ TW_NO_REBOOT_BOOTLOADER := true
 TW_INCLUDE_CRYPTO := false
 
 # --- OrangeFox ---
+# LZMA ramdisk, as awesometic's TWRP: lk2nd RAM-boots a recovery
+# (`fastboot boot`, and its menu's Recovery loads it the same way), and a
+# 21 MB gzip ramdisk hung it; his 10.8 MB LZMA one boots
+OF_USE_LZMA_COMPRESSION := 1
 OF_MAINTAINER := psigod
 FOX_VANILLA_BUILD := 1
 # 3:4 screen: 12 x 120 (OrangeFox lays out at a 9-unit width)
