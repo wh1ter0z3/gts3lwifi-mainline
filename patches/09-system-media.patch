@@ -1,0 +1,71 @@
+diff --git a/alsa_utils/alsa_device_proxy.c b/alsa_utils/alsa_device_proxy.c
+index 5a43697..56bb103 100644
+--- a/alsa_utils/alsa_device_proxy.c
++++ b/alsa_utils/alsa_device_proxy.c
+@@ -25,6 +25,8 @@
+ #include <stdio.h>
+ #include <string.h>
+ 
++#include <cutils/properties.h>
++
+ #include <audio_utils/clock.h>
+ 
+ #include "include/alsa_device_proxy.h"
+@@ -137,6 +139,49 @@ int proxy_prepare(alsa_device_proxy * proxy, const alsa_device_profile* profile,
+     return ret;
+ }
+ 
++/*
++ * Have ALSA hand the hardware silence when the writer falls behind, instead of
++ * whatever stale audio is still sitting in the ring.
++ *
++ * A DSP-backed built-in codec keeps the stream open for seconds after a sound
++ * ends, so it underruns often. Without a silence fill each underrun replays the
++ * tail of whatever played last, which on msm8916 turned dialpad tones into a
++ * stutter that rang on well past the keypress.
++ *
++ * The kernel (snd_pcm_sw_params) accepts silence_size <= silence_threshold <=
++ * buffer_size, so filling exactly one buffer of silence is the largest valid
++ * request that does not need the boundary value - which userspace cannot know
++ * before the stream is open.
++ *
++ * Note what is deliberately NOT changed here: stop_threshold. Setting it out of
++ * reach ("never stop") does remove the XRUN churn, but it also removes the only
++ * resynchronisation point there is. Measured that way, once the writer fell
++ * behind the stream stayed behind for good - delay went to -4096 frames and
++ * avail past the end of the buffer, with playback permanently reading ahead of
++ * what had been written. Letting ALSA stop on underrun lets the write path
++ * prepare the stream again and put the pointers back together; the silence fill
++ * above is what keeps the gap from being audible as replayed audio.
++ */
++static void proxy_config_silence_on_underrun(alsa_device_proxy* proxy)
++{
++    if (proxy->profile->direction != PCM_OUT) {
++        return;
++    }
++    if (!property_get_bool("ro.audio.alsa.silence_on_underrun", false)) {
++        return;
++    }
++
++    unsigned int buffer_frames =
++            proxy->alsa_config.period_size * proxy->alsa_config.period_count;
++    if (buffer_frames == 0) {
++        return;
++    }
++
++    proxy->alsa_config.silence_threshold = buffer_frames;
++    proxy->alsa_config.silence_size = buffer_frames;
++    ALOGD("proxy: silence-on-underrun enabled, buffer %u frames", buffer_frames);
++}
++
+ int proxy_prepare_from_default_config(alsa_device_proxy * proxy,
+         const alsa_device_profile * profile)
+ {
+@@ -153,6 +198,7 @@ int proxy_prepare_from_default_config(alsa_device_proxy * proxy,
+     proxy->alsa_config.channels = profile->default_config.channels;
+     proxy->alsa_config.period_count = profile->default_config.period_count;
+     proxy->alsa_config.period_size = profile->default_config.period_size;
++    proxy_config_silence_on_underrun(proxy);
+     proxy->pcm = NULL;
+     enum pcm_format format = profile->default_config.format;
+     if (format >= 0 && (size_t)format < ARRAY_SIZE(format_byte_size_map)) {

@@ -1,0 +1,11 @@
+<manifest version="1.0" type="device">
+    <hal format="aidl"><name>vendor.samsung.hardware.displayquality</name><fqname>ISehDisplayQuality/default</fqname></hal>
+    <hal format="aidl"><name>vendor.samsung.hardware.khdm</name><fqname>ISehKhdm/default</fqname></hal>
+    <hal format="aidl"><name>vendor.samsung.hardware.tlc.ddar</name><fqname>ISehDdar/default</fqname></hal>
+    <hal format="aidl"><name>vendor.samsung.hardware.bluetooth</name><fqname>ISehBluetooth/default</fqname></hal>
+    <hal format="aidl">
+        <name>android.hardware.thermal</name>
+        <version>1</version>
+        <fqname>IThermal/default</fqname>
+    </hal>
+</manifest>

@@ -1,0 +1,184 @@
+diff --git a/audio/aidl/default/Android.bp b/audio/aidl/default/Android.bp
+index 844f1e9..ea55238 100644
+--- a/audio/aidl/default/Android.bp
++++ b/audio/aidl/default/Android.bp
+@@ -271,3 +271,10 @@ prebuilt_etc {
+     sub_dir: "vintf",
+     installable: false,
+ }
++
++prebuilt_etc {
++    name: "android.hardware.audio.effects-aidl.example.xml",
++    src: "audio_effects_config.xml",
++    filename: "audio_effects_config.xml",
++    installable: false,
++}
+diff --git a/audio/aidl/default/apex/com.android.hardware.audio/Android.bp b/audio/aidl/default/apex/com.android.hardware.audio/Android.bp
+index ee92512..3937b33 100644
+--- a/audio/aidl/default/apex/com.android.hardware.audio/Android.bp
++++ b/audio/aidl/default/apex/com.android.hardware.audio/Android.bp
+@@ -44,6 +44,7 @@ apex {
+         "libvolumesw",
+     ],
+     prebuilts: [
++        "android.hardware.audio.effects-aidl.example.xml",
+         "android.hardware.audio.service-aidl.example.rc",
+         "android.hardware.audio.service-aidl.xml",
+         "android.hardware.bluetooth.audio.xml",
+diff --git a/audio/aidl/default/main.cpp b/audio/aidl/default/main.cpp
+index 6ab747d..696388c 100644
+--- a/audio/aidl/default/main.cpp
++++ b/audio/aidl/default/main.cpp
+@@ -16,6 +16,7 @@
+ 
+ #include <cstdlib>
+ #include <ctime>
++#include <unistd.h>
+ #include <utility>
+ #include <vector>
+ 
+@@ -29,20 +30,36 @@
+ #include "core-impl/AudioPolicyConfigXmlConverter.h"
+ #include "core-impl/ChildInterface.h"
+ #include "core-impl/Config.h"
++#include "core-impl/Configuration.h"
+ #include "core-impl/Module.h"
+ 
+ using aidl::android::hardware::audio::core::ChildInterface;
+ using aidl::android::hardware::audio::core::Config;
+ using aidl::android::hardware::audio::core::Module;
+ using aidl::android::hardware::audio::core::internal::AudioPolicyConfigXmlConverter;
++using aidl::android::hardware::audio::core::internal::getConfiguration;
+ 
+ namespace {
+ 
++static binder_status_t registerServiceWithRetry(AIBinder* binder, const char* name, int maxAttempts = 20) {
++    binder_status_t status = STATUS_UNKNOWN_ERROR;
++    for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
++        status = AServiceManager_addService(binder, name);
++        if (status == STATUS_OK) return STATUS_OK;
++        LOG(WARNING) << "Failed to register service \"" << name << "\" (attempt "
++                     << attempt << "/" << maxAttempts << ", status: " << status
++                     << "), retrying in 500ms...";
++        usleep(500000);
++    }
++    return status;
++}
++
+ ChildInterface<Module> createModule(const std::string& name,
+-                                    std::unique_ptr<Module::Configuration>&& config) {
++                                    std::unique_ptr<Module::Configuration>&& config,
++                                    std::optional<Module::Type> typeOverride = std::nullopt) {
+     ChildInterface<Module> result;
+     {
+-        auto moduleType = Module::typeFromString(name);
++        auto moduleType = typeOverride.has_value() ? typeOverride : Module::typeFromString(name);
+         if (!moduleType.has_value()) {
+             LOG(ERROR) << __func__ << ": module type \"" << name << "\" is not supported";
+             return result;
+@@ -52,11 +69,8 @@ ChildInterface<Module> createModule(const std::string& name,
+         result = std::move(module);
+     }
+     const std::string moduleFqn = std::string().append(Module::descriptor).append("/").append(name);
+-    binder_status_t status = AServiceManager_addService(result.getBinder(), moduleFqn.c_str());
+-    if (status != STATUS_OK) {
+-        LOG(ERROR) << __func__ << ": failed to register service for \"" << moduleFqn << "\"";
+-        return ChildInterface<Module>();
+-    }
++    binder_status_t status = registerServiceWithRetry(result.getBinder(), moduleFqn.c_str());
++    CHECK_EQ(STATUS_OK, status);
+     return result;
+ };
+ 
+@@ -82,21 +96,41 @@ int main() {
+     auto config = ndk::SharedRefBase::make<Config>(audioPolicyConverter);
+     const std::string configFqn = std::string().append(Config::descriptor).append("/default");
+     binder_status_t status =
+-            AServiceManager_addService(config->asBinder().get(), configFqn.c_str());
+-    if (status != STATUS_OK) {
+-        LOG(ERROR) << "failed to register service for \"" << configFqn << "\"";
+-    }
++            registerServiceWithRetry(config->asBinder().get(), configFqn.c_str());
++    CHECK_EQ(STATUS_OK, status);
+ 
+     // Make modules
+     std::vector<ChildInterface<Module>> moduleInstances;
++    // j5xnlte: with no real audio hardware every module has to be a STUB, whatever the
++    // policy config calls it. Without the override, a module named e.g. "default" fails
++    // typeFromString() and is never created, and a module named "primary" becomes a real
++    // ModulePrimary that cannot open a single stream - either way AudioPolicyManager ends
++    // up with no primary output and the framework retries listAudioPorts ~70x/s forever.
++    const bool forceStubModules = android::base::GetBoolProperty("ro.vendor.audio.stub", false);
+     auto configs(audioPolicyConverter.releaseModuleConfigs());
+     for (std::pair<std::string, std::unique_ptr<Module::Configuration>>& configPair : *configs) {
+         std::string name = configPair.first;
+-        if (auto instance = createModule(name, std::move(configPair.second)); instance) {
++        std::optional<Module::Type> typeOverride =
++                forceStubModules ? std::optional<Module::Type>(Module::Type::STUB) : std::nullopt;
++        if (auto instance = createModule(name, std::move(configPair.second), typeOverride);
++            instance) {
+             moduleInstances.push_back(std::move(instance));
+         }
+     }
+ 
++    if (moduleInstances.empty() &&
++        android::base::GetBoolProperty("ro.vendor.audio.stub", false)) {
++        for (const std::string& name : {"default", "r_submix", "bluetooth"}) {
++            if (auto instance = createModule(name, getConfiguration(Module::Type::STUB),
++                                             Module::Type::STUB);
++                instance) {
++                moduleInstances.push_back(std::move(instance));
++            }
++        }
++    }
++
++    CHECK(!moduleInstances.empty()) << "No audio modules registered successfully";
++
+     ABinderProcess_joinThreadPool();
+     return EXIT_FAILURE;  // should not reach
+ }
+diff --git a/audio/aidl/default/primary/StreamPrimary.cpp b/audio/aidl/default/primary/StreamPrimary.cpp
+index 7325a91..5c53d8d 100644
+--- a/audio/aidl/default/primary/StreamPrimary.cpp
++++ b/audio/aidl/default/primary/StreamPrimary.cpp
+@@ -92,14 +92,27 @@ StreamPrimary::StreamPrimary(StreamContext* context, const Metadata& metadata)
+ }
+ 
+ std::vector<alsa::DeviceProfile> StreamPrimary::getDeviceProfiles() {
++    // Capture and playback are not always the same ALSA device. This code used
++    // kAlsaDevice for both, which only holds when one PCM device carries both
++    // directions. On a QDSP6 card each direction is a separate frontend - for
++    // example msm8916 exposes MultiMedia1 as playback-only on device 0 and
++    // MultiMedia2 as capture-only on device 1 - so recording opened a device
++    // with no capture stream and failed to start, with no mixer setting able to
++    // fix it. Let the device numbers be overridden per board.
++    static const int kCard = ::android::base::GetIntProperty(
++            "ro.audio.primary.alsa_card", int{primary::PrimaryMixer::kAlsaCard});
++    static const int kPlaybackDevice = ::android::base::GetIntProperty(
++            "ro.audio.primary.alsa_playback_device", int{primary::PrimaryMixer::kAlsaDevice});
++    static const int kCaptureDevice = ::android::base::GetIntProperty(
++            "ro.audio.primary.alsa_capture_device", int{primary::PrimaryMixer::kAlsaDevice});
+     static const std::vector<alsa::DeviceProfile> kBuiltInSource{
+-            alsa::DeviceProfile{.card = primary::PrimaryMixer::kAlsaCard,
+-                                .device = primary::PrimaryMixer::kAlsaDevice,
++            alsa::DeviceProfile{.card = kCard,
++                                .device = kCaptureDevice,
+                                 .direction = PCM_IN,
+                                 .isExternal = false}};
+     static const std::vector<alsa::DeviceProfile> kBuiltInSink{
+-            alsa::DeviceProfile{.card = primary::PrimaryMixer::kAlsaCard,
+-                                .device = primary::PrimaryMixer::kAlsaDevice,
++            alsa::DeviceProfile{.card = kCard,
++                                .device = kPlaybackDevice,
+                                 .direction = PCM_OUT,
+                                 .isExternal = false}};
+     return mIsInput ? kBuiltInSource : kBuiltInSink;
+diff --git a/gatekeeper/aidl/software/file_contexts b/gatekeeper/aidl/software/file_contexts
+index 23a62ea..cc4180e 100644
+--- a/gatekeeper/aidl/software/file_contexts
++++ b/gatekeeper/aidl/software/file_contexts
+@@ -1,3 +1,3 @@
+ (/.*)?                                                          u:object_r:vendor_file:s0
+ /etc(/.*)?                                                      u:object_r:vendor_configs_file:s0
+-/bin/hw/android\.hardware\.gatekeeper-service\.nonsecure        u:object_r:hal_gatekeeper_remote_exec:s0
++/bin/hw/android\.hardware\.gatekeeper-service\.nonsecure        u:object_r:hal_gatekeeper_default_exec:s0

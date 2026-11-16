@@ -1,0 +1,622 @@
+diff --git a/Android.bp b/Android.bp
+index 47b2cd8..ba011e2 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -54,7 +54,6 @@ cc_defaults {
+ 
+     static_libs: [
+         "libaidlcommonsupport",
+-        "libdisplay_info",
+     ],
+ 
+     header_libs: [
+@@ -67,7 +66,6 @@ cc_defaults {
+     ],
+ 
+     cppflags: [
+-        "-DHAS_LIBDISPLAY_INFO",
+         "-DHWC2_INCLUDE_STRINGIFICATION",
+         "-DHWC2_USE_CPP11",
+     ],
+@@ -91,6 +89,7 @@ filegroup {
+ 
+         "compositor/DrmKmsPlan.cpp",
+         "compositor/FlatteningController.cpp",
++        "compositor/SolidFillFb.cpp",
+ 
+         "drm/DrmAtomicStateManager.cpp",
+         "drm/DrmConnector.cpp",
+@@ -168,7 +167,7 @@ cc_defaults {
+     ],
+ 
+     shared_libs: [
+-        "android.hardware.graphics.composer3-V4-ndk",
++        "android.hardware.graphics.composer3-V3-ndk",
+         "libbase",
+         "libbinder_ndk",
+         "liblog",
+diff --git a/backend/Backend.cpp b/backend/Backend.cpp
+index bf45c08..a46041b 100644
+--- a/backend/Backend.cpp
++++ b/backend/Backend.cpp
+@@ -91,15 +91,31 @@ std::tuple<int, size_t> Backend::GetClientLayers(
+ }
+ 
+ bool Backend::IsClientLayer(HwcDisplay *display, HwcLayer *layer) {
+-  return !HardwareSupportsLayerType(layer->GetSfType()) ||
+-         !layer->IsLayerUsableAsDevice() || display->CtmByGpu() ||
+-         (layer->GetLayerData().pi.RequireScalingOrPhasing() &&
+-          display->GetHwc()->GetResMan().ForcedScalingWithGpu());
++  const bool bad_type = !HardwareSupportsLayerType(layer->GetSfType());
++  const bool unusable = !layer->IsLayerUsableAsDevice();
++  const bool ctm = display->CtmByGpu();
++  const bool scaling = layer->GetLayerData().pi.RequireScalingOrPhasing() &&
++                       display->GetHwc()->GetResMan().ForcedScalingWithGpu();
++
++  /*
++   * Bring-up diagnostic: say which of the four conditions pushed a layer to
++   * GPU composition. Each such layer costs a full render pass on this device,
++   * so it matters whether it is an unsupported layer type (a solid-colour dim
++   * layer during a transition, say), a buffer that cannot be scanned out, the
++   * colour transform, or scaling.
++   */
++  if (bad_type || unusable || ctm || scaling) {
++    ALOGI("J5XCLIENT: layer type=%d -> client: bad_type=%d unusable=%d ctm=%d scaling=%d",
++          static_cast<int>(layer->GetSfType()), bad_type, unusable, ctm, scaling);
++  }
++
++  return bad_type || unusable || ctm || scaling;
+ }
+ 
+ bool Backend::HardwareSupportsLayerType(HWC2::Composition comp_type) {
+   return comp_type == HWC2::Composition::Device ||
+-         comp_type == HWC2::Composition::Cursor;
++         comp_type == HWC2::Composition::Cursor ||
++         comp_type == HWC2::Composition::SolidColor;
+ }
+ 
+ uint32_t Backend::CalcPixOps(const std::vector<HwcLayer *> &layers,
+diff --git a/bufferinfo/BufferInfoMapperMetadata.cpp b/bufferinfo/BufferInfoMapperMetadata.cpp
+index dc1b906..a409143 100644
+--- a/bufferinfo/BufferInfoMapperMetadata.cpp
++++ b/bufferinfo/BufferInfoMapperMetadata.cpp
+@@ -27,6 +27,8 @@
+ 
+ #include <cinttypes>
+ 
++#include <set>
++
+ #include "utils/log.h"
+ 
+ namespace android {
+@@ -142,6 +144,19 @@ auto BufferInfoMapperMetadata::GetBoInfo(buffer_handle_t handle)
+     return {};
+   }
+ 
++  /* Temporary bring-up diagnostic: report each distinct buffer geometry once,
++   * to compare the pitch gralloc reports against the width being scanned out. */
++  {
++    static std::set<uint64_t> seen;
++    uint64_t key = (uint64_t)bi.width << 40 | (uint64_t)bi.height << 20 |
++                   bi.pitches[0];
++    if (seen.insert(key).second) {
++      ALOGI("J5XBUF: %ux%u fmt=0x%x pitch=%u (width*4=%u) offset=%u planes=%zu",
++            bi.width, bi.height, bi.format, bi.pitches[0], bi.width * 4,
++            bi.offsets[0], layouts.size());
++    }
++  }
++
+   return bi;
+ }
+ 
+diff --git a/compositor/DrmKmsPlan.cpp b/compositor/DrmKmsPlan.cpp
+index 4f75e89..4c5c929 100644
+--- a/compositor/DrmKmsPlan.cpp
++++ b/compositor/DrmKmsPlan.cpp
+@@ -29,6 +29,7 @@ auto DrmKmsPlan::CreateDrmKmsPlan(DrmDisplayPipeline &pipe,
+   auto plan = std::make_unique<DrmKmsPlan>();
+ 
+   auto avail_planes = pipe.GetUsablePlanes();
++  const size_t total_planes = avail_planes.size();
+ 
+   int z_pos = 0;
+   for (auto &dhl : composition) {
+@@ -37,6 +38,14 @@ auto DrmKmsPlan::CreateDrmKmsPlan(DrmDisplayPipeline &pipe,
+     /* Skip unsupported planes */
+     do {
+       if (avail_planes.empty()) {
++        /*
++         * Bring-up diagnostic: running out of planes throws the whole frame to
++         * GPU composition, the expensive path on this hardware. Report how many
++         * planes there were and how many layers were being placed, to tell a
++         * plain shortage apart from a layer no plane would accept.
++         */
++        ALOGI("J5XPLAN: out of planes at layer %d of %zu (had %zu planes)",
++              z_pos, composition.size(), total_planes);
+         return {};
+       }
+ 
+diff --git a/compositor/FlatteningController.cpp b/compositor/FlatteningController.cpp
+index efd7ad0..0826e9c 100644
+--- a/compositor/FlatteningController.cpp
++++ b/compositor/FlatteningController.cpp
+@@ -88,7 +88,19 @@ void FlatteningController::ThreadFn(
+       fc->disabled_ = true;
+       fc->flatten_next_frame_ = true;
+       ALOGV("Timeout. Sending an event to compositor");
+-      fc->cbks_.trigger();
++      /* The trigger callback re-enters the composer and takes its client lock,
++       * while the composer's main thread holds that same lock when it calls
++       * NewFrame() below, which wants mutex_. Holding mutex_ across the
++       * callback therefore deadlocks the whole display pipeline one second
++       * after the last frame. Copy the callback out and drop mutex_ for the
++       * duration of the call. */
++      auto trigger = fc->cbks_.trigger;
++      lock.unlock();
++      trigger();
++      lock.lock();
++
++      /* State may have changed while unlocked; re-evaluate from the top. */
++      continue;
+     }
+ 
+     if (fc->disabled_) {
+diff --git a/compositor/LayerData.h b/compositor/LayerData.h
+index 962141f..188d64e 100644
+--- a/compositor/LayerData.h
++++ b/compositor/LayerData.h
+@@ -94,6 +94,13 @@ struct LayerData {
+   std::shared_ptr<DrmFbIdHandle> fb;
+   PresentInfo pi;
+   SharedFd acquire_fence;
++
++  /*
++   * Set for a SolidColor layer: ARGB8888 to paint instead of scanning out a
++   * buffer. Planes that advertise SOLID_FILL can do this in hardware, which is
++   * what keeps dim and scrim layers out of GPU composition.
++   */
++  std::optional<uint32_t> solid_color;
+ };
+ 
+ }  // namespace android
+diff --git a/compositor/SolidFillFb.cpp b/compositor/SolidFillFb.cpp
+new file mode 100644
+index 0000000..dcb0236
+--- /dev/null
++++ b/compositor/SolidFillFb.cpp
+@@ -0,0 +1,60 @@
++/*
++ * Copyright (C) 2026 The Android Open Source Project
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#define LOG_TAG "drmhwc"
++
++#include "SolidFillFb.h"
++
++#include <ui/GraphicBufferAllocator.h>
++
++#include "bufferinfo/BufferInfoGetter.h"
++#include "drm/DrmDevice.h"
++#include "utils/log.h"
++
++namespace android {
++
++auto SolidFillFb::Get(DrmDevice *drm) -> std::shared_ptr<SolidFillFb> {
++  /* One per process is enough: the contents are never read. */
++  static std::weak_ptr<SolidFillFb> cached;
++
++  if (auto existing = cached.lock())
++    return existing;
++
++  auto self = std::shared_ptr<SolidFillFb>(new SolidFillFb());
++
++  uint32_t stride = 0;
++  auto err = GraphicBufferAllocator::get()
++                 .allocate(1, 1, HAL_PIXEL_FORMAT_RGBA_8888, 1,
++                           GRALLOC_USAGE_HW_COMPOSER | GRALLOC_USAGE_HW_RENDER,
++                           &self->handle_, &stride, "drmhwc-solid-fill");
++  if (err != ::android::OK || self->handle_ == nullptr) {
++    ALOGE("Failed to allocate the solid-fill placeholder buffer: %d", err);
++    return {};
++  }
++
++  auto bi = BufferInfoGetter::GetInstance()->GetBoInfo(self->handle_);
++  if (!bi) {
++    ALOGE("Failed to read back the solid-fill placeholder buffer");
++    return {};
++  }
++  self->bi_ = *bi;
++
++  self->fb_ = drm->GetDrmFbImporter().GetOrCreateFbId(&self->bi_);
++  if (!self->fb_) {
++    ALOGE("Failed to import the solid-fill placeholder buffer");
++    return {};
++  }
++
++  cached = self;
++  return self;
++}
++
++SolidFillFb::~SolidFillFb() {
++  if (handle_ != nullptr)
++    GraphicBufferAllocator::get().free(handle_);
++}
++
++}  // namespace android
+diff --git a/compositor/SolidFillFb.h b/compositor/SolidFillFb.h
+new file mode 100644
+index 0000000..af9dddc
+--- /dev/null
++++ b/compositor/SolidFillFb.h
+@@ -0,0 +1,49 @@
++/*
++ * Copyright (C) 2026 The Android Open Source Project
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#pragma once
++
++#include <memory>
++#include <optional>
++
++#include "bufferinfo/BufferInfo.h"
++#include "drm/DrmFbImporter.h"
++
++namespace android {
++
++class DrmDevice;
++
++/*
++ * A single tiny buffer shared by every solid-colour layer.
++ *
++ * MDP5 can paint a plane with a constant colour and fetch nothing from memory,
++ * but the atomic modeset core still refuses a plane that has a CRTC and no
++ * framebuffer ("[PLANE] CRTC set but no FB", drm_atomic_plane_check). So one
++ * 1x1 buffer is allocated once and handed to every such plane; the driver
++ * ignores its contents while SOLID_FILL is set.
++ */
++class SolidFillFb {
++ public:
++  static auto Get(DrmDevice *drm) -> std::shared_ptr<SolidFillFb>;
++
++  auto GetFb() const -> const std::shared_ptr<DrmFbIdHandle> & {
++    return fb_;
++  }
++  auto GetBufferInfo() const -> const BufferInfo & {
++    return bi_;
++  }
++
++  ~SolidFillFb();
++
++ private:
++  SolidFillFb() = default;
++
++  BufferInfo bi_{};
++  std::shared_ptr<DrmFbIdHandle> fb_;
++  buffer_handle_t handle_{};
++};
++
++}  // namespace android
+diff --git a/drm/DrmPlane.cpp b/drm/DrmPlane.cpp
+index 68887dd..402ad30 100644
+--- a/drm/DrmPlane.cpp
++++ b/drm/DrmPlane.cpp
+@@ -106,6 +106,13 @@ int DrmPlane::Init() {
+   }
+ 
+   GetPlaneProperty("IN_FENCE_FD", in_fence_fd_property_, Presence::kOptional);
++  /*
++   * Driver-private on MDP5: lets a plane be painted with a constant
++   * colour instead of scanning out a buffer. Android's dim and scrim
++   * layers are exactly that, and without it each one drags the whole
++   * frame into GPU composition.
++   */
++  GetPlaneProperty("SOLID_FILL", solid_fill_property_, Presence::kOptional);
+ 
+   if (HasNonRgbFormat()) {
+     if (GetPlaneProperty("COLOR_ENCODING", color_encoding_property_,
+@@ -183,6 +190,16 @@ bool DrmPlane::IsValidForLayer(LayerData *layer) {
+     return false;
+   }
+ 
++  /*
++   * A solid-colour layer needs a plane that can paint a constant colour; a
++   * plane without SOLID_FILL would scan out the 1x1 placeholder buffer instead
++   * of the colour, so refuse it here and let another plane take the layer.
++   */
++  if (layer->solid_color && !SupportsSolidFill()) {
++    ALOGV("Solid fill is not supported on plane %d", GetId());
++    return false;
++  }
++
+   uint64_t drm_rotation = ToDrmRotation(layer->pi.transform);
+   if ((drm_rotation & transform_enum_mask_) != drm_rotation) {
+     ALOGV("Transform is not supported on plane %d", GetId());
+@@ -237,6 +254,20 @@ auto DrmPlane::AtomicSetState(drmModeAtomicReq &pset, LayerData &layer,
+     return -EINVAL;
+   }
+ 
++  /*
++   * Solid fill first: with it set the driver paints a constant colour and
++   * never touches the framebuffer, so the 1x1 placeholder attached to the
++   * layer only exists to satisfy the atomic core. It has to be cleared for
++   * ordinary layers too - a plane recycled from a dim layer would otherwise
++   * keep painting the old colour over real content.
++   */
++  if (solid_fill_property_) {
++    const uint64_t fill = layer.solid_color.value_or(0);
++    if (!solid_fill_property_.AtomicSet(pset, fill)) {
++      return -EINVAL;
++    }
++  }
++
+   if (zpos_property_ && !zpos_property_.IsImmutable()) {
+     uint64_t min_zpos = 0;
+ 
+diff --git a/drm/DrmPlane.h b/drm/DrmPlane.h
+index 81306d9..54eee26 100644
+--- a/drm/DrmPlane.h
++++ b/drm/DrmPlane.h
+@@ -46,6 +46,9 @@ class DrmPlane : public PipelineBindable<DrmPlane> {
+   }
+ 
+   bool IsFormatSupported(uint32_t format) const;
++  /* Whether the plane can paint a constant colour with no buffer fetch. */
++  bool SupportsSolidFill() const { return !!solid_fill_property_; }
++  auto &GetSolidFillProperty() const { return solid_fill_property_; }
+   bool HasNonRgbFormat() const;
+ 
+   auto AtomicSetState(drmModeAtomicReq &pset, LayerData &layer, uint32_t zpos,
+@@ -90,6 +93,7 @@ class DrmPlane : public PipelineBindable<DrmPlane> {
+   DrmProperty alpha_property_;
+   DrmProperty blend_property_;
+   DrmProperty in_fence_fd_property_;
++  DrmProperty solid_fill_property_;
+   DrmProperty color_encoding_property_;
+   DrmProperty color_range_property_;
+ 
+diff --git a/drm/VSyncWorker.cpp b/drm/VSyncWorker.cpp
+index defbe42..361cf09 100644
+--- a/drm/VSyncWorker.cpp
++++ b/drm/VSyncWorker.cpp
+@@ -202,6 +202,25 @@ void VSyncWorker::ThreadFn() {
+       vsync_callback = callback_;
+     }
+ 
++    /*
++     * drmWaitVBlank can hand back a vblank we have already reported - it
++     * returns immediately when the requested sequence has already passed.
++     * Forwarding that repeats a timestamp, and SurfaceFlinger drops it with
++     * "Ignoring duplicate VSYNC event", which leaves its vsync predictor
++     * without a sample for that frame and shows up as stuttering animations.
++     * last_timestamp_ was already tracked here but never actually checked.
++     */
++    if (timestamp <= last_timestamp_) {
++      /*
++       * Do NOT just retry: drmWaitVBlank would return the same stale vblank
++       * immediately and spin the thread. Sleep to the next vsync we expect
++       * instead, which both breaks the loop and produces a usable timestamp.
++       */
++      if (SyntheticWaitVBlank(&timestamp) != 0 || timestamp <= last_timestamp_) {
++        continue;
++      }
++    }
++
+     if (vsync_callback) {
+       vsync_callback.value()(timestamp, vsync_period_ns_);
+     }
+diff --git a/hwc2_device/HwcLayer.cpp b/hwc2_device/HwcLayer.cpp
+index d0ff216..58a35ca 100644
+--- a/hwc2_device/HwcLayer.cpp
++++ b/hwc2_device/HwcLayer.cpp
+@@ -18,6 +18,8 @@
+ 
+ #include "HwcLayer.h"
+ 
++#include "compositor/SolidFillFb.h"
++
+ #include "HwcDisplay.h"
+ #include "bufferinfo/BufferInfoGetter.h"
+ #include "utils/log.h"
+@@ -41,6 +43,10 @@ void HwcLayer::SetLayerProperties(const LayerProperties& layer_properties) {
+     layer_data_.acquire_fence = layer_properties.active_slot->fence;
+     buffer_updated_ = true;
+   }
++  if (layer_properties.solid_color) {
++    solid_color_ = layer_properties.solid_color;
++  }
++
+   if (layer_properties.blend_mode) {
+     blend_mode_ = layer_properties.blend_mode.value();
+   }
+@@ -96,7 +102,25 @@ void HwcLayer::ImportFb() {
+ void HwcLayer::PopulateLayerData() {
+   ImportFb();
+ 
++  /*
++   * A SolidColor layer carries no buffer at all. Give it the shared 1x1
++   * placeholder so the rest of the pipeline - and the atomic core, which
++   * insists on a framebuffer - has something to hold, and record the colour
++   * for the plane's SOLID_FILL property. The placeholder is never read.
++   */
++  if (sf_type_ == HWC2::Composition::SolidColor && solid_color_) {
++    auto solid = SolidFillFb::Get(parent_->GetPipe().device);
++    if (solid) {
++      layer_data_.bi = solid->GetBufferInfo();
++      layer_data_.fb = solid->GetFb();
++      layer_data_.solid_color = solid_color_;
++      solid_fill_fb_ = solid;
++    }
++  }
++
+   if (!active_slot_id_.has_value()) {
++    if (layer_data_.fb)
++      return;
+     ALOGE("Internal error: populate layer data called without active slot");
+     return;
+   }
+diff --git a/hwc2_device/HwcLayer.h b/hwc2_device/HwcLayer.h
+index c335d88..2255288 100644
+--- a/hwc2_device/HwcLayer.h
++++ b/hwc2_device/HwcLayer.h
+@@ -57,10 +57,16 @@ class HwcLayer {
+     std::optional<SrcRectInfo> source_crop;
+     std::optional<LayerTransform> transform;
+     std::optional<uint32_t> z_order;
++    /* Colour of a SolidColor layer, ARGB8888. */
++    std::optional<uint32_t> solid_color;
+   };
+ 
+   explicit HwcLayer(HwcDisplay *parent_display) : parent_(parent_display){};
+ 
++  auto GetSolidColor() const {
++    return solid_color_;
++  }
++
+   HWC2::Composition GetSfType() const {
+     return sf_type_;
+   }
+@@ -104,6 +110,11 @@ class HwcLayer {
+   }
+ 
+  private:
++  /* ARGB8888 for SolidColor layers; unset for buffer-backed layers. */
++  std::optional<uint32_t> solid_color_;
++  /* Keeps the shared placeholder buffer alive while this layer uses it. */
++  std::shared_ptr<class SolidFillFb> solid_fill_fb_;
++
+   // sf_type_ stores the initial type given to us by surfaceflinger,
+   // validated_type_ stores the type after running ValidateDisplay
+   HWC2::Composition sf_type_ = HWC2::Composition::Invalid;
+diff --git a/hwc3/ComposerClient.cpp b/hwc3/ComposerClient.cpp
+index c378397..096c315 100644
+--- a/hwc3/ComposerClient.cpp
++++ b/hwc3/ComposerClient.cpp
+@@ -19,6 +19,7 @@
+ 
+ #include "ComposerClient.h"
+ 
++#include <algorithm>
+ #include <cinttypes>
+ #include <cmath>
+ #include <memory>
+@@ -30,7 +31,6 @@
+ #include <aidl/android/hardware/graphics/composer3/Composition.h>
+ #include <aidl/android/hardware/graphics/composer3/DisplayRequest.h>
+ #include <aidl/android/hardware/graphics/composer3/IComposerClient.h>
+-#include <aidl/android/hardware/graphics/composer3/Luts.h>
+ #include <aidl/android/hardware/graphics/composer3/PowerMode.h>
+ #include <aidl/android/hardware/graphics/composer3/PresentOrValidate.h>
+ #include <aidl/android/hardware/graphics/composer3/RenderIntent.h>
+@@ -326,6 +326,20 @@ std::optional<float> AidlToAlpha(const std::optional<PlaneAlpha>& alpha) {
+   return alpha->alpha;
+ }
+ 
++std::optional<uint32_t> AidlToSolidColor(
++    const std::optional<::aidl::android::hardware::graphics::composer3::Color>&
++        color) {
++  if (!color) {
++    return std::nullopt;
++  }
++  /* Float 0..1 per channel in, packed ARGB8888 out. */
++  auto to_u8 = [](float v) -> uint32_t {
++    return static_cast<uint32_t>(std::clamp(v, 0.0F, 1.0F) * 255.0F + 0.5F);
++  };
++  return (to_u8(color->a) << 24) | (to_u8(color->r) << 16) |
++         (to_u8(color->g) << 8) | to_u8(color->b);
++}
++
+ std::optional<uint32_t> AidlToZOrder(const std::optional<ZOrder>& z_order) {
+   if (!z_order) {
+     return std::nullopt;
+@@ -627,6 +641,12 @@ void ComposerClient::DispatchLayerCommand(int64_t display_id,
+   properties.source_crop = AidlToFRect(command.sourceCrop);
+   properties.transform = AidlToLayerTransform(command.transform);
+   properties.z_order = AidlToZOrder(command.z);
++  /*
++   * Colour of a SolidColor layer. This used to be dropped entirely, so
++   * such a layer could never be given to a plane and every dim or scrim
++   * overlay pulled the whole frame into GPU composition.
++   */
++  properties.solid_color = AidlToSolidColor(command.color);
+ 
+   layer->SetLayerProperties(properties);
+ 
+@@ -637,9 +657,6 @@ void ComposerClient::DispatchLayerCommand(int64_t display_id,
+   if (command.sidebandStream) {
+     cmd_result_writer_->AddError(hwc3::Error::kUnsupported);
+   }
+-  if (command.luts) {
+-    cmd_result_writer_->AddError(hwc3::Error::kUnsupported);
+-  }
+   // TODO: Blocking region handling missing.
+   // TODO: Layer surface damage.
+   // TODO: Layer visible region.
+@@ -1437,22 +1454,8 @@ ndk::ScopedAStatus ComposerClient::notifyExpectedPresent(
+   return ToBinderStatus(hwc3::Error::kUnsupported);
+ }
+ 
+-ndk::ScopedAStatus ComposerClient::startHdcpNegotiation(
+-    int64_t /*display*/, const AidlHdcpLevels& /*levels*/) {
+-  return ToBinderStatus(hwc3::Error::kUnsupported);
+-}
+-
+ #endif
+ 
+-ndk::ScopedAStatus ComposerClient::getMaxLayerPictureProfiles(int64_t, int32_t*) {
+-  return ToBinderStatus(hwc3::Error::kUnsupported);
+-}
+-
+-ndk::ScopedAStatus ComposerClient::getLuts(int64_t, const std::vector<Buffer>&,
+-    std::vector<Luts>*) {
+-  return ToBinderStatus(hwc3::Error::kUnsupported);
+-}
+-
+ std::string ComposerClient::Dump() {
+   uint32_t size = 0;
+   hwc_->Dump(&size, nullptr);
+diff --git a/hwc3/ComposerClient.h b/hwc3/ComposerClient.h
+index ed47cd6..25dc0ca 100644
+--- a/hwc3/ComposerClient.h
++++ b/hwc3/ComposerClient.h
+@@ -25,7 +25,6 @@
+ #include "hwc3/Utils.h"
+ #include "utils/Mutex.h"
+ 
+-using AidlHdcpLevels = aidl::android::hardware::drm::HdcpLevels;
+ using AidlPixelFormat = aidl::android::hardware::graphics::common::PixelFormat;
+ using AidlNativeHandle = aidl::android::hardware::common::NativeHandle;
+ 
+@@ -152,16 +151,9 @@ class ComposerClient : public BnComposerClient {
+   ndk::ScopedAStatus notifyExpectedPresent(
+       int64_t display, const ClockMonotonicTimestamp& expected_present_time,
+       int32_t frame_interval_ns) override;
+-  ndk::ScopedAStatus startHdcpNegotiation(int64_t display,
+-      const AidlHdcpLevels& levels) override;
+ 
+ #endif
+ 
+-  ndk::ScopedAStatus getMaxLayerPictureProfiles(
+-      int64_t display, int32_t* maxProfiles) override;
+-  ndk::ScopedAStatus getLuts(int64_t, const std::vector<Buffer>&,
+-                             std::vector<Luts>* out_luts) override;
+-
+  protected:
+   ::ndk::SpAIBinder createBinder() override;
+ 
+diff --git a/hwc3/hwc3-drm.xml b/hwc3/hwc3-drm.xml
+index 7debcf9..911f7f8 100644
+--- a/hwc3/hwc3-drm.xml
++++ b/hwc3/hwc3-drm.xml
+@@ -1,7 +1,7 @@
+ <manifest version="1.0" type="device">
+     <hal format="aidl">
+         <name>android.hardware.graphics.composer3</name>
+-        <version>4</version>
++        <version>3</version>
+         <interface>
+             <name>IComposer</name>
+             <instance>default</instance>

@@ -1,0 +1,8 @@
+# Same reason as mediaextractor.policy: no /dev/ashmem on a mainline kernel, so
+# libcutils probes for memfd, and the probe is memfd_create + fcntl(F_ADD_SEALS).
+# The base policy in the swcodec apex does not allow memfd_create, so the probe
+# fails, the codec falls back to ashmem, and every buffer allocation fails with
+# "Unable to open ashmem device" / C2_NO_MEMORY - no compressed audio decodes.
+memfd_create: 1
+ftruncate: 1
+fallocate: 1

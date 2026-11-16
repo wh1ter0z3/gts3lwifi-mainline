@@ -1,0 +1,35 @@
+// Adapted from SamuraiArtem's android_device_samsung_j5xnlte (codec2-aidl/),
+// Apache-2.0: the V4L2 Codec2 component store behind the AIDL service.
+
+cc_binary {
+    name: "android.hardware.media.c2-service-v4l2",
+
+    defaults: [
+        "libcodec2-hidl-defaults",
+        "libcodec2-aidl-defaults",
+    ],
+    vendor: true,
+    relative_install_path: "hw",
+
+    srcs: ["service.cpp"],
+
+    shared_libs: [
+        "libavservices_minijail",
+        "libbinder_ndk",
+        "libcutils",
+        "liblog",
+        "libutils",
+        "libv4l2_codec2_common",
+        "libv4l2_codec2_components",
+        "libv4l2_codec2_v4l2",
+    ],
+
+    // 64-bit only: the shared codec2 seccomp policy names "mmap", which does
+    // not exist on 32-bit ARM, so a 32-bit build dies with SIGSYS on its first
+    // mmap2 before it can register.
+    compile_multilib: "64",
+
+    required: ["android.hardware.media.c2-default-seccomp_policy"],
+    init_rc: ["android.hardware.media.c2-service-v4l2.rc"],
+    vintf_fragments: ["manifest_media_c2_v4l2.xml"],
+}

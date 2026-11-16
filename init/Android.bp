@@ -1,0 +1,25 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+prebuilt_etc {
+    name: "init.gts3.rc",
+    src: "init.gts3.rc",
+    sub_dir: "init/hw",
+    vendor: true,
+}
+
+prebuilt_etc {
+    name: "init.gts3.usb.rc",
+    src: "init.gts3.usb.rc",
+    sub_dir: "init",
+    vendor: true,
+}
+
+prebuilt_etc {
+    name: "ueventd.gts3.rc",
+    src: "ueventd.gts3.rc",
+    filename: "ueventd.rc",
+    vendor: true,
+}

@@ -1,0 +1,12 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+soong_namespace {
+    // codec2/ builds against the V4L2 Codec2 libraries, which live in their
+    // own namespace.
+    imports: [
+        "external/v4l2_codec2",
+    ],
+}

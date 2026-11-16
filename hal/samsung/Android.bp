@@ -1,0 +1,23 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+// Stand-ins for the Samsung HALs a OneUI system_server waits for without a
+// timeout (display quality, KHDM, DDAR, Bluetooth extension) and for AOSP's
+// thermal HAL that OneUI's apps poll: every call answered with "no exception"
+// and zeros. One process, the interface names on its command line. A plain
+// GSI never asks for any of them.
+
+cc_binary {
+    name: "vendor.samsung.hardware.seh-stubs",
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: ["seh-stubs.c"],
+    cflags: ["-Wall", "-Wextra", "-Werror"],
+    shared_libs: [
+        "libbinder_ndk",
+        "liblog",
+    ],
+    init_rc: ["vendor.samsung.hardware.seh-stubs.rc"],
+    vintf_fragments: ["vendor.samsung.hardware.seh-stubs.xml"],
+}

@@ -1,0 +1,24 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+// IHealth (AIDL v1) from the kernel's /sys/class/power_supply (SM5705 charger
+// and fuel gauge, PD), with Samsung's ISehHealth as its binder extension: a
+// OneUI system calls getExtension() on the health HAL without a null check
+// and takes battery updates only from Samsung's callback. Plain C on
+// libbinder_ndk's platform API (the parcels by hand, no generated code).
+// TODO: v3 (Android 15's level) if VINTF rejects v1 at target-level 202404.
+
+cc_binary {
+    name: "android.hardware.health-service.gts3",
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: ["health-mainline.c"],
+    cflags: ["-Wall", "-Wextra", "-Werror"],
+    shared_libs: [
+        "libbinder_ndk",
+        "liblog",
+    ],
+    init_rc: ["android.hardware.health-service.gts3.rc"],
+    vintf_fragments: ["android.hardware.health-service.gts3.xml"],
+}

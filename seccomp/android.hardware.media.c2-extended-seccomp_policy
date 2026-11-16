@@ -1,0 +1,42 @@
+# Extra syscalls for the V4L2 Codec2 service.
+#
+# The shared codec2 policy (android.hardware.media.c2-default-seccomp_policy)
+# covers the AOSP software codecs, and the V4L2 plugin needs more than that: it
+# runs a libchrome message loop and polls the video device. Without this file
+# the service is killed with SIGSYS the moment a component is created -
+# "blocked syscall: eventfd2" - and the client sees the store die mid
+# transaction, then DEAD_OBJECT.
+#
+# Listed generously on purpose: each missing entry costs a build, a flash and a
+# crash to discover. Unknown names here are only warned about by the policy
+# compiler, not fatal.
+
+eventfd2: 1
+epoll_create1: 1
+epoll_ctl: 1
+epoll_pwait: 1
+epoll_pwait2: 1
+timerfd_create: 1
+timerfd_settime: 1
+timerfd_gettime: 1
+dup3: 1
+fcntl: 1
+sendmsg: 1
+socket: 1
+connect: 1
+getsockopt: 1
+setsockopt: 1
+sched_getaffinity: 1
+sched_setaffinity: 1
+sched_setscheduler: 1
+sched_getscheduler: 1
+rt_sigtimedwait: 1
+clock_nanosleep: 1
+clock_getres: 1
+statx: 1
+inotify_init1: 1
+inotify_add_watch: 1
+inotify_rm_watch: 1
+unlinkat: 1
+mkdirat: 1
+uname: 1

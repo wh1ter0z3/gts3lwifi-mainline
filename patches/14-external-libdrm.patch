@@ -1,0 +1,17 @@
+diff --git a/Android.bp b/Android.bp
+index 2f727d2..5624689 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -25,6 +25,12 @@ package {
+     default_applicable_licenses: ["external_libdrm_license"],
+ }
+ 
++cc_library_headers {
++    name: "libdrm_root_headers",
++    export_include_dirs: ["."],
++    vendor_available: true,
++}
++
+ license {
+     name: "external_libdrm_license",
+     visibility: [":__subpackages__"],

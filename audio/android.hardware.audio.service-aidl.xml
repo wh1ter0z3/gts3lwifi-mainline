@@ -1,0 +1,39 @@
+<!--
+    VINTF declaration for the AIDL audio HAL.
+
+    The HAL's APEX carries this fragment at /apex/.../etc/vintf/, but that copy
+    is not merged into the device manifest here, so servicemanager sees the
+    interfaces as undeclared and refuses every registration the HAL attempts.
+    The HAL then sits there having registered nothing and logging nothing,
+    audioserver blocks on IModule/default forever, init kills and restarts the
+    pair in a loop, and the device never gets past the boot logo. Declaring the
+    same interfaces as a plain vendor manifest fragment is what lets the
+    registration through.
+-->
+<manifest version="8.0" type="device">
+    <hal format="aidl">
+        <name>android.hardware.audio.core</name>
+        <version>2</version>
+        <fqname>IModule/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.audio.core</name>
+        <version>2</version>
+        <fqname>IModule/r_submix</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.audio.core</name>
+        <version>2</version>
+        <fqname>IModule/bluetooth</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.audio.core</name>
+        <version>2</version>
+        <fqname>IConfig/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.audio.effect</name>
+        <version>2</version>
+        <fqname>IFactory/default</fqname>
+    </hal>
+</manifest>

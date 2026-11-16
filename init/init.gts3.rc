@@ -1,0 +1,55 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# Galaxy Tab S3, mainline kernel: the vendor's board init. gsi-init (our boot
+# ramdisk) has already mounted the images, /data, binderfs and the tablet's
+# firmware partitions, and set the boot properties (androidboot.*).
+
+on early-init
+    # No ashmem in mainline: libcutils uses memfd only when this is true (FMQ
+    # for the composer and sensors, codec buffers, ...).
+    setprop sys.use_memfd true
+
+# Some system images (OneUI) set it false in their own init.rc: put it back.
+on property:sys.use_memfd=false
+    setprop sys.use_memfd true
+
+on init
+    # The GPU (render node) and the display controller: Mesa in every app, the
+    # composer, the allocator.
+    chmod 0666 /dev/dri/renderD128
+
+on fs
+    mount_all /vendor/etc/fstab.${ro.hardware} --early
+
+on late-fs
+    mount_all /vendor/etc/fstab.${ro.hardware} --late
+
+on boot
+    # MSM8996: CPUs 0-1 are the low-power pair, 2-3 the fast pair. Background
+    # work stays on the slow pair; AOSP's init.rc only copies all CPUs into
+    # every group and leaves the split to the vendor.
+    write /dev/cpuset/top-app/cpus 0-3
+    write /dev/cpuset/foreground/cpus 0-3
+    write /dev/cpuset/background/cpus 0-1
+    write /dev/cpuset/system-background/cpus 0-1
+    write /dev/cpuset/restricted/cpus 0-1
+
+    # Mixer routes for the speakers and built-in mics (bin/gts3-audio-init.sh)
+    start vendor.gts3-audio-init
+
+on post-fs-data
+    # Wi-Fi's directories: Android 16 GSIs leave them to the vendor, and
+    # without them wpa_supplicant can't write its configuration.
+    mkdir /data/vendor/wifi 0770 wifi wifi
+    mkdir /data/vendor/wifi/wpa 0770 wifi wifi
+    mkdir /data/vendor/wifi/wpa/sockets 0770 wifi wifi
+    mkdir /data/vendor/wifi/hostapd 0770 wifi wifi
+    mkdir /data/vendor/wifi/hostapd/sockets 0770 wifi wifi
+
+service vendor.gts3-audio-init /vendor/bin/gts3-audio-init.sh
+    class core
+    user audio
+    group audio
+    oneshot
+    disabled

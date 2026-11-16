@@ -1,0 +1,35 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# Installed as /vendor/etc/ueventd.rc: the system's ueventd.rc imports it by
+# that name only.
+
+# Kernel modules by modalias (gsi-init's host modprobe covers devices that
+# appear while Android runs).
+modalias_handling enabled
+
+# Firmware: the vendor's own (linux-firmware parts, links into the tablet's
+# partitions under /vendor/firmware/.part).
+firmware_directories /vendor/firmware/
+
+/dev/dri/*              0666    root        graphics
+/dev/dma_heap/*         0666    system      graphics
+/dev/video*             0660    mediacodec  camera
+/dev/media*             0660    system      camera
+/dev/v4l-subdev*        0660    system      camera
+/dev/iio:device*        0660    system      system
+/dev/rfkill             0660    bluetooth   bluetooth
+/dev/snd/*              0660    system      audio
+/dev/uhid               0660    uhid        uhid
+/dev/uinput             0660    system      bluetooth
+/dev/tun                0660    system      vpn
+/dev/watchdog           0600    root        root
+/dev/qseecom            0660    system      system
+
+# Backlight and the touch key LED for the lights HAL (runs as system)
+/sys/class/backlight/*  brightness  0664  system  system
+/sys/class/leds/*       brightness  0664  system  system
+
+# CPU frequency limits for the power HAL
+/sys/devices/system/cpu/cpu*  cpufreq/scaling_min_freq  0664  system  system
+/sys/devices/system/cpu/cpu*  cpufreq/scaling_max_freq  0664  system  system
