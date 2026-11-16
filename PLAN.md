@@ -86,9 +86,25 @@ ways, speakers and mics, Wi-Fi, Bluetooth, battery, backlight, keys.
 - Rewrite health and lights on the generated AIDL code (now possible
   in-tree), at the versions the matrix wants.
 
-### Phase 1: a real screen
-Exit: the T825 tester confirms display, rotation, touch, S-Pen, touch keys,
-keyboard cover, microSD, brightness on the same build.
+### Phase 1: a real Treble layout, then a real screen
+Exit: a tablet repartitioned with a vendor partition boots a GSI flashed to
+its system partition with our vendor flashed to its vendor partition, from a
+standard Android boot image; the T825 tester confirms display, rotation,
+touch, S-Pen, touch keys, keyboard cover, microSD, brightness on it.
+- Partitions (one-time, a TWRP zip with sgdisk; undo = the stock PIT in
+  Odin): `vendor` 1 GB, `system` grown to 8 GB (OneUI 8's system image is
+  6.3 GB; stock system is 4 GB), the rest stays `userdata`.
+- A standard boot image behind lk2nd: Android's first-stage init, fstab
+  (system, vendor, userdata, the firmware partitions read only at
+  `/vendor/firmware_mnt`, zram), modules by ueventd from `/vendor/lib/modules`.
+  gsi-init's jobs move into the vendor; gsi-init stays the developer's RAM
+  boot (no repartition needed) and the test build keeps a USB log shell.
+- The installer copies the firmware files the stock system partition holds
+  (Wi-Fi board data and the like) into the vendor partition before that
+  partition is overwritten: the device's own files, nothing distributed.
+- Our TWRP: awesometic's device tree and kernel plus the vendor partition and
+  system-as-image flashing, so "Install Image" works for `vendor.img` and a
+  GSI's `system.img`; `fastboot flash vendor` from lk2nd as the PC way.
 - The orientation fix (`ro.surface_flinger.primary_display_orientation`), key
   layouts, vold.
 
@@ -120,9 +136,8 @@ shipped HAL; soak tests passed on both models; reproducible build.
 - Vendor sepolicy for all of the above; `gsi-init` stops locking permissive.
 - Release A: vendor + boot images + installers, built on GitHub Actions
   from a tag, SHA256SUMS.
-- Product B: `lineage_gts3` on LineageOS 24, recovery, OTA zip; the
-  partition layout for it (system partition for the ROM's system, the store
-  on userdata as now for GSIs) decided then.
+- Product B: `lineage_gts3` on LineageOS 24, recovery, OTA zip, on the
+  phase 1 layout (system + vendor partitions).
 
 ## 4. Where it builds
 
