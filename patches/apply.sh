@@ -23,6 +23,7 @@ while read -r p dir; do
 	fi
 done <<'LIST'
 03-hardware-interfaces-audio.patch hardware/interfaces
+04-hardware-interfaces-bluetooth.patch hardware/interfaces
 05-external-minigbm.patch external/minigbm
 09-system-media.patch system/media
 14-external-libdrm.patch external/libdrm
