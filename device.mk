@@ -206,6 +206,10 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PACKAGES += \
     android.hardware.power-service.example
 
+# No HIDL CAS service (it can't register here and crash-loops): dead-hidl/
+PRODUCT_PACKAGES += \
+    gts3-dead-hidl-overrides
+
 # --- Features of the hardware ---
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/tablet_core_hardware.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/tablet_core_hardware.xml \

@@ -7,7 +7,7 @@ Parts of this tree are adapted from SamuraiArtem's Samsung Galaxy J5 2016
   https://github.com/SamuraiArtem/android_device_samsung_j5xnlte
   https://github.com/SamuraiArtem/android_patches_j5xnlte
   - codec2/ (the AIDL Codec2 V4L2 service)
-  - seccomp/, wifi/, linker.config.json
+  - seccomp/, wifi/, linker.config.json, dead-hidl/
   - audio/ (the policy layout)
   - init/init.gts3.usb.rc (the configfs USB gadget)
   - the GSI compatibility settings in BoardConfig.mk and device.mk

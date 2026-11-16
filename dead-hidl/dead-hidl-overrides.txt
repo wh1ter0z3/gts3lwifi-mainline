@@ -1,0 +1,2 @@
+Marker module: installing it keeps android.hardware.cas@1.2-service out of
+the vendor image (see Android.mk next to this file).

@@ -22,7 +22,7 @@
     </mixPort>
     <mixPort name="primary input" role="sink">
       <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
-               samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_MONO,AUDIO_CHANNEL_IN_STEREO"/>
+               samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
     </mixPort>
   </mixPorts>
   <devicePorts>
@@ -32,7 +32,7 @@
     </devicePort>
     <devicePort tagName="Built-In Mic" type="AUDIO_DEVICE_IN_BUILTIN_MIC" role="source" address="CARD_0_DEV_2">
       <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
-               samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_MONO,AUDIO_CHANNEL_IN_STEREO"/>
+               samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
     </devicePort>
   </devicePorts>
   <routes>
