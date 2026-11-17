@@ -223,9 +223,21 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.touchscreen.multitouch.jazzhand.xml \
     frameworks/native/data/etc/android.software.midi.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.midi.xml
 
+# --- Sensors: the SLPI's accelerometer, gyroscope, magnetometer and light
+# sensor (IIO devices of the kernel's qcom_smgr) through AOSP's AIDL
+# multihal and our IIO sub-HAL (hal/sensors/) ---
+PRODUCT_PACKAGES += \
+    android.hardware.sensors-service.multihal \
+    android.hardware.sensors@2.1-gts3-iio-subhal
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/hal/sensors/hals.conf:$(TARGET_COPY_OUT_VENDOR)/etc/sensors/hals.conf \
+    frameworks/native/data/etc/android.hardware.sensor.accelerometer.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.accelerometer.xml \
+    frameworks/native/data/etc/android.hardware.sensor.gyroscope.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.gyroscope.xml \
+    frameworks/native/data/etc/android.hardware.sensor.compass.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.compass.xml \
+    frameworks/native/data/etc/android.hardware.sensor.light.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.light.xml
+
 # Still to come (each its own step, tested on the tablet):
-#  - sensors: an AIDL HAL over IIO (accelerometer, gyroscope, magnetometer,
-#    light from the SLPI driver; hall sensor);
+#  - sensors: the hall sensor (cover), once the kernel has it;
 #  - audio: headphone/headset routing on jack events; Bluetooth audio;
 #  - camera (libcamera), GNSS, Vulkan (turnip on a5xx), fingerprint;
 #  - kernel modules and firmware links in this build, not after it.

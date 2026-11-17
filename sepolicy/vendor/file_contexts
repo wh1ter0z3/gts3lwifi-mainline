@@ -21,3 +21,6 @@
 /vendor/lib(64)?/egl/lib(EGL|GLESv1_CM|GLESv2)_mesa\.so                      u:object_r:same_process_hal_file:s0
 /vendor/lib(64)?/hw/mapper\.minigbm\.so                                      u:object_r:same_process_hal_file:s0
 /vendor/lib(64)?/hw/gralloc\.minigbm_msm\.so                                 u:object_r:same_process_hal_file:s0
+
+# The SLPI's sensors (qcom_smgr IIO devices, under the remoteproc's QRTR node)
+/sys/devices/platform/soc@0/1c00000\.remoteproc/remoteproc/remoteproc[0-9]+/.+/iio:device[0-9]+(/.*)?  u:object_r:sysfs_gts3_iio:s0

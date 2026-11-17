@@ -1,0 +1,9 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# hal/sensors: the multihal with our IIO sub-HAL reads the SLPI's sensors.
+# From device/google/trout (AOSP's IIO sub-HAL).
+
+r_dir_file(hal_sensors_default, sysfs_gts3_iio)
+allow hal_sensors_default sysfs_gts3_iio:file w_file_perms;
+allow hal_sensors_default iio_device:chr_file r_file_perms;
