@@ -1,7 +1,7 @@
-From 55a5fc489e999083bfb68b3081f709999835aab6 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Fri, 30 Oct 2026 14:01:55 -0600
-Subject: [PATCH 13/14] ipa: simple: Add autofocus algorithm
+Subject: [PATCH] ipa: simple: Add autofocus algorithm
 
 Add an Af algorithm to the software ISP IPA, built on the libipa
 AfContrast algorithm and the focus statistics of the software ISP.
@@ -22,21 +22,24 @@ uncalibrated tuning file.
 
 Signed-off-by: Jayden Milne <linux@jayd.ml>
 Assisted-by: Claude:claude-opus-5-5
----
- src/ipa/simple/algorithms/af.cpp      | 160 ++++++++++++++++++++++++++
- src/ipa/simple/algorithms/af.h        |  49 ++++++++
- src/ipa/simple/algorithms/meson.build |   1 +
- src/ipa/simple/data/uncalibrated.yaml |   3 +
- src/ipa/simple/ipa_context.h          |   2 +
- 5 files changed, 215 insertions(+)
- create mode 100644 src/ipa/simple/algorithms/af.cpp
- create mode 100644 src/ipa/simple/algorithms/af.h
 
-diff --git a/src/ipa/simple/algorithms/af.cpp b/src/ipa/simple/algorithms/af.cpp
+[psigod: ported to libcamera 0.8.0: src/ipa/softisp, namespace
+ ipa::softisp, next to the AWB, CCM and AGC frame contexts]
+---
+ src/ipa/softisp/algorithms/af.cpp      | 160 +++++++++++++++++++++++++
+ src/ipa/softisp/algorithms/af.h        |  49 ++++++++
+ src/ipa/softisp/algorithms/meson.build |   1 +
+ src/ipa/softisp/data/uncalibrated.yaml |   3 +
+ src/ipa/softisp/ipa_context.h          |   2 +
+ 5 files changed, 215 insertions(+)
+ create mode 100644 src/ipa/softisp/algorithms/af.cpp
+ create mode 100644 src/ipa/softisp/algorithms/af.h
+
+diff --git a/src/ipa/softisp/algorithms/af.cpp b/src/ipa/softisp/algorithms/af.cpp
 new file mode 100644
-index 00000000..59956ee0
+index 00000000..f81ae1aa
 --- /dev/null
-+++ b/src/ipa/simple/algorithms/af.cpp
++++ b/src/ipa/softisp/algorithms/af.cpp
 @@ -0,0 +1,160 @@
 +/* SPDX-License-Identifier: LGPL-2.1-or-later */
 +/*
@@ -60,7 +63,7 @@ index 00000000..59956ee0
 +
 +LOG_DEFINE_CATEGORY(IPASoftAf)
 +
-+namespace ipa::soft::algorithms {
++namespace ipa::softisp::algorithms {
 +
 +/*
 + * Mean level above black, on an 8-bit scale, below which the image is too
@@ -195,14 +198,14 @@ index 00000000..59956ee0
 +
 +REGISTER_IPA_ALGORITHM(Af, "Af")
 +
-+} /* namespace ipa::soft::algorithms */
++} /* namespace ipa::softisp::algorithms */
 +
 +} /* namespace libcamera */
-diff --git a/src/ipa/simple/algorithms/af.h b/src/ipa/simple/algorithms/af.h
+diff --git a/src/ipa/softisp/algorithms/af.h b/src/ipa/softisp/algorithms/af.h
 new file mode 100644
-index 00000000..fb5ceaec
+index 00000000..61634051
 --- /dev/null
-+++ b/src/ipa/simple/algorithms/af.h
++++ b/src/ipa/softisp/algorithms/af.h
 @@ -0,0 +1,49 @@
 +/* SPDX-License-Identifier: LGPL-2.1-or-later */
 +/*
@@ -221,7 +224,7 @@ index 00000000..fb5ceaec
 +
 +namespace libcamera {
 +
-+namespace ipa::soft::algorithms {
++namespace ipa::softisp::algorithms {
 +
 +class Af : public Algorithm
 +{
@@ -250,25 +253,25 @@ index 00000000..fb5ceaec
 +	std::array<AfContrast::RegionStats, kRegions> regions_;
 +};
 +
-+} /* namespace ipa::soft::algorithms */
++} /* namespace ipa::softisp::algorithms */
 +
 +} /* namespace libcamera */
-diff --git a/src/ipa/simple/algorithms/meson.build b/src/ipa/simple/algorithms/meson.build
-index 73c63722..1cd58d5e 100644
---- a/src/ipa/simple/algorithms/meson.build
-+++ b/src/ipa/simple/algorithms/meson.build
+diff --git a/src/ipa/softisp/algorithms/meson.build b/src/ipa/softisp/algorithms/meson.build
+index d98f4b1f..7d107711 100644
+--- a/src/ipa/softisp/algorithms/meson.build
++++ b/src/ipa/softisp/algorithms/meson.build
 @@ -2,6 +2,7 @@
  
- soft_simple_ipa_algorithms = files([
+ softisp_ipa_algorithms = files([
      'adjust.cpp',
 +    'af.cpp',
      'awb.cpp',
      'agc.cpp',
      'blc.cpp',
-diff --git a/src/ipa/simple/data/uncalibrated.yaml b/src/ipa/simple/data/uncalibrated.yaml
+diff --git a/src/ipa/softisp/data/uncalibrated.yaml b/src/ipa/softisp/data/uncalibrated.yaml
 index fc90ca52..6c5c2822 100644
---- a/src/ipa/simple/data/uncalibrated.yaml
-+++ b/src/ipa/simple/data/uncalibrated.yaml
+--- a/src/ipa/softisp/data/uncalibrated.yaml
++++ b/src/ipa/softisp/data/uncalibrated.yaml
 @@ -16,4 +16,7 @@ algorithms:
    #                0, 0, 1]
    - Adjust:
@@ -277,26 +280,26 @@ index fc90ca52..6c5c2822 100644
 +  # map, lens positions in dioptres are uncalibrated.
 +  - Af:
  ...
-diff --git a/src/ipa/simple/ipa_context.h b/src/ipa/simple/ipa_context.h
-index a24c0ce7..29801170 100644
---- a/src/ipa/simple/ipa_context.h
-+++ b/src/ipa/simple/ipa_context.h
-@@ -16,6 +16,7 @@
+diff --git a/src/ipa/softisp/ipa_context.h b/src/ipa/softisp/ipa_context.h
+index 614298d4..532a7bc4 100644
+--- a/src/ipa/softisp/ipa_context.h
++++ b/src/ipa/softisp/ipa_context.h
+@@ -17,6 +17,7 @@
  #include "libcamera/internal/matrix.h"
  #include "libcamera/internal/vector.h"
  
 +#include <libipa/af_contrast.h>
- #include <libipa/fc_queue.h>
- 
- #include "core_ipa_interface.h"
-@@ -68,6 +69,7 @@ struct IPAActiveState {
+ #include <libipa/agc.h>
+ #include <libipa/awb.h>
+ #include <libipa/camera_sensor_helper.h>
+@@ -65,6 +66,7 @@ struct IPAActiveState {
  };
  
  struct IPAFrameContext : public FrameContext {
 +	ipa::af::FrameContext af;
- 	Matrix<float, 3, 3> ccm;
- 
- 	struct {
+ 	ipa::awb::FrameContext awb;
+ 	ipa::ccm::FrameContext ccm;
+ 	ipa::agc::FrameContext agc;
 -- 
-2.56.0
+2.34.1
 

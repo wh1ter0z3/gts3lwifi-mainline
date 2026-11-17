@@ -1,8 +1,8 @@
-From c7d028152b9e48b747012b20c2149756fe372134 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Fri, 30 Oct 2026 13:50:32 -0600
-Subject: [PATCH 10/14] libcamera: software_isp: Pass focus lens controls to
- and from the IPA
+Subject: [PATCH] libcamera: software_isp: Pass focus lens controls to and from
+ the IPA
 
 To drive a focus lens, the software ISP IPA needs to know the lens
 control ranges and to send lens positions back to the pipeline handler.
@@ -24,18 +24,21 @@ start emitter.
 
 Signed-off-by: Jayden Milne <linux@jayd.ml>
 Assisted-by: Claude:claude-opus-5-5
+
+[psigod: ported to libcamera 0.8.0 (softisp IPA: init returns LSC and
+ size limits, paramsComputed(frame), controls in the IPA context)]
 ---
  .../internal/software_isp/software_isp.h      |  7 ++++---
- include/libcamera/ipa/soft.mojom              |  7 +++++--
- src/ipa/simple/ipa_context.cpp                | 15 ++++++++++++++
- src/ipa/simple/ipa_context.h                  |  5 +++++
- src/ipa/simple/soft_simple.cpp                | 15 +++++++++++++-
+ include/libcamera/ipa/softisp.mojom           |  7 +++++--
+ src/ipa/softisp/ipa_context.cpp               | 15 ++++++++++++++
+ src/ipa/softisp/ipa_context.h                 |  5 +++++
+ src/ipa/softisp/softisp.cpp                   | 17 +++++++++++++++-
  src/libcamera/pipeline/simple/simple.cpp      | 20 +++++++++++++++++--
  src/libcamera/software_isp/software_isp.cpp   | 19 +++++++++++++-----
- 7 files changed, 75 insertions(+), 13 deletions(-)
+ 7 files changed, 77 insertions(+), 13 deletions(-)
 
 diff --git a/include/libcamera/internal/software_isp/software_isp.h b/include/libcamera/internal/software_isp/software_isp.h
-index 4f72dce9..79aef5a4 100644
+index 12e70ec1..09f7b4aa 100644
 --- a/include/libcamera/internal/software_isp/software_isp.h
 +++ b/include/libcamera/internal/software_isp/software_isp.h
 @@ -47,7 +47,7 @@ LOG_DECLARE_CATEGORY(SoftwareIsp)
@@ -47,7 +50,7 @@ index 4f72dce9..79aef5a4 100644
  		    ControlInfoMap *ipaControls);
  	~SoftwareIsp();
  
-@@ -86,11 +86,12 @@ public:
+@@ -87,11 +87,12 @@ public:
  	Signal<FrameBuffer *> outputBufferReady;
  	Signal<uint32_t, uint32_t> ispStatsReady;
  	Signal<uint32_t, const ControlList &> metadataReady;
@@ -55,17 +58,17 @@ index 4f72dce9..79aef5a4 100644
 +	Signal<const ControlList &, const ControlList &> setSensorControls;
  
  private:
- 	void saveIspParams();
+ 	void saveIspParams(uint32_t frame);
 -	void setSensorCtrls(const ControlList &sensorControls);
 +	void setSensorCtrls(const ControlList &sensorControls,
 +			    const ControlList &lensControls);
  	void statsReady(uint32_t frame, uint32_t bufferId);
  	void inputReady(FrameBuffer *input);
  	void outputReady(FrameBuffer *output);
-diff --git a/include/libcamera/ipa/soft.mojom b/include/libcamera/ipa/soft.mojom
-index 77328c5f..a1676d75 100644
---- a/include/libcamera/ipa/soft.mojom
-+++ b/include/libcamera/ipa/soft.mojom
+diff --git a/include/libcamera/ipa/softisp.mojom b/include/libcamera/ipa/softisp.mojom
+index 52f60d90..7e37e868 100644
+--- a/include/libcamera/ipa/softisp.mojom
++++ b/include/libcamera/ipa/softisp.mojom
 @@ -10,6 +10,7 @@ import "include/libcamera/ipa/core.mojom";
  
  struct IPAConfigInfo {
@@ -73,32 +76,32 @@ index 77328c5f..a1676d75 100644
 +	libcamera.ControlInfoMap lensControls;
  };
  
- interface IPASoftInterface {
-@@ -17,7 +18,8 @@ interface IPASoftInterface {
+ interface IPASoftIspInterface {
+@@ -17,7 +18,8 @@ interface IPASoftIspInterface {
  	     libcamera.SharedFD fdStats,
  	     libcamera.SharedFD fdParams,
  	     libcamera.IPACameraSensorInfo sensorInfo,
 -	     libcamera.ControlInfoMap sensorControls)
 +	     libcamera.ControlInfoMap sensorControls,
 +	     libcamera.ControlInfoMap lensControls)
- 		=> (int32 ret, libcamera.ControlInfoMap ipaControls, bool ccmEnabled);
- 	start() => (int32 ret);
- 	stop();
-@@ -32,7 +34,8 @@ interface IPASoftInterface {
+ 		=> (int32 ret,
+ 		    libcamera.ControlInfoMap ipaControls,
+ 		    bool ccmEnabled, bool lscEnabled,
+@@ -35,7 +37,8 @@ interface IPASoftIspInterface {
  };
  
- interface IPASoftEventInterface {
+ interface IPASoftIspEventInterface {
 -	setSensorControls(libcamera.ControlList sensorControls);
 +	setSensorControls(libcamera.ControlList sensorControls,
 +			  libcamera.ControlList lensControls);
- 	setIspParams();
+ 	paramsComputed(uint32 frame);
  	metadataReady(uint32 frame, libcamera.ControlList metadata);
  };
-diff --git a/src/ipa/simple/ipa_context.cpp b/src/ipa/simple/ipa_context.cpp
-index 3f94bbeb..9c7a5ccf 100644
---- a/src/ipa/simple/ipa_context.cpp
-+++ b/src/ipa/simple/ipa_context.cpp
-@@ -48,6 +48,10 @@ namespace libcamera::ipa::soft {
+diff --git a/src/ipa/softisp/ipa_context.cpp b/src/ipa/softisp/ipa_context.cpp
+index 0c7cbbf7..35410c1a 100644
+--- a/src/ipa/softisp/ipa_context.cpp
++++ b/src/ipa/softisp/ipa_context.cpp
+@@ -48,6 +48,10 @@ namespace libcamera::ipa::softisp {
   *
   * \var IPAContext::activeState
   * \brief The current state of IPA algorithms
@@ -109,7 +112,7 @@ index 3f94bbeb..9c7a5ccf 100644
   */
  
  /**
-@@ -99,4 +103,15 @@ namespace libcamera::ipa::soft {
+@@ -99,4 +103,15 @@ namespace libcamera::ipa::softisp {
   * \brief Black level used for the gamma table computation
   */
  
@@ -124,15 +127,15 @@ index 3f94bbeb..9c7a5ccf 100644
 + * once the lens control has been sent to the pipeline handler.
 + */
 +
- } /* namespace libcamera::ipa::soft */
-diff --git a/src/ipa/simple/ipa_context.h b/src/ipa/simple/ipa_context.h
-index 8ccfacb4..a24c0ce7 100644
---- a/src/ipa/simple/ipa_context.h
-+++ b/src/ipa/simple/ipa_context.h
-@@ -61,6 +61,10 @@ struct IPAActiveState {
- 		std::optional<float> contrast;
- 		std::optional<float> saturation;
+ } /* namespace libcamera::ipa::softisp */
+diff --git a/src/ipa/softisp/ipa_context.h b/src/ipa/softisp/ipa_context.h
+index 1c5db17e..614298d4 100644
+--- a/src/ipa/softisp/ipa_context.h
++++ b/src/ipa/softisp/ipa_context.h
+@@ -58,6 +58,10 @@ struct IPAActiveState {
  	} knobs;
+ 
+ 	ipa::lsc::ActiveState lsc;
 +
 +	struct {
 +		std::optional<int32_t> focusPosition;
@@ -140,63 +143,65 @@ index 8ccfacb4..a24c0ce7 100644
  };
  
  struct IPAFrameContext : public FrameContext {
-@@ -85,6 +89,7 @@ struct IPAContext {
- 	}
+@@ -84,6 +88,7 @@ struct IPAContext {
  
  	IPACameraSensorInfo sensorInfo;
+ 	ControlInfoMap sensorControls;
 +	ControlInfoMap lensControls;
+ 	std::unique_ptr<CameraSensorHelper> camHelper;
  	IPASessionConfiguration configuration;
  	IPAActiveState activeState;
- 	FCQueue<IPAFrameContext> frameContexts;
-diff --git a/src/ipa/simple/soft_simple.cpp b/src/ipa/simple/soft_simple.cpp
-index 8bffd2a4..db21618c 100644
---- a/src/ipa/simple/soft_simple.cpp
-+++ b/src/ipa/simple/soft_simple.cpp
-@@ -7,6 +7,7 @@
+diff --git a/src/ipa/softisp/softisp.cpp b/src/ipa/softisp/softisp.cpp
+index a166176b..bb872e47 100644
+--- a/src/ipa/softisp/softisp.cpp
++++ b/src/ipa/softisp/softisp.cpp
+@@ -6,6 +6,8 @@
+  */
  
  #include <chrono>
- #include <cmath>
++#include <cmath>
 +#include <optional>
  #include <stdint.h>
  #include <sys/mman.h>
  
-@@ -57,6 +58,7 @@ public:
+@@ -57,6 +59,7 @@ public:
  		 const SharedFD &fdParams,
  		 const IPACameraSensorInfo &sensorInfo,
  		 const ControlInfoMap &sensorControls,
 +		 const ControlInfoMap &lensControls,
  		 ControlInfoMap *ipaControls,
- 		 bool *ccmEnabled) override;
- 	int configure(const IPAConfigInfo &configInfo) override;
-@@ -97,6 +99,7 @@ int IPASoftSimple::init(const IPASettings &settings,
- 			const SharedFD &fdParams,
- 			const IPACameraSensorInfo &sensorInfo,
- 			const ControlInfoMap &sensorControls,
-+			const ControlInfoMap &lensControls,
- 			ControlInfoMap *ipaControls,
- 			bool *ccmEnabled)
- {
-@@ -108,6 +111,7 @@ int IPASoftSimple::init(const IPASettings &settings,
- 	}
+ 		 bool *ccmEnabled,
+ 		 bool *lscEnabled,
+@@ -98,6 +101,7 @@ int IPASoftIsp::init(const IPASettings &settings,
+ 		     const SharedFD &fdParams,
+ 		     const IPACameraSensorInfo &sensorInfo,
+ 		     const ControlInfoMap &sensorControls,
++		     const ControlInfoMap &lensControls,
+ 		     ControlInfoMap *ipaControls,
+ 		     bool *ccmEnabled,
+ 		     bool *lscEnabled,
+@@ -112,6 +116,7 @@ int IPASoftIsp::init(const IPASettings &settings,
  
  	context_.sensorInfo = sensorInfo;
+ 	context_.sensorControls = sensorControls;
 +	context_.lensControls = lensControls;
  
  	/* Load the tuning data file */
  	File file(settings.configurationFile);
-@@ -203,6 +207,7 @@ int IPASoftSimple::init(const IPASettings &settings,
- int IPASoftSimple::configure(const IPAConfigInfo &configInfo)
+@@ -210,6 +215,7 @@ int IPASoftIsp::init(const IPASettings &settings,
+ int IPASoftIsp::configure(const IPAConfigInfo &configInfo, ControlInfoMap *ipaControls)
  {
- 	sensorInfoMap_ = configInfo.sensorControls;
+ 	context_.sensorControls = configInfo.sensorControls;
 +	context_.lensControls = configInfo.lensControls;
  
- 	const ControlInfo &exposureInfo = sensorInfoMap_.find(V4L2_CID_EXPOSURE)->second;
- 	const ControlInfo &gainInfo = sensorInfoMap_.find(V4L2_CID_ANALOGUE_GAIN)->second;
-@@ -337,7 +342,15 @@ void IPASoftSimple::processStats(const uint32_t frame,
- 	ctrls.set(V4L2_CID_ANALOGUE_GAIN,
- 		  static_cast<int32_t>(camHelper_ ? camHelper_->gainCode(againNew) : againNew));
- 
+ 	/* Clear the IPA context before the streaming session. */
+ 	context_.configuration = {};
+@@ -274,7 +280,16 @@ void IPASoftIsp::processStats(const uint32_t frame,
+ 	ControlList ctrls(context_.sensorControls);
+ 	agc::prepareControls(ctrls, context_.camHelper.get(),
+ 			     frameContext.agc.exposure, frameContext.agc.gain);
 -	setSensorControls.emit(ctrls);
++
 +	ControlList lensCtrls;
 +	std::optional<int32_t> &focusPosition = context_.activeState.lens.focusPosition;
 +	if (focusPosition) {
@@ -208,12 +213,12 @@ index 8bffd2a4..db21618c 100644
 +	setSensorControls.emit(ctrls, lensCtrls);
  }
  
- std::string IPASoftSimple::logPrefix() const
+ std::string IPASoftIsp::logPrefix() const
 diff --git a/src/libcamera/pipeline/simple/simple.cpp b/src/libcamera/pipeline/simple/simple.cpp
-index e26f438d..41d7e746 100644
+index 35e06649..5c03eade 100644
 --- a/src/libcamera/pipeline/simple/simple.cpp
 +++ b/src/libcamera/pipeline/simple/simple.cpp
-@@ -33,6 +33,7 @@
+@@ -34,6 +34,7 @@
  #include <libcamera/stream.h>
  
  #include "libcamera/internal/camera.h"
@@ -221,7 +226,7 @@ index e26f438d..41d7e746 100644
  #include "libcamera/internal/camera_manager.h"
  #include "libcamera/internal/camera_sensor.h"
  #include "libcamera/internal/camera_sensor_properties.h"
-@@ -371,7 +372,8 @@ private:
+@@ -374,7 +375,8 @@ private:
  
  	void ispStatsReady(uint32_t frame, uint32_t bufferId);
  	void metadataReady(uint32_t frame, const ControlList &metadata);
@@ -231,7 +236,7 @@ index e26f438d..41d7e746 100644
  };
  
  class SimpleCameraConfiguration : public CameraConfiguration
-@@ -1041,8 +1043,20 @@ void SimpleCameraData::metadataReady(uint32_t frame, const ControlList &metadata
+@@ -1046,8 +1048,20 @@ void SimpleCameraData::metadataReady(uint32_t frame, const ControlList &metadata
  	tryCompleteRequest(info->request);
  }
  
@@ -253,17 +258,17 @@ index e26f438d..41d7e746 100644
  	delayedCtrls_->push(sensorControls);
  	/*
  	 * Directly apply controls now if there is no frameStart signal.
-@@ -1605,6 +1619,8 @@ int SimplePipelineHandler::configure(Camera *camera, CameraConfiguration *c)
+@@ -1652,6 +1666,8 @@ int SimplePipelineHandler::configure(Camera *camera, CameraConfiguration *c)
  	} else {
- 		ipa::soft::IPAConfigInfo configInfo;
+ 		ipa::softisp::IPAConfigInfo configInfo;
  		configInfo.sensorControls = data->sensor_->controls();
 +		if (CameraLens *lens = data->sensor_->focusLens())
 +			configInfo.lensControls = lens->controls();
- 		return data->swIsp_->configure(inputCfg, outputCfgs, configInfo);
+ 		return data->swIsp_->configure(inputCfg, outputCfgs, configInfo, &data->controlInfo_);
  	}
  }
 diff --git a/src/libcamera/software_isp/software_isp.cpp b/src/libcamera/software_isp/software_isp.cpp
-index 74973d9e..76219774 100644
+index 71b95a10..41b79585 100644
 --- a/src/libcamera/software_isp/software_isp.cpp
 +++ b/src/libcamera/software_isp/software_isp.cpp
 @@ -24,6 +24,7 @@
@@ -289,9 +294,9 @@ index 74973d9e..76219774 100644
   */
  
  /**
-@@ -80,7 +85,7 @@ LOG_DEFINE_CATEGORY(SoftwareIsp)
+@@ -79,7 +84,7 @@ LOG_DEFINE_CATEGORY(SoftwareIsp)
+  * \param[in] sensor Pointer to the CameraSensor instance owned by the pipeline handler
   * \param[out] ipaControls The IPA controls to update
-  * handler
   */
 -SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
 +SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, CameraSensor *sensor,
@@ -311,9 +316,9 @@ index 74973d9e..76219774 100644
  			 sensor->controls(),
 +			 lens ? lens->controls() : ControlInfoMap{},
  			 ipaControls,
- 			 &ccmEnabled_);
- 	if (ret) {
-@@ -445,9 +453,10 @@ void SoftwareIsp::saveIspParams()
+ 			 &ccmEnabled_,
+ 			 &lscEnabled_,
+@@ -456,9 +464,10 @@ void SoftwareIsp::saveIspParams([[maybe_unused]] uint32_t frame)
  	debayerParams_ = *sharedParams_;
  }
  
@@ -327,5 +332,5 @@ index 74973d9e..76219774 100644
  
  void SoftwareIsp::statsReady(uint32_t frame, uint32_t bufferId)
 -- 
-2.56.0
+2.34.1
 

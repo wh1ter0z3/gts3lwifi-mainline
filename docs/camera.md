@@ -27,9 +27,10 @@ clients such as Firefox and Chromium turned the picture a quarter turn.
 
 ## libcamera
 
-postmarketOS's libcamera (temp/libcamera, 0.7.2) lists both cameras, but
+postmarketOS's libcamera (temp/libcamera, 0.8.0) lists both cameras, but
 has no autofocus and no sensor helper for the S5K5E3. `pmaports/libcamera/`
-is that package plus our series (patches 0007-0019, pkgrel 108):
+is that package plus our series (patches 0003-0015, pkgrel 100; ported
+from 0.7.2, where the software ISP's IPA was still `simple`):
 
 - S5K5E3 sensor helper and properties;
 - focus statistics from the software ISP, lens controls passed to the IPA,

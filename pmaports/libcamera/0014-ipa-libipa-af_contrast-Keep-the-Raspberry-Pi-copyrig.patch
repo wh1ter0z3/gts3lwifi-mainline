@@ -1,8 +1,8 @@
-From eb96c67fefdd9e7e7d8ba88542fa98e849baf79b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Sat, 31 Oct 2026 16:38:10 -0600
-Subject: [PATCH 18/18] ipa: libipa: af_contrast: Keep the Raspberry Pi
- copyright and licence
+Subject: [PATCH] ipa: libipa: af_contrast: Keep the Raspberry Pi copyright and
+ licence
 
 AfContrast is a port of the contrast detection part of the Raspberry Pi
 autofocus algorithm, which is BSD-2-Clause.
@@ -38,5 +38,5 @@ index 371edef5..fcb94969 100644
   *
   * Contrast detection autofocus algorithm
 -- 
-2.56.0
+2.34.1
 

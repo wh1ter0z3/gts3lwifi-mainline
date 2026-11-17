@@ -1,7 +1,7 @@
-From 1d48b0c83e370979817ffb7e5505afbb7c7c1d47 Mon Sep 17 00:00:00 2001
+From e3be587eda57ea076145721ee53b9923e216a179 Mon Sep 17 00:00:00 2001
 From: Frederic Laing <dev@fredfunk.tech>
 Date: Tue, 25 Aug 2026 18:16:06 +0000
-Subject: [PATCH 6/6] libcamera: Add quad-Bayer CFA layout support
+Subject: [PATCH 2/2] libcamera: Add quad-Bayer CFA layout support
 
 Quad-Bayer sensors arrange pixels in 2x2 same-colour cells. Treating
 the IMX371 full-resolution stream as a conventional Bayer pattern
@@ -320,10 +320,10 @@ index 551870921862..6fe60e6a0bb2 100644
  	std::vector<SwIspStats> stats_;
  	SharedMemObject<SwIspStats> sharedStats_;
 diff --git a/src/ipa/rpi/cam_helper/cam_helper.cpp b/src/ipa/rpi/cam_helper/cam_helper.cpp
-index dfdcd167839a..6c7cf3a29e30 100644
+index a480de0043c1..846fbb5baa7a 100644
 --- a/src/ipa/rpi/cam_helper/cam_helper.cpp
 +++ b/src/ipa/rpi/cam_helper/cam_helper.cpp
-@@ -206,8 +206,12 @@ unsigned int CamHelper::mistrustFramesModeSwitch() const
+@@ -206,8 +206,12 @@ unsigned int CamHelper::mistrustMetadataModeSwitch() const
  
  unsigned int CamHelper::getMinDebinFactor() const
  {
@@ -337,13 +337,13 @@ index dfdcd167839a..6c7cf3a29e30 100644
 +	cfaLayout_ = layout;
  }
  
- void CamHelper::parseEmbeddedData(Span<const uint8_t> buffer,
+ void CamHelper::parseEmbeddedData(std::span<const uint8_t> buffer,
 diff --git a/src/ipa/rpi/cam_helper/cam_helper.h b/src/ipa/rpi/cam_helper/cam_helper.h
-index bd101895f23e..6dac8c7a7b62 100644
+index bbaf57a1f268..eb9392ba4083 100644
 --- a/src/ipa/rpi/cam_helper/cam_helper.h
 +++ b/src/ipa/rpi/cam_helper/cam_helper.h
 @@ -13,12 +13,14 @@
- #include <libcamera/base/span.h>
+ 
  #include <libcamera/base/utils.h>
  
 +#include "libcamera/internal/sensor_cfa_layout.h"
@@ -360,13 +360,13 @@ index bd101895f23e..6dac8c7a7b62 100644
  namespace RPiController {
  
 @@ -99,6 +101,7 @@ public:
- 	virtual unsigned int mistrustFramesStartup() const;
- 	virtual unsigned int mistrustFramesModeSwitch() const;
+ 	virtual unsigned int mistrustMetadataStartup() const;
+ 	virtual unsigned int mistrustMetadataModeSwitch() const;
  	virtual unsigned int getMinDebinFactor() const;
 +	void setCfaLayout(const libcamera::SensorCfaLayout &layout);
  
  protected:
- 	void parseEmbeddedData(libcamera::Span<const uint8_t> buffer,
+ 	void parseEmbeddedData(std::span<const uint8_t> buffer,
 @@ -109,6 +112,7 @@ protected:
  	std::unique_ptr<MdParser> parser_;
  	CameraMode mode_;
@@ -376,10 +376,10 @@ index bd101895f23e..6dac8c7a7b62 100644
  private:
  	/*
 diff --git a/src/ipa/rpi/cam_helper/cam_helper_imx708.cpp b/src/ipa/rpi/cam_helper/cam_helper_imx708.cpp
-index e7b8d6712185..6150909ca34f 100644
+index a53b5c8fe554..020c801d6f31 100644
 --- a/src/ipa/rpi/cam_helper/cam_helper_imx708.cpp
 +++ b/src/ipa/rpi/cam_helper/cam_helper_imx708.cpp
-@@ -58,7 +58,6 @@ public:
+@@ -60,7 +60,6 @@ public:
  	double getModeSensitivity(const CameraMode &mode) const override;
  	unsigned int hideFramesModeSwitch() const override;
  	unsigned int hideFramesStartup() const override;
@@ -387,7 +387,7 @@ index e7b8d6712185..6150909ca34f 100644
  
  private:
  	/*
-@@ -238,12 +237,6 @@ unsigned int CamHelperImx708::hideFramesStartup() const
+@@ -240,12 +239,6 @@ unsigned int CamHelperImx708::hideFramesStartup() const
  	return hideFramesModeSwitch();
  }
  
@@ -401,7 +401,7 @@ index e7b8d6712185..6150909ca34f 100644
  				       Metadata &metadata) const
  {
 diff --git a/src/ipa/rpi/common/ipa_base.cpp b/src/ipa/rpi/common/ipa_base.cpp
-index dacafa578c98..8f6b987edcd3 100644
+index c284834440c8..4623b8070ba5 100644
 --- a/src/ipa/rpi/common/ipa_base.cpp
 +++ b/src/ipa/rpi/common/ipa_base.cpp
 @@ -144,6 +144,7 @@ int32_t IpaBase::init(const IPASettings &settings, const InitParams &params, Ini
@@ -413,12 +413,12 @@ index dacafa578c98..8f6b987edcd3 100644
  	/* Pass out the sensor metadata to the pipeline handler */
  	int sensorMetadata = helper_->sensorEmbeddedDataPresent();
 diff --git a/src/libcamera/shaders/bayer_1x_packed.frag b/src/libcamera/shaders/bayer_1x_packed.frag
-index 0b641a5f35c5..d20d9d6fb694 100644
+index e613340702a9..b9db053a1c94 100644
 --- a/src/libcamera/shaders/bayer_1x_packed.frag
 +++ b/src/libcamera/shaders/bayer_1x_packed.frag
-@@ -71,6 +71,26 @@ uniform vec3 blacklevel;
- uniform float gamma;
- uniform float contrastExp;
+@@ -75,6 +75,26 @@ uniform float contrastExp;
+ uniform sampler2D lsc_tex;
+ #endif
  
 +#if defined (QUAD_BAYER)
 +vec2 quad_cell(vec2 pixel)
@@ -443,7 +443,7 @@ index 0b641a5f35c5..d20d9d6fb694 100644
  float apply_contrast(float value)
  {
  	// Apply simple S-curve
-@@ -108,6 +128,9 @@ void main(void)
+@@ -112,6 +132,9 @@ void main(void)
  	 * by hand.
  	 */
  	center_pixel = floor(textureOut * tex_size);
@@ -453,7 +453,7 @@ index 0b641a5f35c5..d20d9d6fb694 100644
  	center_bytes.y = center_pixel.y;
  
  	/*
-@@ -127,6 +150,10 @@ void main(void)
+@@ -131,6 +154,10 @@ void main(void)
  	center_bytes.x = floor(center_bytes.x);
  	center_bytes *= tex_step;
  
@@ -464,7 +464,7 @@ index 0b641a5f35c5..d20d9d6fb694 100644
  	xcoords = center_bytes.x + vec2(-tex_step.x, tex_step.x);
  	ycoords = center_bytes.y + vec2(-tex_step.y, tex_step.y);
  
-@@ -143,8 +170,12 @@ void main(void)
+@@ -147,8 +174,12 @@ void main(void)
  	 * byte forward.
  	 */
  	xcoords[1] += (fract_x > THRESHOLD_H) ? tex_step.x : 0.0;
@@ -478,7 +478,7 @@ index 0b641a5f35c5..d20d9d6fb694 100644
  	bool even_col = alternate.x < 1.0;
  	bool even_row = alternate.y < 1.0;
  
-@@ -199,17 +230,31 @@ void main(void)
+@@ -203,17 +234,31 @@ void main(void)
  	 *   patterns.z = (A0 + A1 + B0 + B1) / 4.0
  	 *   patterns.w = (D0 + D1 + D2 + D3) / 4.0
  	 */
@@ -512,10 +512,10 @@ index 0b641a5f35c5..d20d9d6fb694 100644
  		fetch(xcoords[0], ycoords[1]));		/* D2: (-1,1) */
  	patterns = (patterns + temp) * 0.5;
 diff --git a/src/libcamera/software_isp/debayer.cpp b/src/libcamera/software_isp/debayer.cpp
-index 56446f55d44f..d60b2a2318a8 100644
+index 4f6659000edb..a038a998c66a 100644
 --- a/src/libcamera/software_isp/debayer.cpp
 +++ b/src/libcamera/software_isp/debayer.cpp
-@@ -56,8 +56,8 @@ LOG_DEFINE_CATEGORY(Debayer)
+@@ -97,8 +97,8 @@ LOG_DEFINE_CATEGORY(Debayer)
   * \brief Construct a Debayer object
   * \param[in] cm The camera manager
   */
@@ -527,7 +527,7 @@ index 56446f55d44f..d60b2a2318a8 100644
  }
  
 diff --git a/src/libcamera/software_isp/debayer.h b/src/libcamera/software_isp/debayer.h
-index 28f1b857b388..6c52ed0249a4 100644
+index e30a05279c18..f0ebdf59c64a 100644
 --- a/src/libcamera/software_isp/debayer.h
 +++ b/src/libcamera/software_isp/debayer.h
 @@ -35,7 +35,7 @@ LOG_DECLARE_CATEGORY(Debayer)
@@ -548,7 +548,7 @@ index 28f1b857b388..6c52ed0249a4 100644
  private:
  	virtual Size patternSize(PixelFormat inputFormat) = 0;
 diff --git a/src/libcamera/software_isp/debayer_egl.cpp b/src/libcamera/software_isp/debayer_egl.cpp
-index fdb1efec2a7b..aaa42b5b3932 100644
+index 33933b11db70..df0d9c9957d1 100644
 --- a/src/libcamera/software_isp/debayer_egl.cpp
 +++ b/src/libcamera/software_isp/debayer_egl.cpp
 @@ -24,6 +24,7 @@
@@ -559,21 +559,21 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  
  #include "../shaders/glsl_shaders.h"
  
-@@ -40,9 +41,11 @@ namespace libcamera {
-  * \brief Construct a DebayerEGL object
+@@ -41,9 +42,11 @@ namespace libcamera {
   * \param[in] stats Statistics processing object
   * \param[in] cm The camera manager
+  * \param[in] display The EGL display to use
 + * \param[in] quadBayer Whether the sensor uses 2x2 same-colour cells
   */
--DebayerEGL::DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm)
--	: Debayer(cm), stats_(std::move(stats))
+-DebayerEGL::DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm, EGLDisplay display)
+-	: Debayer(cm), stats_(std::move(stats)), egl_(display)
 +DebayerEGL::DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm,
-+		       bool quadBayer)
-+	: Debayer(cm, quadBayer), stats_(std::move(stats))
++		       EGLDisplay display, bool quadBayer)
++	: Debayer(cm, quadBayer), stats_(std::move(stats)), egl_(display)
  {
  }
  
-@@ -152,6 +155,8 @@ int DebayerEGL::initBayerShaders(PixelFormat inputFormat, PixelFormat outputForm
+@@ -142,6 +145,8 @@ int DebayerEGL::initBayerShaders(PixelFormat inputFormat, PixelFormat outputForm
  
  	/* Target gles 100 glsl requires "#version x" as first directive in shader */
  	egl_.pushEnv(shaderEnv, "#version 100");
@@ -582,7 +582,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  
  	/* Specify GL_OES_EGL_image_external */
  	egl_.pushEnv(shaderEnv, "#extension GL_OES_EGL_image_external: enable");
-@@ -294,6 +299,9 @@ int DebayerEGL::configure(const StreamConfiguration &inputCfg,
+@@ -288,6 +293,9 @@ int DebayerEGL::configure(const StreamConfiguration &inputCfg,
  		return -EINVAL;
  	}
  
@@ -592,7 +592,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  	if (stats_->configure(inputCfg) != 0)
  		return -EINVAL;
  
-@@ -335,18 +343,22 @@ int DebayerEGL::configure(const StreamConfiguration &inputCfg,
+@@ -331,18 +339,22 @@ int DebayerEGL::configure(const StreamConfiguration &inputCfg,
  	outputSize_ = outputCfg.size;
  	nativeOutputSize_ = outSizeRange.max;
  
@@ -622,7 +622,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  
  	inputBufferCount_ = inputCfg.bufferCount;
  	outputBufferCount_ = outputCfg.bufferCount;
-@@ -366,6 +378,9 @@ Size DebayerEGL::patternSize(PixelFormat inputFormat)
+@@ -362,6 +374,9 @@ Size DebayerEGL::patternSize(PixelFormat inputFormat)
  
  std::vector<PixelFormat> DebayerEGL::formats(PixelFormat inputFormat)
  {
@@ -632,7 +632,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  	DebayerEGL::DebayerInputConfig config;
  
  	if (getInputConfig(inputFormat, config) != 0)
-@@ -412,8 +427,10 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
+@@ -402,8 +417,10 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
  	 * the input size. Keep the aspect ratio and prefer cropping over black
  	 * bars.
  	 */
@@ -645,7 +645,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  	GLfloat trans = -(1.0f - scale);
  	GLfloat projMatrix[] = {
  		scale, 0, 0, 0,
-@@ -428,12 +445,8 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
+@@ -418,12 +435,8 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
  		{ +1.0f, +1.0f },
  		{ +1.0f, -1.0f },
  	};
@@ -660,7 +660,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  
  	/* vertexIn - bayer_8.vert */
  	glEnableVertexAttribArray(attributeVertex_);
-@@ -443,7 +456,7 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
+@@ -433,7 +446,7 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
  	/* textureIn - bayer_8.vert */
  	glEnableVertexAttribArray(attributeTexture_);
  	glVertexAttribPointer(attributeTexture_, 2, GL_FLOAT, GL_TRUE,
@@ -669,7 +669,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  
  	/*
  	 * Set the sampler2D to the respective texture unit for each texutre
-@@ -626,7 +639,9 @@ int DebayerEGL::debayerGPU(FrameBuffer *input, FrameBuffer *output, const Debaye
+@@ -609,7 +622,9 @@ int DebayerEGL::debayerGPU(FrameBuffer *input, FrameBuffer *output, const Debaye
  	egl_.attachTextureToFBO(*eglImageOut);
  	setShaderVariableValues(*eglImageIn, params);
  
@@ -680,7 +680,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  	glClear(GL_COLOR_BUFFER_BIT);
  	glDrawArrays(GL_TRIANGLE_FAN, 0, DEBAYER_OPENGL_COORDS);
  
-@@ -721,6 +736,15 @@ void DebayerEGL::stop()
+@@ -722,6 +737,15 @@ void DebayerEGL::stop()
  
  SizeRange DebayerEGL::sizes(PixelFormat inputFormat, const Size &inputSize)
  {
@@ -697,7 +697,7 @@ index fdb1efec2a7b..aaa42b5b3932 100644
  	unsigned int borderHeight = patternSize.height;
  
 diff --git a/src/libcamera/software_isp/debayer_egl.h b/src/libcamera/software_isp/debayer_egl.h
-index d6223f3a9724..8e6b4af91476 100644
+index cbbc6a450568..067524eeb0be 100644
 --- a/src/libcamera/software_isp/debayer_egl.h
 +++ b/src/libcamera/software_isp/debayer_egl.h
 @@ -9,6 +9,7 @@
@@ -712,13 +712,13 @@ index d6223f3a9724..8e6b4af91476 100644
  class DebayerEGL : public Debayer
  {
  public:
--	DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm);
+-	DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm, EGLDisplay display);
 +	DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm,
-+		   bool quadBayer = false);
++		   EGLDisplay display, bool quadBayer = false);
  	~DebayerEGL();
  
  	int configure(const StreamConfiguration &inputCfg,
-@@ -93,6 +95,7 @@ private:
+@@ -98,6 +100,7 @@ private:
  	GLint textureUniformStrideFactor_;
  	GLint textureUniformBayerFirstRed_;
  	GLint textureUniformProjMatrix_;
@@ -727,7 +727,7 @@ index d6223f3a9724..8e6b4af91476 100644
  	GLint textureUniformBayerDataIn_;
  
 diff --git a/src/libcamera/software_isp/software_isp.cpp b/src/libcamera/software_isp/software_isp.cpp
-index c73a16ce0a29..74973d9ef99e 100644
+index 218660ed8510..71b95a105575 100644
 --- a/src/libcamera/software_isp/software_isp.cpp
 +++ b/src/libcamera/software_isp/software_isp.cpp
 @@ -26,6 +26,7 @@
@@ -738,7 +738,7 @@ index c73a16ce0a29..74973d9ef99e 100644
  
  #include "debayer_cpu.h"
  #if HAVE_DEBAYER_EGL
-@@ -98,8 +99,9 @@ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
+@@ -97,8 +98,9 @@ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
  	}
  
  	const CameraManager &cm = *pipe->cameraManager();
@@ -750,11 +750,11 @@ index c73a16ce0a29..74973d9ef99e 100644
  		LOG(SoftwareIsp, Error) << "Failed to create SwStatsCpu object";
  		return;
 @@ -121,7 +123,7 @@ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
- 
  	if (!softISPMode || softISPMode == "gpu") {
- 		if (eGL::isAvailable()) {
--			debayer_ = std::make_unique<DebayerEGL>(std::move(stats), cm);
-+			debayer_ = std::make_unique<DebayerEGL>(std::move(stats), cm, quadBayer);
+ 		auto display = eGL::probeDisplay();
+ 		if (display != EGL_NO_DISPLAY) {
+-			debayer_ = std::make_unique<DebayerEGL>(std::move(stats), cm, display);
++			debayer_ = std::make_unique<DebayerEGL>(std::move(stats), cm, display, quadBayer);
  		} else {
  			LOG(SoftwareIsp, Info)
  				<< "EGL not available, falling back to CPU debayer";
@@ -773,7 +773,7 @@ index c73a16ce0a29..74973d9ef99e 100644
  		debayer_ = std::make_unique<DebayerCpu>(std::move(stats), cm);
  
 diff --git a/src/libcamera/software_isp/swstats_cpu.cpp b/src/libcamera/software_isp/swstats_cpu.cpp
-index 7fb77ce7ddd6..0d3359422caf 100644
+index 74633815ed0a..5918024a9550 100644
 --- a/src/libcamera/software_isp/swstats_cpu.cpp
 +++ b/src/libcamera/software_isp/swstats_cpu.cpp
 @@ -17,6 +17,7 @@
@@ -795,7 +795,7 @@ index 7fb77ce7ddd6..0d3359422caf 100644
  {
  	if (!sharedStats_)
  		LOG(SwStatsCpu, Error)
-@@ -323,6 +324,34 @@ void SwStatsCpu::statsGBRG10PLine0(const uint8_t *src[], SwIspStats &stats)
+@@ -338,6 +339,34 @@ void SwStatsCpu::statsGBRG10PLine0(const uint8_t *src[], SwIspStats &stats)
  	SWSTATS_FINISH_LINE_STATS()
  }
  
@@ -830,7 +830,7 @@ index 7fb77ce7ddd6..0d3359422caf 100644
  void SwStatsCpu::statsBGGR12PLine0(const uint8_t *src[], SwIspStats &stats)
  {
  	const uint8_t *src0 = src[1] + window_.x * 3 / 2;
-@@ -473,6 +502,18 @@ int SwStatsCpu::configure(const StreamConfiguration &inputCfg, unsigned int stat
+@@ -491,6 +520,18 @@ int SwStatsCpu::configure(const StreamConfiguration &inputCfg, unsigned int stat
  	BayerFormat bayerFormat =
  		BayerFormat::fromPixelFormat(inputCfg.pixelFormat);
  
@@ -849,7 +849,7 @@ index 7fb77ce7ddd6..0d3359422caf 100644
  	if (bayerFormat.packing == BayerFormat::Packing::None &&
  	    setupStandardBayerOrder(bayerFormat.order) == 0) {
  		processFrame_ = &SwStatsCpu::processBayerFrame2;
-@@ -594,6 +635,19 @@ void SwStatsCpu::processBayerFrame2(MappedFrameBuffer &in)
+@@ -612,6 +653,19 @@ void SwStatsCpu::processBayerFrame2(MappedFrameBuffer &in)
  	}
  }
  
@@ -870,7 +870,7 @@ index 7fb77ce7ddd6..0d3359422caf 100644
   * \brief Calculate statistics for a frame in one go
   * \param[in] frame The frame number
 diff --git a/test/meson.build b/test/meson.build
-index e4450625ee4c..d41ce23c0fd3 100644
+index 62f8c7da8b30..b86bccffaa16 100644
 --- a/test/meson.build
 +++ b/test/meson.build
 @@ -51,6 +51,7 @@ public_tests = [

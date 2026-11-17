@@ -1,4 +1,4 @@
-From 162dce8c3e98a73dcedea469e8fda34d99322a06 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Sat, 31 Oct 2026 20:26:08 -0600
 Subject: [PATCH] ipa: libipa: af_contrast: Allow for exposure changes in scene
@@ -22,10 +22,10 @@ scene changes are detected without that allowance.
 
 Signed-off-by: Jayden Milne <linux@jayd.ml>
 ---
- src/ipa/libipa/af_contrast.cpp   | 55 ++++++++++++++++++++++++-----
- src/ipa/libipa/af_contrast.h     | 13 ++++---
- src/ipa/simple/algorithms/af.cpp |  7 +++-
- test/ipa/libipa/af_contrast.cpp  | 60 ++++++++++++++++++++++++++++++--
+ src/ipa/libipa/af_contrast.cpp    | 55 +++++++++++++++++++++++-----
+ src/ipa/libipa/af_contrast.h      | 13 ++++---
+ src/ipa/softisp/algorithms/af.cpp |  7 +++-
+ test/ipa/libipa/af_contrast.cpp   | 60 +++++++++++++++++++++++++++++--
  4 files changed, 119 insertions(+), 16 deletions(-)
 
 diff --git a/src/ipa/libipa/af_contrast.cpp b/src/ipa/libipa/af_contrast.cpp
@@ -221,10 +221,10 @@ index fcb94969..fef4b238 100644
  	std::optional<uint32_t> sceneChangeFrame_;
  };
  
-diff --git a/src/ipa/simple/algorithms/af.cpp b/src/ipa/simple/algorithms/af.cpp
-index 9487c2cc..605a14d2 100644
---- a/src/ipa/simple/algorithms/af.cpp
-+++ b/src/ipa/simple/algorithms/af.cpp
+diff --git a/src/ipa/softisp/algorithms/af.cpp b/src/ipa/softisp/algorithms/af.cpp
+index 389fab71..481cb277 100644
+--- a/src/ipa/softisp/algorithms/af.cpp
++++ b/src/ipa/softisp/algorithms/af.cpp
 @@ -147,7 +147,12 @@ void Af::process(IPAContext &context, const uint32_t frame,
  	if (stats->valid && computeRegions(context, stats))
  		regions = regions_;
@@ -360,5 +360,5 @@ index e773564c..ad53519c 100644
  			return TestFail;
  
 -- 
-2.56.0
+2.34.1
 

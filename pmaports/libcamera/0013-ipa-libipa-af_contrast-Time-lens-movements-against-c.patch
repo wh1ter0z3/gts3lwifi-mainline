@@ -1,7 +1,7 @@
-From dfd10dd7a0657673baac115fca0fabe4fe655488 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Sat, 31 Oct 2026 16:26:51 -0600
-Subject: [PATCH 17/18] ipa: libipa: af_contrast: Time lens movements against
+Subject: [PATCH] ipa: libipa: af_contrast: Time lens movements against
  captured frames
 
 Deploy-branch counterpart of the AfContrast change folded into the
@@ -13,11 +13,11 @@ no longer needed.
 
 Signed-off-by: Jayden Milne <linux@jayd.ml>
 ---
- src/ipa/libipa/af_contrast.cpp   | 44 ++++++++++++-----
- src/ipa/libipa/af_contrast.h     |  4 +-
- src/ipa/simple/algorithms/af.cpp | 12 ++---
- src/ipa/simple/data/imx258.yaml  |  9 +---
- test/ipa/libipa/af_contrast.cpp  | 81 +++++++++++++++++++++++++++-----
+ src/ipa/libipa/af_contrast.cpp    | 44 ++++++++++++-----
+ src/ipa/libipa/af_contrast.h      |  4 +-
+ src/ipa/softisp/algorithms/af.cpp | 12 ++---
+ src/ipa/softisp/data/imx258.yaml  |  9 +---
+ test/ipa/libipa/af_contrast.cpp   | 81 ++++++++++++++++++++++++++-----
  5 files changed, 112 insertions(+), 38 deletions(-)
 
 diff --git a/src/ipa/libipa/af_contrast.cpp b/src/ipa/libipa/af_contrast.cpp
@@ -146,10 +146,10 @@ index e45f7675..371edef5 100644
  	std::optional<uint32_t> lastMoveFrame_;
  	uint32_t skipCount_ = 0;
  
-diff --git a/src/ipa/simple/algorithms/af.cpp b/src/ipa/simple/algorithms/af.cpp
-index 59956ee0..9487c2cc 100644
---- a/src/ipa/simple/algorithms/af.cpp
-+++ b/src/ipa/simple/algorithms/af.cpp
+diff --git a/src/ipa/softisp/algorithms/af.cpp b/src/ipa/softisp/algorithms/af.cpp
+index f81ae1aa..389fab71 100644
+--- a/src/ipa/softisp/algorithms/af.cpp
++++ b/src/ipa/softisp/algorithms/af.cpp
 @@ -40,9 +40,10 @@ static constexpr double kContrastScale = 1e6;
   * Without a focus lens, it only reports the FocusFoM metadata.
   *
@@ -179,10 +179,10 @@ index 59956ee0..9487c2cc 100644
  }
  
  bool Af::computeRegions(const IPAContext &context, const SwIspStats *stats)
-diff --git a/src/ipa/simple/data/imx258.yaml b/src/ipa/simple/data/imx258.yaml
+diff --git a/src/ipa/softisp/data/imx258.yaml b/src/ipa/softisp/data/imx258.yaml
 index 9c4b345f..bdaa4f9b 100644
---- a/src/ipa/simple/data/imx258.yaml
-+++ b/src/ipa/simple/data/imx258.yaml
+--- a/src/ipa/softisp/data/imx258.yaml
++++ b/src/ipa/softisp/data/imx258.yaml
 @@ -18,11 +18,6 @@ algorithms:
            min: 3.0
            max: 10.0
@@ -366,5 +366,5 @@ index 30d96ae9..e773564c 100644
  	}
  };
 -- 
-2.56.0
+2.34.1
 
