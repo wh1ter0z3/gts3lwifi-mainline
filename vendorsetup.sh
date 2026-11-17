@@ -17,11 +17,12 @@ gts3lwifi|gts3llte)
 	export FOX_SAMSUNG_DEVICE=1
 	export FOX_USE_SAMSUNG_SPECIAL=1
 	export FOX_VANILLA_BUILD=1
-	# LZMA ramdisk (see BoardConfigCommon.mk)
+	# LZMA ramdisk, and no bash or nano: S-Boot's 12 MiB ramdisk limit
+	# (see BoardConfigCommon.mk)
 	export OF_USE_LZMA_COMPRESSION=1
+	export FOX_REMOVE_BASH=1
+	export FOX_EXCLUDE_NANO_EDITOR=1
 	# Extras
-	export FOX_USE_BASH_SHELL=1
-	export FOX_USE_NANO_EDITOR=1
 	export FOX_USE_TAR_BINARY=1
 	export FOX_USE_SED_BINARY=1
 	export FOX_USE_XZ_UTILS=1

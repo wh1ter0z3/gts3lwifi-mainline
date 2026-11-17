@@ -19,7 +19,10 @@ What's different:
 - **lk2nd stays safe**: the boot partition (lk2nd at its start, Android's boot
   image 4 MiB in) is backed up but never flashed whole, the Magisk addon and
   OrangeFox's boot image patching are left out.
-- OrangeFox extras on: bash, nano, GNU tar and sed, xz.
+- **Ramdisk under 12 MiB**: S-Boot can't load a bigger one (it copies the
+  ramdisk to 0x83400000, and 0x84000000 is protected), so the image is LZMA
+  compressed and leaves out bash, nano and the CJK font of the extra
+  languages. Extras kept: GNU tar and sed, xz.
 
 ## Layout
 
@@ -53,7 +56,9 @@ The image: `out/target/product/gts3lwifi/OrangeFox-*.img`.
 - From a PC in download mode (Power + Volume Down + Home):
   `heimdall flash --RECOVERY OrangeFox-...img`, or Odin with the image in a
   tar (`tar -H ustar -cf recovery.tar recovery.img`) in the AP slot.
-- Start it: Power + Volume Up + Home, or lk2nd's menu → Recovery.
+- Start it: Power + Volume Up + Home, or `adb reboot recovery` from our
+  Android. Not lk2nd's menu → Recovery: that starts the recovery's 3.18
+  kernel from lk2nd, which resets.
 
 ## Seeing it without a screen
 

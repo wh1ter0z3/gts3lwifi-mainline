@@ -87,7 +87,8 @@ TW_DEFAULT_BRIGHTNESS := 127
 TW_SCREEN_BLANK_ON_BOOT := true
 TW_INPUT_BLACKLIST := "hbtp_vm"
 TW_CUSTOM_CPU_TEMP_PATH := "/sys/devices/virtual/thermal/thermal_zone1/temp"
-TW_EXTRA_LANGUAGES := true
+# No TW_EXTRA_LANGUAGES: its CJK font alone is 5 MB, and the ramdisk has a
+# hard size limit (see OrangeFox below)
 TW_INCLUDE_NTFS_3G := true
 TW_USE_TOOLBOX := true
 TW_EXCLUDE_DEFAULT_USB_INIT := true
@@ -105,9 +106,12 @@ TW_NO_REBOOT_BOOTLOADER := true
 TW_INCLUDE_CRYPTO := false
 
 # --- OrangeFox ---
-# LZMA ramdisk, as awesometic's TWRP: lk2nd RAM-boots a recovery
-# (`fastboot boot`, and its menu's Recovery loads it the same way), and a
-# 21 MB gzip ramdisk hung it; his 10.8 MB LZMA one boots
+# The ramdisk must stay under 12 MiB, compressed. S-Boot copies it to
+# 0x83400000 whatever the header says, and 0x84000000 is protected: a bigger
+# one aborts S-Boot halfway ("data abort" in its log at 0x85200000) and the
+# tablet resets instead of starting recovery. awesometic's TWRP is 10.8 MB.
+# So: LZMA (gzip gave 22 MB), no extra languages, no bash or nano (10.8 MB
+# with them gone, 12.9 MB with them)
 OF_USE_LZMA_COMPRESSION := 1
 OF_MAINTAINER := psigod
 FOX_VANILLA_BUILD := 1
@@ -124,8 +128,6 @@ FOX_RECOVERY_SYSTEM_PARTITION := /dev/block/bootdevice/by-name/system
 FOX_RECOVERY_VENDOR_PARTITION := /dev/block/bootdevice/by-name/vendor
 # The "SEANDROIDENFORCE" tail S-Boot expects on a recovery image
 FOX_USE_SAMSUNG_SPECIAL := 1
-FOX_USE_BASH_SHELL := 1
-FOX_USE_NANO_EDITOR := 1
 FOX_USE_TAR_BINARY := 1
 FOX_USE_SED_BINARY := 1
 FOX_USE_XZ_UTILS := 1
