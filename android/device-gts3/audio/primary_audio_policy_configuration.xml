@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (C) 2026 The gts3lwifi-mainline project
+     SPDX-License-Identifier: Apache-2.0
+
+     Primary module of the AIDL audio HAL on the q6 card "S3": the speakers
+     (both pairs, one stereo stream) and the built-in mics. The AIDL HAL makes
+     one IModule per module listed in audio_policy_configuration.xml, and
+     audioserver waits for IModule/default: without this file Android never
+     gets past the boot logo (lesson from the J5 tree, whose layout this
+     follows). Headphones and the headset mic are PCMs of their own, added
+     with jack routing. -->
+<module name="default" halVersion="2.0">
+  <attachedDevices>
+    <item>Speaker</item>
+    <item>Built-In Mic</item>
+  </attachedDevices>
+  <defaultOutputDevice>Speaker</defaultOutputDevice>
+  <mixPorts>
+    <mixPort name="primary output" role="source" flags="AUDIO_OUTPUT_FLAG_PRIMARY">
+      <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+               samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
+    </mixPort>
+    <mixPort name="primary input" role="sink">
+      <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+               samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
+    </mixPort>
+  </mixPorts>
+  <devicePorts>
+    <devicePort tagName="Speaker" type="AUDIO_DEVICE_OUT_SPEAKER" role="sink" address="CARD_0_DEV_0">
+      <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+               samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
+    </devicePort>
+    <devicePort tagName="Built-In Mic" type="AUDIO_DEVICE_IN_BUILTIN_MIC" role="source" address="CARD_0_DEV_2">
+      <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+               samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
+    </devicePort>
+  </devicePorts>
+  <routes>
+    <route type="mix" sink="Speaker" sources="primary output"/>
+    <route type="mix" sink="primary input" sources="Built-In Mic"/>
+  </routes>
+</module>

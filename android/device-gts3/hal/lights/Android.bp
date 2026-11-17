@@ -1,0 +1,21 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+// ILights (AIDL v2): the panel's backlight and the touch key LED; battery,
+// notification and attention lights that do nothing (OneUI's LightsService
+// assumes them). Plain C on libbinder_ndk, as the health HAL.
+
+cc_binary {
+    name: "android.hardware.lights-service.gts3",
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: ["lights-mainline.c"],
+    cflags: ["-Wall", "-Wextra", "-Werror"],
+    shared_libs: [
+        "libbinder_ndk",
+        "liblog",
+    ],
+    init_rc: ["android.hardware.lights-service.gts3.rc"],
+    vintf_fragments: ["android.hardware.lights-service.gts3.xml"],
+}

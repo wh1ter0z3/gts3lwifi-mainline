@@ -1,0 +1,90 @@
+diff --git a/cros_gralloc/aidl/Android.bp b/cros_gralloc/aidl/Android.bp
+index b52f806..15000d0 100644
+--- a/cros_gralloc/aidl/Android.bp
++++ b/cros_gralloc/aidl/Android.bp
+@@ -50,6 +50,34 @@ cc_binary {
+     ],
+ }
+ 
++cc_binary {
++    name: "android.hardware.graphics.allocator-service.minigbm_msm",
++    overrides: ["android.hardware.graphics.allocator-service.minigbm"],
++    defaults: ["minigbm_cros_gralloc_defaults"],
++    relative_install_path: "hw",
++    init_rc: ["allocator_msm.rc"],
++    vintf_fragments: ["allocator.xml"],
++    vendor: true,
++    shared_libs: [
++        "android.hardware.graphics.allocator-V2-ndk",
++        "android.hardware.graphics.mapper@4.0",
++        "libbase",
++        "libbinder_ndk",
++        "libgralloctypes",
++        "libhidlbase",
++        "liblog",
++        "libminigbm_gralloc_msm",
++        "libminigbm_gralloc4_utils",
++    ],
++    static_libs: [
++        "libaidlcommonsupport",
++    ],
++    srcs: [
++        "Allocator.cpp",
++        "Main.cpp",
++    ],
++}
++
+ filegroup {
+     name: "allocator.minigbm.rc",
+     srcs: ["allocator.rc"]
+diff --git a/cros_gralloc/aidl/allocator_msm.rc b/cros_gralloc/aidl/allocator_msm.rc
+new file mode 100644
+index 0000000..d99361e
+--- /dev/null
++++ b/cros_gralloc/aidl/allocator_msm.rc
+@@ -0,0 +1,7 @@
++service vendor.graphics.allocator /vendor/bin/hw/android.hardware.graphics.allocator-service.minigbm_msm
++    class hal animation
++    user system
++    group graphics drmrpc
++    capabilities SYS_NICE
++    onrestart restart surfaceflinger
++    task_profiles ServiceCapacityLow
+diff --git a/cros_gralloc/cros_gralloc_helpers.cc b/cros_gralloc/cros_gralloc_helpers.cc
+index 67a53a0..f4683c0 100644
+--- a/cros_gralloc/cros_gralloc_helpers.cc
++++ b/cros_gralloc/cros_gralloc_helpers.cc
+@@ -32,7 +32,19 @@ uint32_t cros_gralloc_convert_format(int format)
+ 	case HAL_PIXEL_FORMAT_RGBA_8888:
+ 		return DRM_FORMAT_ABGR8888;
+ 	case HAL_PIXEL_FORMAT_RGBX_8888:
+-		return DRM_FORMAT_XBGR8888;
++		/*
++		 * Report the alpha-carrying format even though the client asked
++		 * for the X variant. The memory layout is identical - 32bpp,
++		 * 8:8:8:8 - only the declared meaning of the fourth channel
++		 * differs, so nothing about the allocation changes.
++		 *
++		 * freedreno on a3xx does not accept XBGR8888 when importing a
++		 * dmabuf, which left SurfaceFlinger unable to build a texture
++		 * for its 720x1280 target ("Failed to create a valid texture
++		 * ... format:2") and killed the RenderEngine thread on every
++		 * frame - a black screen with the GPU otherwise working.
++		 */
++		return DRM_FORMAT_ABGR8888;
+ 	case HAL_PIXEL_FORMAT_RGB_888:
+ 		return DRM_FORMAT_BGR888;
+ 	/*
+diff --git a/cros_gralloc/mapper_stablec/Android.bp b/cros_gralloc/mapper_stablec/Android.bp
+index 401c177..25ba205 100644
+--- a/cros_gralloc/mapper_stablec/Android.bp
++++ b/cros_gralloc/mapper_stablec/Android.bp
+@@ -29,7 +29,7 @@ cc_library_shared {
+     vintf_fragments: ["mapper.minigbm.xml"],
+     shared_libs: [
+         "android.hardware.graphics.allocator-V2-ndk",
+-        "libminigbm_gralloc",
++        "libminigbm_gralloc_msm",
+     ],
+     header_libs: [
+         "libbase_headers",

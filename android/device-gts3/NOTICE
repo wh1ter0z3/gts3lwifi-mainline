@@ -1,0 +1,18 @@
+Galaxy Tab S3 (gts3) vendor device tree
+Copyright (C) 2026 The gts3lwifi-mainline project
+Licensed under the Apache License, Version 2.0 (LICENSE).
+
+Parts of this tree are adapted from SamuraiArtem's Samsung Galaxy J5 2016
+(j5xnlte) mainline device tree and patch series, Apache-2.0:
+  https://github.com/SamuraiArtem/android_device_samsung_j5xnlte
+  https://github.com/SamuraiArtem/android_patches_j5xnlte
+  - codec2/ (the AIDL Codec2 V4L2 service)
+  - seccomp/, wifi/, linker.config.json, dead-hidl/
+  - audio/ (the policy layout)
+  - init/init.gts3.usb.rc (the configfs USB gadget)
+  - the GSI compatibility settings in BoardConfig.mk and device.mk
+  - patches/ (as listed in patches/README.md)
+His files carry "SPDX-FileCopyrightText: The LineageOS Project" where they did.
+
+hal/health, hal/lights and hal/samsung are our own (gsi/health in
+wh1ter0z3/gts3lwifi-mainline).

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Copyright (C) 2026 The gts3lwifi-mainline project
+     SPDX-License-Identifier: Apache-2.0
+
+     Venus through Codec2 V4L2 first (rank 1), then the system's software
+     codecs. -->
+<MediaCodecs>
+    <Include href="media_codecs_v4l2_c2.xml" />
+    <Include href="media_codecs_google_c2_audio.xml" />
+    <Include href="media_codecs_google_c2_video.xml" />
+</MediaCodecs>

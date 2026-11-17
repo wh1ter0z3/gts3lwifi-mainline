@@ -1,0 +1,4 @@
+service vendor.seh-stubs /vendor/bin/hw/vendor.samsung.hardware.seh-stubs vendor.samsung.hardware.displayquality.ISehDisplayQuality vendor.samsung.hardware.khdm.ISehKhdm vendor.samsung.hardware.tlc.ddar.ISehDdar vendor.samsung.hardware.bluetooth.ISehBluetooth android.hardware.thermal.IThermal
+    class hal
+    user system
+    group system

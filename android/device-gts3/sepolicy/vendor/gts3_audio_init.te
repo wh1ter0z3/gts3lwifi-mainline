@@ -1,0 +1,15 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# bin/gts3-audio-init.sh: tinymix at boot (the sound card's mixer routes)
+
+type gts3_audio_init, domain;
+type gts3_audio_init_exec, exec_type, vendor_file_type, file_type;
+
+init_daemon_domain(gts3_audio_init)
+
+allow gts3_audio_init vendor_shell_exec:file rx_file_perms;
+allow gts3_audio_init vendor_toolbox_exec:file rx_file_perms;
+allow gts3_audio_init vendor_file:file rx_file_perms;
+allow gts3_audio_init audio_device:dir r_dir_perms;
+allow gts3_audio_init audio_device:chr_file rw_file_perms;

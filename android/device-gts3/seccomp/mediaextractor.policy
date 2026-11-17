@@ -1,0 +1,9 @@
+# Mainline kernels have no /dev/ashmem, so libcutils falls back to memfd
+# (sys.use_memfd=true, forced on in init.rc for this device). Creating a memfd
+# region needs all three of these, and the base policy shipped in the media apex
+# allows none of them: the seccomp filter then kills the extractor on every
+# start and nothing in the system can play a compressed file. The apex is
+# read-only, so they are added through the vendor "additional policy" path.
+memfd_create: 1
+ftruncate: 1
+fallocate: 1

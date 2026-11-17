@@ -1,0 +1,17 @@
+diff --git a/bluetooth/aidl/default/net_bluetooth_mgmt.cpp b/bluetooth/aidl/default/net_bluetooth_mgmt.cpp
+--- a/bluetooth/aidl/default/net_bluetooth_mgmt.cpp	2026-11-16 21:09:58.621780757 +0530
++++ b/bluetooth/aidl/default/net_bluetooth_mgmt.cpp	2026-11-16 21:09:58.669127640 +0530
+@@ -259,8 +259,11 @@
+ int NetBluetoothMgmt::openHci(int hci_interface) {
+   ALOGI("opening hci interface %d", hci_interface);
+ 
+-  // Block Bluetooth.
+-  rfkill(1);
++  // Unblock Bluetooth. (AOSP blocks it here, which mainline Linux answers
++  // with ERFKILL when the user channel is bound: hci_dev_open_sync() refuses
++  // to open an rfkilled device, user channel or not. Without bluetoothd
++  // nothing else powers the controller up, so leaving it unblocked is safe.)
++  rfkill(0);
+ 
+   // Wait for the HCI interface to complete initialization or to come online.
+   int hci = waitHciDev(hci_interface);

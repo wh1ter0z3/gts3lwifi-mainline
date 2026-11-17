@@ -1,0 +1,19 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# Galaxy Tab S3 under gsi-init. System and vendor are image files on the
+# userdata partition, mounted by gsi-init before Android's init runs; /data is
+# userdata.img on loop7 (gsi-init attaches it). Zram swap is gsi-init's too
+# (lz4, three quarters of the RAM).
+
+/dev/block/loop7                                    /data   ext4    noatime,nosuid,nodev,noauto_da_alloc,discard    latemount,first_stage_mount
+
+# Bootloader messages. Before restarting to recovery Android writes
+# "boot-recovery" here, and cancels the restart if there is no /misc; the
+# recovery clears it. Under gsi-init, Settings' factory reset would make the
+# recovery wipe the whole userdata partition (the image store with it)
+/dev/block/by-name/misc                             /misc   emmc    defaults    defaults
+
+# microSD card and USB drives
+/devices/platform/soc@0/74a4900.mmc/mmc_host/mmc*   auto    auto    defaults    voldmanaged=sdcard1:auto
+/devices/platform/soc@0/6a00000.usb/*/usb*          auto    auto    defaults    voldmanaged=usb1:auto

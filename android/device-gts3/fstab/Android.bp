@@ -1,0 +1,10 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+prebuilt_etc {
+    name: "fstab.gts3",
+    src: "fstab.gts3",
+    vendor: true,
+}

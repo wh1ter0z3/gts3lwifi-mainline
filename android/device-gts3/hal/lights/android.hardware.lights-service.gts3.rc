@@ -1,0 +1,5 @@
+service vendor.light-gts3 /vendor/bin/hw/android.hardware.lights-service.gts3
+    class hal
+    user system
+    group system
+    shutdown critical

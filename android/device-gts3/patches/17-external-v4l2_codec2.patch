@@ -1,0 +1,104 @@
+diff --git a/components/Android.bp b/components/Android.bp
+index 73efcf2..dba0bab 100644
+--- a/components/Android.bp
++++ b/components/Android.bp
+@@ -38,6 +38,7 @@ cc_library {
+         "libc2plugin_store",
+         "libchrome",
+         "libcodec2_soft_common",
++        "libstagefright_aidl_bufferpool2",
+         "libcutils",
+         "liblog",
+         "libsfplugin_ccodec_utils",
+diff --git a/components/EncodeInterface.cpp b/components/EncodeInterface.cpp
+index 12152e6..a99ab80 100644
+--- a/components/EncodeInterface.cpp
++++ b/components/EncodeInterface.cpp
+@@ -314,9 +314,13 @@ void EncodeInterface::Initialize(const C2String& name, const SupportedCapabiliti
+                     .withConstValue(new C2StreamBufferTypeSetting::input(0u, C2BufferData::GRAPHIC))
+                     .build());
+ 
++    // CPU_READ: the format converter reads RGB input (an input surface's
++    // frames) on the CPU, and a gralloc that enforces usage (minigbm) won't
++    // map a buffer that wasn't allocated for it
+     addParameter(DefineParam(mInputMemoryUsage, C2_PARAMKEY_INPUT_STREAM_USAGE)
+                          .withConstValue(new C2StreamUsageTuning::input(
+-                                 0u, static_cast<uint64_t>(BufferUsage::VIDEO_ENCODER)))
++                                 0u, static_cast<uint64_t>(BufferUsage::VIDEO_ENCODER) |
++                                             C2MemoryUsage::CPU_READ))
+                          .build());
+ 
+     addParameter(
+diff --git a/components/VideoFramePool.cpp b/components/VideoFramePool.cpp
+index 9927acf..ca9a9f7 100644
+--- a/components/VideoFramePool.cpp
++++ b/components/VideoFramePool.cpp
+@@ -12,6 +12,7 @@
+ 
+ #include <C2BlockInternal.h>
+ #include <bufferpool/BufferPoolTypes.h>
++#include <bufferpool2/BufferPoolTypes.h>
+ 
+ #include <android/hardware/graphics/common/1.0/types.h>
+ #include <base/bind.h>
+@@ -25,6 +26,7 @@
+ 
+ using android::hardware::graphics::common::V1_0::BufferUsage;
+ using android::hardware::media::bufferpool::BufferPoolData;
++using AidlBufferPoolData = aidl::android::hardware::media::bufferpool2::BufferPoolData;
+ 
+ namespace android {
+ 
+@@ -36,7 +38,11 @@ std::optional<uint32_t> VideoFramePool::getBufferIdFromGraphicBlock(C2BlockPool&
+     switch (blockPool.getAllocatorId()) {
+     case V4L2AllocatorId::SECURE_GRAPHIC:
+         FALLTHROUGH;
+-    case C2PlatformAllocatorStore::BUFFERQUEUE: {
++    case C2PlatformAllocatorStore::BUFFERQUEUE:
++        FALLTHROUGH;
++    // A surface through IGraphicBufferAllocator (Codec2 AIDL HAL, Android 15+):
++    // the same gralloc buffer, its first fd the dmabuf
++    case C2PlatformAllocatorStore::IGBA: {
+         auto dmabufId = android::getDmabufId(block.handle()->data[0]);
+         if (!dmabufId) {
+             return std::nullopt;
+@@ -48,6 +54,20 @@ std::optional<uint32_t> VideoFramePool::getBufferIdFromGraphicBlock(C2BlockPool&
+     case V4L2AllocatorId::SECURE_LINEAR: {
+         std::shared_ptr<_C2BlockPoolData> blockPoolData =
+                 _C2BlockFactory::GetGraphicBlockPoolData(block);
++        if (!blockPoolData) {
++            // A basic pool's block: the framework made no bufferpool (pool mask)
++            ALOGE("Obtained C2GraphicBlock is not from a block pool.");
++            return std::nullopt;
++        }
++        // The pools of a Codec2 AIDL HAL are AIDL bufferpools
++        if (blockPoolData->getType() == _C2BlockPoolData::TYPE_BUFFERPOOL2) {
++            std::shared_ptr<AidlBufferPoolData> bpData;
++            if (!_C2BlockFactory::GetBufferPoolData(blockPoolData, &bpData) || !bpData) {
++                ALOGE("BufferPoolData unavailable in block.");
++                return std::nullopt;
++            }
++            return bpData->mId;
++        }
+         if (blockPoolData->getType() != _C2BlockPoolData::TYPE_BUFFERPOOL) {
+             ALOGE("Obtained C2GraphicBlock is not bufferpool-backed.");
+             return std::nullopt;
+diff --git a/v4l2/V4L2Decoder.cpp b/v4l2/V4L2Decoder.cpp
+index d0d862d..eb303ca 100644
+--- a/v4l2/V4L2Decoder.cpp
++++ b/v4l2/V4L2Decoder.cpp
+@@ -170,8 +170,12 @@ bool V4L2Decoder::start(const VideoCodec& codec, const size_t inputBufferSize,
+         return false;
+     }
+     if (!setupInitialOutput()) {
+-        ALOGE("Unable to setup initial output");
+-        return false;
++        // The initial EOS buffer is for ARCVM. A decoder that reports no
++        // CAPTURE format before the stream header is parsed (Venus returns
++        // EINVAL from G_FMT until the source change event) can't take it:
++        // carry on without it, as before it existed
++        ALOGW("Unable to setup initial output, continuing without it");
++        mInitialEosBuffer = nullptr;
+     }
+ 
+     if (!mDevice->startPolling(mTaskRunner,

@@ -1,0 +1,11 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+sh_binary {
+    name: "gts3-audio-init",
+    src: "gts3-audio-init.sh",
+    filename: "gts3-audio-init.sh",
+    vendor: true,
+}
