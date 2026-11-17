@@ -532,6 +532,7 @@ def main():
     ap.add_argument("--lock", required=True)
     ap.add_argument("--image", default="userdata.img")
     ap.add_argument("--report", default="AUDIT.txt")
+    ap.add_argument("--host-uid", type=int, default=1000, help="owner of the reports")
     ap.add_argument("--secret-file", action="append")
     ap.add_argument("--key-file", action="append")
     ap.add_argument("--terms-file")
@@ -614,7 +615,7 @@ def main():
         f.write("\n".join(result + head + ["", "==== details", ""] + OUT) + "\n")
     print("\n".join(result + head))
     for p in (a.report, a.report.replace(".txt", "-unowned.txt")):
-        os.chown(os.path.join(a.image_dir, p), 1000, 1000)
+        os.chown(os.path.join(a.image_dir, p), a.host_uid, a.host_uid)
     return 1 if FAILS else 0
 
 

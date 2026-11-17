@@ -99,8 +99,10 @@ class Ctx:
         self.logs = os.path.join(self.root, "logs")
         self.aports = os.path.join(self.work, "cache_git", "pmaports")
         self.pmb = os.path.join(self.src, "pmbootstrap")
+        self.uid = os.getuid()
         self.tag = "localhost/gts3-preview-builder:" + hashlib.sha256(
-            open(os.path.join(PREVIEW, "Containerfile"), "rb").read()).hexdigest()[:12]
+            open(os.path.join(PREVIEW, "Containerfile"), "rb").read()
+            + b"uid=%d" % self.uid).hexdigest()[:12]
         self.name = self.lock["release"]["name"]
         self.device = self.lock["image"]["device"]
         for d in (self.work, self.config, self.src, self.image, self.logs):
@@ -235,7 +237,8 @@ boot_size = {i['boot_size_mb']}
 
 
 def step_builder(ctx):
-    run(["podman", "build", "-q", "-t", ctx.tag, PREVIEW], log=ctx.log("builder"))
+    run(["podman", "build", "-q", "--build-arg", f"UID={ctx.uid}", "-t", ctx.tag, PREVIEW],
+        log=ctx.log("builder"))
 
 
 def step_packages(ctx):
@@ -289,7 +292,7 @@ def step_pack(ctx):
         "sdtest": i.get("sdtest"),
         "zstd_level": i.get("zstd_level", 15),
         "jobs": ctx.lock.get("jobs", 16),
-        "host_uid": 1000,
+        "host_uid": ctx.uid,
     }
     with open(os.path.join(ctx.image, "pack-job.json"), "w") as f:
         json.dump(job, f, indent=1)
@@ -319,7 +322,7 @@ def step_audit(ctx):
             args += [f"--{flag}-file", inside]
     with open(os.path.join(ctx.image, "lock.json"), "w") as f:
         json.dump(ctx.lock, f, indent=1)
-    r = ctx.pod("python3", "-I", "/scripts/audit-image.py", "/image", "--lock", "/image/lock.json", *args,
+    r = ctx.pod("python3", "-I", "/scripts/audit-image.py", "/image", "--lock", "/image/lock.json", "--host-uid", str(ctx.uid), *args,
                 user="root", log=ctx.log("audit"), check=False, extra=vols)
     report = os.path.join(ctx.image, "AUDIT.txt")
     if os.path.exists(report):
