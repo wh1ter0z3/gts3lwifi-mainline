@@ -20,7 +20,7 @@
   <remote name="libcamera" fetch="https://git.libcamera.org/" />
   <remote name="github" fetch="https://github.com/" />
   <project path="vendor/camera/libcamera" name="libcamera/libcamera.git" remote="libcamera"
-           revision="191e202178f02430b5942397c70d215cdd2056fa" />
+           revision="df8e348d64b4932a0676256ed24f0da3ee9438bc" />
   <!-- libyaml for libcamera, where its wrap would put it (no network in
        the build: patch 0102 adds the meson.build) -->
   <project path="vendor/camera/libcamera/subprojects/yaml-0.2.5" name="yaml/libyaml"

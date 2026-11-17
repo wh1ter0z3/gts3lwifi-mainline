@@ -5,7 +5,7 @@
 # autofocus and tuning, as in Nura) with its Android camera HAL3 module,
 # built by meson through GloDroid's aospext (vendor/camera/aospext). After
 # aospext's meson_libcamera.mk, without udev and libevent (no cam app): the
-# simple pipeline and its software ISP (CPU), the simple IPA.
+# simple pipeline and its software ISP (CPU), the softisp IPA.
 
 LOCAL_PATH := vendor/camera/aospext
 include $(LOCAL_PATH)/aospext_cleanup.mk
@@ -21,7 +21,7 @@ MESON_BUILD_ARGUMENTS := \
     -Dandroid=enabled \
     -Dandroid_platform=generic \
     -Dpipelines=simple \
-    -Dipas=simple \
+    -Dipas=softisp \
     -Dsoftisp-gpu=disabled \
     -Dudev=disabled \
     -Dv4l2=disabled \
@@ -42,12 +42,12 @@ AOSPEXT_GEN_TARGETS := \
     lib:libcamera.so::libcamera: \
     lib:libcamera-base.so::libcamera-base: \
     lib:libcamera-hal.so:hw:camera.libcamera: \
-    libetc:libcamera/ipa/ipa_soft_simple.so:libcamera/ipa:ipa_soft_simple.so: \
-    libetc:libcamera/ipa/ipa_soft_simple.so.sign:libcamera/ipa:ipa_soft_simple.so.sign: \
-    bin:libcamera/soft_ipa_proxy:libcamera:soft_ipa_proxy: \
-    etc:shared/libcamera/ipa/simple/imx258.yaml:shared/libcamera/ipa/simple:imx258.yaml: \
-    etc:shared/libcamera/ipa/simple/s5k5e3.yaml:shared/libcamera/ipa/simple:s5k5e3.yaml: \
-    etc:shared/libcamera/ipa/simple/uncalibrated.yaml:shared/libcamera/ipa/simple:uncalibrated.yaml:
+    libetc:libcamera/ipa/ipa_softisp.so:libcamera/ipa:ipa_softisp.so: \
+    libetc:libcamera/ipa/ipa_softisp.so.sign:libcamera/ipa:ipa_softisp.so.sign: \
+    bin:libcamera/softisp_ipa_proxy:libcamera:softisp_ipa_proxy: \
+    etc:shared/libcamera/ipa/softisp/imx258.yaml:shared/libcamera/ipa/softisp:imx258.yaml: \
+    etc:shared/libcamera/ipa/softisp/s5k5e3.yaml:shared/libcamera/ipa/softisp:s5k5e3.yaml: \
+    etc:shared/libcamera/ipa/softisp/uncalibrated.yaml:shared/libcamera/ipa/softisp:uncalibrated.yaml:
 
 AOSPEXT_TARGETS_SO_DEPS := \
     camera.libcamera=libcamera:libcamera-base \

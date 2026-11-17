@@ -14,15 +14,15 @@ one line of interleaved chroma (BT.601 full range, chroma averaged over
 lines are aligned to 128 bytes, as gralloc (minigbm) and Venus lay out
 NV12, so that their buffers can be written as they are.
 ---
- src/libcamera/software_isp/debayer_cpu.cpp | 103 ++++++++++++++++++---
- src/libcamera/software_isp/debayer_cpu.h   |   1 +
- 2 files changed, 92 insertions(+), 12 deletions(-)
+ src/libcamera/software_isp/debayer_cpu.cpp | 92 +++++++++++++++++++---
+ src/libcamera/software_isp/debayer_cpu.h   |  1 +
+ 2 files changed, 81 insertions(+), 12 deletions(-)
 
 diff --git a/src/libcamera/software_isp/debayer_cpu.cpp b/src/libcamera/software_isp/debayer_cpu.cpp
-index 47f204b1..4a3eb1ad 100644
+index 9d1026cb..5a3d77fe 100644
 --- a/src/libcamera/software_isp/debayer_cpu.cpp
 +++ b/src/libcamera/software_isp/debayer_cpu.cpp
-@@ -42,13 +42,13 @@ public:
+@@ -43,13 +43,13 @@ public:
  			 bool enableInputMemcpy);
  
  	void configure(unsigned int yStart, unsigned int yEnd);
@@ -38,7 +38,7 @@ index 47f204b1..4a3eb1ad 100644
  	void process4(uint32_t frame, const uint8_t *src, uint8_t *dst);
  
  	/* Max. supported Bayer pattern height is 4, debayering this requires 5 lines */
-@@ -63,6 +63,8 @@ private:
+@@ -64,6 +64,8 @@ private:
  	unsigned int lineBufferIndex_;
  	std::vector<uint8_t> lineBuffers_[kMaxLineBuffers];
  	bool enableInputMemcpy_;
@@ -47,7 +47,7 @@ index 47f204b1..4a3eb1ad 100644
  };
  
  /**
-@@ -446,6 +448,7 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
+@@ -447,6 +449,7 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
  		config.patternSize.width = 2;
  		config.patternSize.height = 2;
  		config.outputFormats = outputFormats;
@@ -55,7 +55,7 @@ index 47f204b1..4a3eb1ad 100644
  		return 0;
  	}
  
-@@ -456,6 +459,7 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
+@@ -457,6 +460,7 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
  		config.patternSize.width = 4; /* 5 bytes per *4* pixels */
  		config.patternSize.height = 2;
  		config.outputFormats = outputFormats;
@@ -63,7 +63,7 @@ index 47f204b1..4a3eb1ad 100644
  		return 0;
  	}
  
-@@ -466,6 +470,7 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
+@@ -467,6 +471,7 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
  		config.patternSize.width = 2; /* 3 bytes per *2* pixels */
  		config.patternSize.height = 2;
  		config.outputFormats = outputFormats;
@@ -71,19 +71,7 @@ index 47f204b1..4a3eb1ad 100644
  		return 0;
  	}
  
-@@ -487,6 +492,11 @@ int DebayerCpu::getOutputConfig(PixelFormat outputFormat, DebayerOutputConfig &c
- 		return 0;
- 	}
- 
-+	if (outputFormat == formats::NV12) {
-+		config.bpp = 8;
-+		return 0;
-+	}
-+
- 	LOG(Debayer, Info)
- 		<< "Unsupported output format " << outputFormat.toString();
- 	return -EINVAL;
-@@ -542,7 +552,10 @@ int DebayerCpu::setDebayerFunctions(PixelFormat inputFormat,
+@@ -525,7 +530,10 @@ int DebayerCpu::setDebayerFunctions(PixelFormat inputFormat,
  		return -EINVAL;
  	};
  
@@ -94,7 +82,7 @@ index 47f204b1..4a3eb1ad 100644
  	case formats::XRGB8888:
  	case formats::ARGB8888:
  		addAlphaByte = true;
-@@ -750,6 +763,9 @@ void DebayerCpuThread::configure(unsigned int yStart, unsigned int yEnd)
+@@ -734,6 +742,9 @@ void DebayerCpuThread::configure(unsigned int yStart, unsigned int yEnd)
  		for (unsigned int i = 0; i <= inputConfig.patternSize.height; i++)
  			lineBuffers_[i].resize(lineBufferLength_);
  	}
@@ -104,29 +92,21 @@ index 47f204b1..4a3eb1ad 100644
  }
  
  /*
-@@ -788,9 +804,20 @@ DebayerCpu::strideAndFrameSize(const PixelFormat &outputFormat, const Size &size
- 	 * round up to multiple of 8 for 64 bits alignment, and the frame size
- 	 * to whole groups of kOutputHeightAlign lines
+@@ -769,7 +780,12 @@ DebayerCpu::strideAndFrameSize(const PixelFormat &outputFormat, const Size &size
  	 */
--	unsigned int stride = (size.width * config.bpp / 8 + 7) & ~7;
- 	unsigned int height = utils::alignUp(size.height, kOutputHeightAlign);
- 
-+	if (outputFormat == formats::NV12) {
-+		/*
-+		 * Lines aligned to 128 bytes, as gralloc (minigbm) and the Venus
-+		 * codec lay out NV12, so that their buffers can be written as
-+		 * they are.
-+		 */
-+		unsigned int stride = utils::alignUp(size.width, 128);
-+		return std::make_tuple(stride, stride * height * 3 / 2);
-+	}
-+
-+	unsigned int stride = (size.width * config.bpp / 8 + 7) & ~7;
-+
- 	return std::make_tuple(stride, stride * height);
+ 	const PixelFormatInfo &info = PixelFormatInfo::info(outputFormat);
+ 	const Size padded(size.width, utils::alignUp(size.height, kOutputHeightAlign));
+-	return std::make_tuple(info.stride(size.width, 0, 8), info.frameSize(padded, 8));
++	/*
++	 * NV12 lines aligned to 128 bytes, as gralloc (minigbm) and the Venus
++	 * codec lay NV12 out, so that their buffers can be written as they are
++	 */
++	const unsigned int align = outputFormat == formats::NV12 ? 128 : 8;
++	return std::make_tuple(info.stride(size.width, 0, align), info.frameSize(padded, align));
  }
  
-@@ -844,7 +871,33 @@ void DebayerCpuThread::memcpyNextLine(const uint8_t *linePointers[])
+ void DebayerCpuThread::setupInputMemcpy(const uint8_t *linePointers[])
+@@ -822,7 +838,33 @@ void DebayerCpuThread::memcpyNextLine(const uint8_t *linePointers[])
   * \param[in] src The source buffer
   * \param[in] dst The destination buffer
   */
@@ -161,7 +141,7 @@ index 47f204b1..4a3eb1ad 100644
  {
  	Rectangle &window = debayer_->window_;
  
-@@ -853,9 +906,11 @@ void DebayerCpuThread::process(uint32_t frame, const uint8_t *src, uint8_t *dst)
+@@ -831,9 +873,11 @@ void DebayerCpuThread::process(uint32_t frame, const uint8_t *src, uint8_t *dst)
  	       window.x * debayer_->inputConfig_.bpp / 8;
  	/* Adjust dst for yStart_ */
  	dst += yStart_ * debayer_->outputConfig_.stride;
@@ -174,7 +154,7 @@ index 47f204b1..4a3eb1ad 100644
  	else
  		process4(frame, src, dst);
  
-@@ -865,9 +920,12 @@ void DebayerCpuThread::process(uint32_t frame, const uint8_t *src, uint8_t *dst)
+@@ -843,9 +887,12 @@ void DebayerCpuThread::process(uint32_t frame, const uint8_t *src, uint8_t *dst)
  	debayer_->workPendingCv_.notify_one();
  }
  
@@ -188,7 +168,7 @@ index 47f204b1..4a3eb1ad 100644
  	unsigned int inputStride = debayer_->inputConfig_.stride;
  	Rectangle &window = debayer_->window_;
  	unsigned int yEnd = yEnd_;
-@@ -903,31 +961,41 @@ void DebayerCpuThread::process2(uint32_t frame, const uint8_t *src, uint8_t *dst
+@@ -881,31 +928,41 @@ void DebayerCpuThread::process2(uint32_t frame, const uint8_t *src, uint8_t *dst
  		shiftLinePointers(linePointers, src);
  		memcpyNextLine(linePointers);
  		debayer_->stats_->processLine0(frame, y, linePointers, threadIndex_);
@@ -234,7 +214,7 @@ index 47f204b1..4a3eb1ad 100644
  	}
  }
  
-@@ -1102,10 +1170,20 @@ void DebayerCpu::process(uint32_t frame, FrameBuffer *input, FrameBuffer *output
+@@ -1080,10 +1137,20 @@ void DebayerCpu::process(uint32_t frame, FrameBuffer *input, FrameBuffer *output
  	workPending_ = (1 << threads_.size()) - 1;
  	workPendingMutex_.unlock();
  
@@ -256,7 +236,7 @@ index 47f204b1..4a3eb1ad 100644
  
  	{
  		MutexLocker locker(workPendingMutex_);
-@@ -1114,7 +1192,8 @@ void DebayerCpu::process(uint32_t frame, FrameBuffer *input, FrameBuffer *output
+@@ -1092,7 +1159,8 @@ void DebayerCpu::process(uint32_t frame, FrameBuffer *input, FrameBuffer *output
  		});
  	}
  
@@ -267,7 +247,7 @@ index 47f204b1..4a3eb1ad 100644
  	dmaSyncers.clear();
  
 diff --git a/src/libcamera/software_isp/debayer_cpu.h b/src/libcamera/software_isp/debayer_cpu.h
-index 5281c65c..8a2e02e2 100644
+index ae570893..44d45fef 100644
 --- a/src/libcamera/software_isp/debayer_cpu.h
 +++ b/src/libcamera/software_isp/debayer_cpu.h
 @@ -147,6 +147,7 @@ private:

@@ -71,7 +71,7 @@ index 00000000..167972ee
 +
 +#endif
 diff --git a/src/android/mm/generic_camera_buffer.cpp b/src/android/mm/generic_camera_buffer.cpp
-index 0ffcb445..0cd25ee3 100644
+index 4aeb2547..664e8df3 100644
 --- a/src/android/mm/generic_camera_buffer.cpp
 +++ b/src/android/mm/generic_camera_buffer.cpp
 @@ -10,6 +10,8 @@

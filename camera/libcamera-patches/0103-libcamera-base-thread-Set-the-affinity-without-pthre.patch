@@ -12,7 +12,7 @@ it runs, and by its ID when it is changed for a running thread.
  1 file changed, 16 insertions(+)
 
 diff --git a/src/libcamera/base/thread.cpp b/src/libcamera/base/thread.cpp
-index bcb25ba6..5b596016 100644
+index b204355a..bf4b82b0 100644
 --- a/src/libcamera/base/thread.cpp
 +++ b/src/libcamera/base/thread.cpp
 @@ -11,6 +11,7 @@

@@ -1,7 +1,7 @@
-From 000bc30ae535ef3a430bd039b606b74e30c1306a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Fri, 30 Oct 2026 14:03:04 -0600
-Subject: [PATCH 14/14] ipa: simple: Add IMX258 and S5K5E3 tuning files
+Subject: [PATCH] ipa: simple: Add IMX258 and S5K5E3 tuning files
 
 Add tuning files for the Sony IMX258 and Samsung S5K5E3 sensors, with
 their black level of 64 at 10 bits.
@@ -12,23 +12,23 @@ the full range of the lens driver that still needs to be calibrated on
 the camera module. The S5K5E3 file doesn't enable autofocus, the sensor
 being found in fixed focus modules.
 
-[backport: moved to src/ipa/simple/data]
+[backport: moved to src/ipa/softisp/data]
 
 Signed-off-by: Jayden Milne <linux@jayd.ml>
 Assisted-by: Claude:claude-opus-5-5
 ---
- src/ipa/simple/data/imx258.yaml | 43 +++++++++++++++++++++++++++++++++
- src/ipa/simple/data/meson.build |  2 ++
- src/ipa/simple/data/s5k5e3.yaml | 11 +++++++++
+ src/ipa/softisp/data/imx258.yaml | 43 ++++++++++++++++++++++++++++++++
+ src/ipa/softisp/data/meson.build |  2 ++
+ src/ipa/softisp/data/s5k5e3.yaml | 11 ++++++++
  3 files changed, 56 insertions(+)
- create mode 100644 src/ipa/simple/data/imx258.yaml
- create mode 100644 src/ipa/simple/data/s5k5e3.yaml
+ create mode 100644 src/ipa/softisp/data/imx258.yaml
+ create mode 100644 src/ipa/softisp/data/s5k5e3.yaml
 
-diff --git a/src/ipa/simple/data/imx258.yaml b/src/ipa/simple/data/imx258.yaml
+diff --git a/src/ipa/softisp/data/imx258.yaml b/src/ipa/softisp/data/imx258.yaml
 new file mode 100644
 index 00000000..bdaa4f9b
 --- /dev/null
-+++ b/src/ipa/simple/data/imx258.yaml
++++ b/src/ipa/softisp/data/imx258.yaml
 @@ -0,0 +1,43 @@
 +# SPDX-License-Identifier: CC0-1.0
 +%YAML 1.1
@@ -73,10 +73,10 @@ index 00000000..bdaa4f9b
 +      # calibrated and needs to be measured on the module.
 +      map: [ 0.0, 0, 10.0, 1023 ]
 +...
-diff --git a/src/ipa/simple/data/meson.build b/src/ipa/simple/data/meson.build
-index 92795ee4..80de1417 100644
---- a/src/ipa/simple/data/meson.build
-+++ b/src/ipa/simple/data/meson.build
+diff --git a/src/ipa/softisp/data/meson.build b/src/ipa/softisp/data/meson.build
+index fd9aa0fa..6278a123 100644
+--- a/src/ipa/softisp/data/meson.build
++++ b/src/ipa/softisp/data/meson.build
 @@ -1,6 +1,8 @@
  # SPDX-License-Identifier: CC0-1.0
  
@@ -86,11 +86,11 @@ index 92795ee4..80de1417 100644
      'uncalibrated.yaml',
  ])
  
-diff --git a/src/ipa/simple/data/s5k5e3.yaml b/src/ipa/simple/data/s5k5e3.yaml
+diff --git a/src/ipa/softisp/data/s5k5e3.yaml b/src/ipa/softisp/data/s5k5e3.yaml
 new file mode 100644
 index 00000000..e903d96a
 --- /dev/null
-+++ b/src/ipa/simple/data/s5k5e3.yaml
++++ b/src/ipa/softisp/data/s5k5e3.yaml
 @@ -0,0 +1,11 @@
 +# SPDX-License-Identifier: CC0-1.0
 +%YAML 1.1
@@ -104,5 +104,5 @@ index 00000000..e903d96a
 +  - Agc:
 +...
 -- 
-2.56.0
+2.34.1
 

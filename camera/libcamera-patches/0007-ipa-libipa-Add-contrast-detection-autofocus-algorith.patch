@@ -1,7 +1,7 @@
-From 00e591ed09f01084c6ab5a62537bf1221537573e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Fri, 30 Oct 2026 14:00:35 -0600
-Subject: [PATCH 11/14] ipa: libipa: Add contrast detection autofocus algorithm
+Subject: [PATCH] ipa: libipa: Add contrast detection autofocus algorithm
 
 Add an autofocus algorithm based on a contrast measurement over a grid
 of regions, for IPA modules whose statistics provide no phase detection
@@ -1025,7 +1025,7 @@ index 00000000..e45f7675
 +
 +} /* namespace libcamera */
 diff --git a/src/ipa/libipa/meson.build b/src/ipa/libipa/meson.build
-index 963c5ee7..e83ff1c1 100644
+index a38d5d52..cadf5f5e 100644
 --- a/src/ipa/libipa/meson.build
 +++ b/src/ipa/libipa/meson.build
 @@ -1,6 +1,7 @@
@@ -1033,17 +1033,17 @@ index 963c5ee7..e83ff1c1 100644
  
  libipa_headers = files([
 +    'af_contrast.h',
+     'agc.h',
      'agc_mean_luminance.h',
-     'algorithm.h',
-     'awb_bayes.h',
-@@ -22,6 +23,7 @@ libipa_headers = files([
+     'agc_msv.h',
+@@ -30,6 +31,7 @@ libipa_headers = files([
  ])
  
  libipa_sources = files([
 +    'af_contrast.cpp',
+     'agc.cpp',
      'agc_mean_luminance.cpp',
-     'algorithm.cpp',
-     'awb_bayes.cpp',
+     'agc_msv.cpp',
 -- 
-2.56.0
+2.34.1
 

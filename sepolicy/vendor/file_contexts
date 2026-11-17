@@ -36,6 +36,6 @@
 
 # Camera: ST's AIDL provider (libcamera's HAL3 module inside), CAMSS nodes
 /vendor/bin/hw/android\.hardware\.camera\.provider-service\.libcamera        u:object_r:hal_camera_default_exec:s0
-/vendor/bin/libcamera/soft_ipa_proxy                                         u:object_r:hal_camera_default_exec:s0
+/vendor/bin/libcamera/softisp_ipa_proxy                                      u:object_r:hal_camera_default_exec:s0
 /dev/media[0-9]+                                                             u:object_r:video_device:s0
 /dev/v4l-subdev[0-9]+                                                        u:object_r:video_device:s0

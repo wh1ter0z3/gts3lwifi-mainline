@@ -1,4 +1,4 @@
-From 6244d4f3ee4f4e1e96f1941769d3074390bb43a3 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Fri, 30 Oct 2026 23:15:29 -0600
 Subject: [PATCH] libcamera: software_isp: Pad the output frame size to whole
@@ -17,6 +17,9 @@ are written don't change.
 
 Signed-off-by: Jayden Milne <linux@jayd.ml>
 Assisted-by: Claude:claude-opus-5-5
+
+[psigod: ported to libcamera 0.8.0, which computes strides and frame
+ sizes with PixelFormatInfo]
 ---
  src/libcamera/software_isp/debayer.cpp     | 9 +++++++++
  src/libcamera/software_isp/debayer.h       | 2 ++
@@ -25,10 +28,10 @@ Assisted-by: Claude:claude-opus-5-5
  4 files changed, 23 insertions(+), 4 deletions(-)
 
 diff --git a/src/libcamera/software_isp/debayer.cpp b/src/libcamera/software_isp/debayer.cpp
-index d60b2a23..7ba8e55d 100644
+index a038a998..89e09fd8 100644
 --- a/src/libcamera/software_isp/debayer.cpp
 +++ b/src/libcamera/software_isp/debayer.cpp
-@@ -242,6 +242,15 @@ Debayer::~Debayer()
+@@ -281,6 +281,15 @@ Debayer::~Debayer()
   * reversed.
   */
  
@@ -45,7 +48,7 @@ index d60b2a23..7ba8e55d 100644
   * \var Debayer::bench_
   * \brief Benchmarking utility instance for performance measurements
 diff --git a/src/libcamera/software_isp/debayer.h b/src/libcamera/software_isp/debayer.h
-index 6c52ed02..dc9d800c 100644
+index f0ebdf59..1f272dcc 100644
 --- a/src/libcamera/software_isp/debayer.h
 +++ b/src/libcamera/software_isp/debayer.h
 @@ -87,6 +87,8 @@ private:
@@ -58,47 +61,45 @@ index 6c52ed02..dc9d800c 100644
  	static bool isStandardBayerOrder(BayerFormat::Order order);
  };
 diff --git a/src/libcamera/software_isp/debayer_cpu.cpp b/src/libcamera/software_isp/debayer_cpu.cpp
-index c84832cf..47f204b1 100644
+index 91867baa..9d1026cb 100644
 --- a/src/libcamera/software_isp/debayer_cpu.cpp
 +++ b/src/libcamera/software_isp/debayer_cpu.cpp
-@@ -784,10 +784,14 @@ DebayerCpu::strideAndFrameSize(const PixelFormat &outputFormat, const Size &size
- 	if (getOutputConfig(outputFormat, config) != 0)
- 		return std::make_tuple(0, 0);
- 
+@@ -763,9 +763,13 @@ std::vector<PixelFormat> DebayerCpu::formats(PixelFormat inputFormat)
+ std::tuple<unsigned int, unsigned int>
+ DebayerCpu::strideAndFrameSize(const PixelFormat &outputFormat, const Size &size)
+ {
 -	/* round up to multiple of 8 for 64 bits alignment */
 +	/*
 +	 * round up to multiple of 8 for 64 bits alignment, and the frame size
 +	 * to whole groups of kOutputHeightAlign lines
 +	 */
- 	unsigned int stride = (size.width * config.bpp / 8 + 7) & ~7;
-+	unsigned int height = utils::alignUp(size.height, kOutputHeightAlign);
- 
--	return std::make_tuple(stride, stride * size.height);
-+	return std::make_tuple(stride, stride * height);
+ 	const PixelFormatInfo &info = PixelFormatInfo::info(outputFormat);
+-	return std::make_tuple(info.stride(size.width, 0, 8), info.frameSize(size, 8));
++	const Size padded(size.width, utils::alignUp(size.height, kOutputHeightAlign));
++	return std::make_tuple(info.stride(size.width, 0, 8), info.frameSize(padded, 8));
  }
  
  void DebayerCpuThread::setupInputMemcpy(const uint8_t *linePointers[])
 diff --git a/src/libcamera/software_isp/debayer_egl.cpp b/src/libcamera/software_isp/debayer_egl.cpp
-index aaa42b5b..0f99e38b 100644
+index df0d9c99..92317ef1 100644
 --- a/src/libcamera/software_isp/debayer_egl.cpp
 +++ b/src/libcamera/software_isp/debayer_egl.cpp
-@@ -397,10 +397,14 @@ DebayerEGL::strideAndFrameSize(const PixelFormat &outputFormat, const Size &size
- 	if (getOutputConfig(outputFormat, config) != 0)
- 		return std::make_tuple(0, 0);
- 
+@@ -388,9 +388,13 @@ std::vector<PixelFormat> DebayerEGL::formats(PixelFormat inputFormat)
+ std::tuple<unsigned int, unsigned int>
+ DebayerEGL::strideAndFrameSize(const PixelFormat &outputFormat, const Size &size)
+ {
 -	/* Align stride to 256 bytes as a generic GPU memory access alignment */
 +	/*
 +	 * Align stride to 256 bytes as a generic GPU memory access alignment,
 +	 * and the frame size to whole groups of kOutputHeightAlign lines.
 +	 */
- 	unsigned int stride = libcamera::utils::alignUp(size.width * config.bpp / 8, 256);
-+	unsigned int height = libcamera::utils::alignUp(size.height, kOutputHeightAlign);
- 
--	return std::make_tuple(stride, stride * size.height);
-+	return std::make_tuple(stride, stride * height);
+ 	const PixelFormatInfo &info = PixelFormatInfo::info(outputFormat);
+-	return std::make_tuple(info.stride(size.width, 0, 256), info.frameSize(size, 256));
++	const Size padded(size.width, libcamera::utils::alignUp(size.height, kOutputHeightAlign));
++	return std::make_tuple(info.stride(size.width, 0, 256), info.frameSize(padded, 256));
  }
  
  uint32_t DebayerEGL::preferredInputStride(const PixelFormat &inputFormat, const Size &size)
 -- 
-2.56.0
+2.34.1
 

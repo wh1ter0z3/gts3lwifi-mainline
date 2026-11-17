@@ -1,0 +1,145 @@
+From b6e75a7962a32473b8fee892cc8802c857e8b49e Mon Sep 17 00:00:00 2001
+From: Robert Mader <robert.mader@collabora.com>
+Date: Sat, 10 Oct 2026 22:45:50 +0200
+Subject: [PATCH 1/2] libcamera: software_isp: Allow limiting output sizes
+
+There are various scenarios where it can be useful to control the output
+sizes of the softisp inside libcamera without rebuilding the project.
+Examples include:
+ - Debugging and testing when one can't fully control the client
+ - Forcing well working sizes on devices where the GPU/CPU are not strong
+   enough for typically client-picked sizes. This can be especially
+   useful on mobile devices
+
+Add a new "options" block to softisp tuning files, to be used like shown
+below:
+
+>options:
+>  min_output_width: 640
+>  min_output_height: 480
+>  max_output_width: 1920
+>  max_output_height: 1080
+
+Signed-off-by: Robert Mader <robert.mader@collabora.com>
+
+---
+
+Changes in v2:
+ - Use tuning files instead of the global config
+ - Fix typo in commit message
+
+Context:
+
+I plan to use this as convenience feature in Nura (formerly postmarketOS),
+making it easy to ship device specific configuration files without needing
+libcamera-specific downstream changes to the kernel. To me the feature
+seems useful enough to upstream it, though.
+---
+ .../internal/software_isp/software_isp.h      |  1 +
+ include/libcamera/ipa/softisp.mojom           |  3 ++-
+ src/ipa/softisp/softisp.cpp                   | 22 +++++++++++++++++--
+ src/libcamera/software_isp/software_isp.cpp   |  8 +++++--
+ 4 files changed, 29 insertions(+), 5 deletions(-)
+
+diff --git a/include/libcamera/internal/software_isp/software_isp.h b/include/libcamera/internal/software_isp/software_isp.h
+index b64910637dcc..12e70ec12481 100644
+--- a/include/libcamera/internal/software_isp/software_isp.h
++++ b/include/libcamera/internal/software_isp/software_isp.h
+@@ -102,6 +102,7 @@ private:
+ 	DmaBufAllocator dmaHeap_;
+ 	bool ccmEnabled_;
+ 	bool lscEnabled_;
++	SizeRange outputSizeLimits_;
+ 
+ 	std::unique_ptr<ipa::softisp::IPAProxySoftIsp> ipa_;
+ 	std::deque<FrameBuffer *> queuedInputBuffers_;
+diff --git a/include/libcamera/ipa/softisp.mojom b/include/libcamera/ipa/softisp.mojom
+index e42742ed7f6d..52f60d902b25 100644
+--- a/include/libcamera/ipa/softisp.mojom
++++ b/include/libcamera/ipa/softisp.mojom
+@@ -20,7 +20,8 @@ interface IPASoftIspInterface {
+ 	     libcamera.ControlInfoMap sensorControls)
+ 		=> (int32 ret,
+ 		    libcamera.ControlInfoMap ipaControls,
+-		    bool ccmEnabled, bool lscEnabled);
++		    bool ccmEnabled, bool lscEnabled,
++		    libcamera.SizeRange sizeLimits);
+ 	start() => (int32 ret);
+ 	stop();
+ 	configure(IPAConfigInfo configInfo)
+diff --git a/src/ipa/softisp/softisp.cpp b/src/ipa/softisp/softisp.cpp
+index 00249a300430..a166176b90c0 100644
+--- a/src/ipa/softisp/softisp.cpp
++++ b/src/ipa/softisp/softisp.cpp
+@@ -59,7 +59,8 @@ public:
+ 		 const ControlInfoMap &sensorControls,
+ 		 ControlInfoMap *ipaControls,
+ 		 bool *ccmEnabled,
+-		 bool *lscEnabled) override;
++		 bool *lscEnabled,
++		 SizeRange *sizeLimits) override;
+ 	int configure(const IPAConfigInfo &configInfo,
+ 		      ControlInfoMap *ipaControls) override;
+ 
+@@ -99,7 +100,8 @@ int IPASoftIsp::init(const IPASettings &settings,
+ 		     const ControlInfoMap &sensorControls,
+ 		     ControlInfoMap *ipaControls,
+ 		     bool *ccmEnabled,
+-		     bool *lscEnabled)
++		     bool *lscEnabled,
++		     SizeRange *sizeLimits)
+ {
+ 	context_.camHelper = CameraSensorHelperFactoryBase::create(settings.sensorModel);
+ 	if (!context_.camHelper) {
+@@ -186,6 +188,22 @@ int IPASoftIsp::init(const IPASettings &settings,
+ 	ControlInfoMap::Map ctrlMap = context_.ctrlMap;
+ 	*ipaControls = ControlInfoMap(std::move(ctrlMap), controls::controls);
+ 
++	sizeLimits->min = Size(0, 0);
++	sizeLimits->max = Size(std::numeric_limits<uint32_t>::max(),
++			       std::numeric_limits<uint32_t>::max());
++	if (data->contains("options")) {
++		const ValueNode *options = &(*data)["options"];
++
++		if (options->contains("min_output_width"))
++			sizeLimits->min.width = (*options)["min_output_width"].get<uint32_t>(0);
++		if (options->contains("min_output_heigth"))
++			sizeLimits->min.height = (*options)["min_output_heigth"].get<uint32_t>(0);
++		if (options->contains("max_output_width"))
++			sizeLimits->max.width = (*options)["max_output_width"].get<uint32_t>(0);
++		if (options->contains("max_output_heigth"))
++			sizeLimits->max.height = (*options)["max_output_heigth"].get<uint32_t>(0);
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/src/libcamera/software_isp/software_isp.cpp b/src/libcamera/software_isp/software_isp.cpp
+index 627625b4f54f..218660ed8510 100644
+--- a/src/libcamera/software_isp/software_isp.cpp
++++ b/src/libcamera/software_isp/software_isp.cpp
+@@ -164,7 +164,8 @@ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
+ 			 sensor->controls(),
+ 			 ipaControls,
+ 			 &ccmEnabled_,
+-			 &lscEnabled_);
++			 &lscEnabled_,
++			 &outputSizeLimits_);
+ 	if (ret) {
+ 		LOG(SoftwareIsp, Error) << "IPA init failed";
+ 		debayer_.reset();
+@@ -244,7 +245,10 @@ SizeRange SoftwareIsp::sizes(PixelFormat inputFormat, const Size &inputSize)
+ {
+ 	ASSERT(debayer_);
+ 
+-	return debayer_->sizes(inputFormat, inputSize);
++	SizeRange sizes = debayer_->sizes(inputFormat, inputSize);
++	sizes.min = sizes.min.expandTo(outputSizeLimits_.min).alignUpTo(sizes.hStep, sizes.vStep);
++	sizes.max = sizes.max.boundTo(outputSizeLimits_.max).alignDownTo(sizes.hStep, sizes.vStep);
++	return sizes;
+ }
+ 
+ /**
+-- 
+2.56.0
+

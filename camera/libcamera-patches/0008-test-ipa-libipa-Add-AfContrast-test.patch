@@ -1,7 +1,7 @@
-From 20de374708ba0b08bb4c4b530f02512c833efe80 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jayden Milne <linux@jayd.ml>
 Date: Fri, 30 Oct 2026 14:00:35 -0600
-Subject: [PATCH 12/14] test: ipa: libipa: Add AfContrast test
+Subject: [PATCH] test: ipa: libipa: Add AfContrast test
 
 Test the contrast detection autofocus algorithm against a simulated
 lens and scene, covering manual focus, auto and continuous scans,
@@ -561,5 +561,5 @@ index c3e25587..b4d84d76 100644
      {'name': 'histogram', 'sources': ['histogram.cpp']},
      {'name': 'interpolator', 'sources': ['interpolator.cpp']},
 -- 
-2.56.0
+2.34.1
 
