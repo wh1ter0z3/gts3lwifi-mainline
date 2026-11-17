@@ -13,8 +13,29 @@ mnt=
 cleanup() { [ -z "$mnt" ] || { umount "$mnt"; rmdir "$mnt"; }; }
 trap cleanup EXIT
 
+# the partition labelled pmOS_boot, if the kernel has it as a device
+find_boot() {
+	d=$(findfs LABEL=pmOS_boot 2>/dev/null) || d=$(blkid -L pmOS_boot 2>/dev/null) || d=
+	[ -b "$d" ] && echo "$d"
+}
+
 if [ ! -f "$conf" ]; then
-	dev=$(findfs LABEL=pmOS_boot 2>/dev/null || blkid -L pmOS_boot 2>/dev/null || true)
+	dev=$(find_boot) || dev=
+	if [ -z "$dev" ]; then
+		# the layout's GPT on the userdata partition isn't attached (Android
+		# from another disk): attach it to see its partitions
+		ud=$(readlink -f /dev/block/by-name/userdata 2>/dev/null || readlink -f /dev/disk/by-partlabel/userdata 2>/dev/null) || ud=
+		# (Android: toybox's losetup has no -P, and busybox's looks for free
+		# devices in /dev, not /dev/block: toybox names one, busybox attaches)
+		if [ -b "$ud" ]; then
+			losetup -f -P "$ud" 2>/dev/null || {
+				lo=$(losetup -f 2>/dev/null) || lo=
+				[ -b "$lo" ] && busybox losetup -P "$lo" "$ud"
+			}
+			sleep 1
+		fi
+		dev=$(find_boot) || dev=
+	fi
 	[ -n "$dev" ] || { echo "no partition labelled pmOS_boot" >&2; exit 1; }
 	mnt=$(mktemp -d)
 	mount -t ext2 "$dev" "$mnt"
