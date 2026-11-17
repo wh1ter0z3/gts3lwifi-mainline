@@ -2,11 +2,11 @@
  "release": {
   "name": "pmos-gts3-preview1"
  },
- "jobs": 16,
+ "jobs": 12,
  "fork": {
   "url": "https://github.com/wh1ter0z3/gts3lwifi-mainline.git",
-  "commit": "fa315df947bb01353f313741d93dcb887e683996",
-  "pmaports_tree": "9350e5ca33068db330b9ea359aaebe67ae34a4fb",
+  "commit": "e39fb3c47d89b26ea3be2625d408dbeb0d400540",
+  "pmaports_tree": "cbbd603bfe26b118a63fd52b29f3bd0a7982096a",
   "build": [
    "linux-postmarketos-qcom-msm8996",
    "device-samsung-gts3lwifi",
@@ -31,11 +31,11 @@
  },
  "pmbootstrap": {
   "url": "https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git",
-  "commit": "46ee403e4680002ce42dc2645adf9b08557270e9"
+  "commit": "e0dfe2cda7f3a0b70cdcc96f3060100839322aa4"
  },
  "pmaports": {
   "url": "https://gitlab.postmarketos.org/postmarketOS/pmaports.git",
-  "commit": "c33fd8ac3a8f05bc36c633c2233023e3ca70b847"
+  "commit": "5e58ec8390f9d04ba9b97d2b39616e254edee8b7"
  },
  "image": {
   "device": "samsung-gts3lwifi",
