@@ -4,13 +4,18 @@
 #
 # It does the job of Android's first stage init, but takes the partitions from
 # image files in a directory, so the eMMC's own system/vendor partitions are
-# never reflashed. Two layouts:
+# never reflashed. Three layouts:
 #  - standalone (no pmos_root_uuid=): the directory is on the userdata
 #    partition, made by the PC installer; kernel modules and links to the
 #    tablet's own firmware are in our vendor image, the firmware itself is read
 #    from the tablet's partitions (apnhlos, modem, system, efs; read only)
 #  - pmOS: the directory is on the postmarketOS root partition, so pmOS still
 #    boots from the same disk, and pmOS's udevd, modprobe and firmware are used
+#  - partitions (gsi.parts=1, standalone otherwise): dual boot with Nura.
+#    Android's own partitions in the GPT on the userdata partition, found by
+#    name: android_system, android_vendor and android_data (an ext4 made by
+#    the installer: /data, and in its .gts3 directory what <dir> holds in
+#    the other layouts except the images: keep, logs, system-hide...)
 #
 #   <dir>/system.img       system (system-as-root) image, e.g. a GSI
 #   <dir>/vendor.img       our vendor image (tools/mkvendor-glodroid.sh;
@@ -27,6 +32,10 @@
 # image and runs Android's init at its selinux_setup stage. Kernel command line:
 #   pmos_root_uuid=   the pmOS root filesystem (as pmOS's own boot image)
 #   gsi.dir=          image directory in it (default /android)
+#   gsi.parts=1       the partitions layout
+#   gsi.disk=         with gsi.parts=1: the eMMC partition (by label) whose
+#                     GPT has Android's partitions (default userdata), or a
+#                     whole disk by kernel name (mmcblk1: microSD, for tests)
 #   gsi.vkms=1        load vkms (a virtual display; for a board without panel)
 #   gsi.data=SIZE     pmOS: size of userdata.img: made at it, or grown to it
 #                     (default 8G)
@@ -53,8 +62,8 @@
 # `nc 172.16.42.1 23`) on the USB NCM link pmOS also sets up (that address
 # only: not on Wi-Fi; not with gsi.usb=android), and the partition with the
 # images is mounted on
-# /mnt/vendor/store (standalone) or /mnt/vendor/pmos (vold unmounts
-# everything else under /mnt).
+# /mnt/vendor/store (standalone; with gsi.parts=1 android_data, <dir> =
+# .gts3) or /mnt/vendor/pmos (vold unmounts everything else under /mnt).
 #
 # Android's init reads its androidboot.* parameters from /proc/cmdline. They
 # can't be in the boot image (lk2nd would treat it as a downstream Android
@@ -122,11 +131,13 @@ fail() {
 	reboot -f
 }
 
-ROOT_UUID=; GSI_DIR=/android; VKMS=0; DATA_SIZE=8G; DEADMAN=0; COMPOSITOR=; AUDIO=; SELINUX=permissive; USB=net
+ROOT_UUID=; GSI_DIR=/android; PARTS=0; DISK=userdata; VKMS=0; DATA_SIZE=8G; DEADMAN=0; COMPOSITOR=; AUDIO=; SELINUX=permissive; USB=net
 for w in $(cat /proc/cmdline); do
 	case $w in
 	pmos_root_uuid=*) ROOT_UUID=${w#*=} ;;
 	gsi.dir=*) GSI_DIR=${w#*=} ;;
+	gsi.parts=*) PARTS=${w#*=} ;;
+	gsi.disk=*) DISK=${w#*=} ;;
 	gsi.vkms=*) VKMS=${w#*=} ;;
 	gsi.data=*) DATA_SIZE=${w#*=} ;;
 	gsi.deadman=*) DEADMAN=${w#*=} ;;
@@ -142,7 +153,9 @@ done
 # vendor image and the tablet's own firmware partitions.
 [ -n "$ROOT_UUID" ] && STANDALONE=0 || STANDALONE=1
 [ $STANDALONE = 1 ] && { COMPOSITOR=; AUDIO=; }	# those run in pmOS
-log "starting; $([ $STANDALONE = 1 ] && echo standalone || echo "pmOS root $ROOT_UUID"), images in $GSI_DIR"
+[ $STANDALONE = 1 ] || PARTS=0
+[ "$PARTS" = 1 ] && GSI_DIR=/.gts3
+log "starting; $([ "$PARTS" = 1 ] && echo "partitions on $DISK" || { [ $STANDALONE = 1 ] && echo standalone || echo "pmOS root $ROOT_UUID"; }), images in $GSI_DIR"
 
 # /dev/<partition> of a partition label
 part_dev() {
@@ -151,8 +164,40 @@ part_dev() {
 	done
 	return 1
 }
-P=$(part_dev userdata) || fail "no userdata partition"
-if [ $STANDALONE = 1 ]; then
+# The system and vendor images and the /data device: image files in <dir>,
+# or partitions (gsi.parts=1)
+SYSIMG=; VENIMG=; IMGOPT=,loop
+if [ "$PARTS" = 1 ]; then
+	# Android's partitions: in the GPT on an eMMC partition (seen through a
+	# loop device), or on a whole disk the kernel has the partitions of
+	if [ -e /sys/class/block/$DISK ] && [ ! -e /sys/class/block/$DISK/partition ]; then
+		PB=${DISK}p
+	else
+		P=$(part_dev $DISK) || fail "no $DISK partition"
+		L=$(losetup -f) && losetup -P "$L" "$P" || fail "losetup $P"
+		PB=${L#/dev/}p
+	fi
+	# /dev/<partition> of a partition name there
+	sub_dev() {
+		for u in /sys/class/block/$PB*/uevent; do
+			grep -q "^PARTNAME=$1\$" "$u" && { echo "/dev/$(sed -n 's/^DEVNAME=//p' "$u")"; return 0; }
+		done
+		return 1
+	}
+	for i in $(seq 20); do sub_dev android_data > /dev/null && break; sleep 0.5; done
+	SYSIMG=$(sub_dev android_system) || fail "no android_system partition on $DISK"
+	VENIMG=$(sub_dev android_vendor) || fail "no android_vendor partition on $DISK"
+	D=$(sub_dev android_data) || fail "no android_data partition on $DISK"
+	IMGOPT=
+	# /data and <dir> are the same file system: one device for both mounts
+	losetup /dev/loop7 "$D" || fail "losetup $D"
+	SM=/store; SMA=/mnt/vendor/store
+	mkdir -p $SM && mount -t ext4 -o rw,noatime /dev/loop7 $SM ||
+		fail "no file system on android_data $D (the installer makes it)"
+	mkdir -p "$SM$GSI_DIR"
+	log "partitions: system $SYSIMG, vendor $VENIMG, data $D"
+elif [ $STANDALONE = 1 ]; then
+	P=$(part_dev userdata) || fail "no userdata partition"
 	# the store: userdata itself, else a partition in a disk image on it
 	# (pmOS's "subpartitions", on a tablet that has it too)
 	SM=/store; SMA=/mnt/vendor/store
@@ -171,6 +216,7 @@ if [ $STANDALONE = 1 ]; then
 	log "store $R mounted"
 else
 	# pmOS lives in a disk image on the userdata partition ("subpartitions")
+	P=$(part_dev userdata) || fail "no userdata partition"
 	SM=/pmos; SMA=/mnt/vendor/pmos
 	L=$(losetup -f) && losetup -P "$L" "$P" || fail "losetup $P"
 	R=
@@ -184,7 +230,10 @@ else
 	log "pmOS root $R mounted"
 fi
 G=$SM$GSI_DIR
-[ -f "$G/system.img" ] && [ -f "$G/vendor.img" ] || fail "no images in $G"
+if [ "$PARTS" != 1 ]; then
+	SYSIMG=$G/system.img; VENIMG=$G/vendor.img
+	[ -f "$SYSIMG" ] && [ -f "$VENIMG" ] || fail "no images in $G"
+fi
 rm -f "$G/keep"
 dmesg > "$G/boot.log"
 
@@ -192,12 +241,15 @@ dmesg > "$G/boot.log"
 # that all but the last second survives a panic (<dir>/log.img, boot.log;
 # init's last words are in it). cat stops with EPIPE when it falls behind
 # the ring buffer, hence the loop (it then re-reads the buffer: duplicates).
-if [ ! -f "$G/log.img" ] && [ $STANDALONE = 0 ]; then	# else the installer made it
+if [ "$PARTS" = 1 ]; then
+	# no image: a directory on android_data's ext4
+	mkdir -p "$G/log" /log && mount --bind "$G/log" /log
+elif [ ! -f "$G/log.img" ] && [ $STANDALONE = 0 ]; then	# else the installer made it
 	truncate -s 16M "$G/log.img" &&
 		chroot /pmos /sbin/mke2fs -q -t ext4 -L gsilog "${G#/pmos}/log.img"
 fi
 LOG1=; LOG2=
-if mkdir -p /log && mount -t ext4 -o loop "$G/log.img" /log &&
+if mkdir -p /log && { mountpoint -q /log || mount -t ext4 -o loop "$G/log.img" /log; } &&
 	# the previous boot's log, for a look after a reset (<dir>/boot.prev.log)
 	{ [ ! -s /log/boot.log ] || cp /log/boot.log "$G/boot.prev.log"; } &&
 	: > /log/boot.log; then
@@ -208,8 +260,8 @@ fi
 # The vendor image holds the firmware (firmware_class.path=/vendor/firmware),
 # so it is mounted before any driver asks for some
 mount_vendor() {
-	mkdir -p /vendor && mount -t erofs -o ro,loop "$G/vendor.img" /vendor 2>/dev/null ||
-		mount -o ro,loop "$G/vendor.img" /vendor || fail "mount vendor.img"
+	mkdir -p /vendor && mount -t erofs -o ro$IMGOPT "$VENIMG" /vendor 2>/dev/null ||
+		mount -o ro$IMGOPT "$VENIMG" /vendor || fail "mount vendor $VENIMG"
 	# The kernel always searches /lib/firmware too
 	mkdir -p /lib && ln -s /vendor/firmware /lib/firmware
 }
@@ -353,8 +405,10 @@ fi
 # brings the debug link up when there is no Android to hand it to)
 [ "$USB" = android ] || gadget
 
-# /data: an ext4 image next to the others
-if [ $STANDALONE = 1 ]; then
+# /data: an ext4 image next to the others (or android_data: on loop7 already)
+if [ "$PARTS" = 1 ]; then
+	:
+elif [ $STANDALONE = 1 ]; then
 	[ -f "$G/userdata.img" ] || fail "no $G/userdata.img (the installer makes it)"
 elif [ ! -f "$G/userdata.img" ]; then
 	log "making $G/userdata.img ($DATA_SIZE)"
@@ -397,13 +451,13 @@ else
 		fi
 	fi
 fi
-losetup /dev/loop7 "$G/userdata.img" || fail "losetup userdata.img"
+[ "$PARTS" = 1 ] || losetup /dev/loop7 "$G/userdata.img" || fail "losetup userdata.img"
 
 # The new root: system-as-root, with product/system_ext if separate
 N=/newroot
 mkdir -p $N
-mount -t erofs -o ro,loop "$G/system.img" $N 2>/dev/null ||
-	mount -o ro,loop "$G/system.img" $N || fail "mount system.img"
+mount -t erofs -o ro$IMGOPT "$SYSIMG" $N 2>/dev/null ||
+	mount -o ro$IMGOPT "$SYSIMG" $N || fail "mount system $SYSIMG"
 [ -x $N/system/bin/init ] || fail "system.img has no /system/bin/init"
 for p in product system_ext; do
 	[ -f "$G/$p.img" ] && [ -d $N/$p ] && [ ! -L $N/$p ] &&
@@ -453,11 +507,11 @@ fi
 
 # /data: mounted here (fs_mgr ignored the fstab entry for a loop device);
 # init's post-fs-data then owns it. Android expects it unencrypted.
-mount -t ext4 -o rw,noatime,nosuid,nodev /dev/loop7 $N/data || fail "mount userdata.img"
+mount -t ext4 -o rw,noatime,nosuid,nodev /dev/loop7 $N/data || fail "mount /data (loop7)"
 # Nothing in it yet: Android's first start on this /data, for board files that
 # set up a new system once (ro.boot.gsi.firstboot=1)
 FIRSTBOOT=0
-[ -n "$(ls -A $N/data | grep -v '^lost+found$')" ] || { FIRSTBOOT=1; log "/data is new: first start"; }
+[ -n "$(ls -A $N/data | grep -v -e '^lost+found$' -e '^\.gts3$')" ] || { FIRSTBOOT=1; log "/data is new: first start"; }
 
 # Services from pmOS for the host-integration HALs of a Waydroid vendor:
 # a Wayland compositor (composer HAL) and PipeWire with its PulseAudio server
