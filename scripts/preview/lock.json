@@ -5,8 +5,8 @@
  "jobs": 12,
  "fork": {
   "url": "https://github.com/wh1ter0z3/gts3lwifi-mainline.git",
-  "commit": "e39fb3c47d89b26ea3be2625d408dbeb0d400540",
-  "pmaports_tree": "cbbd603bfe26b118a63fd52b29f3bd0a7982096a",
+  "commit": "7a45d337260b82da8561f977472ba7a9cb69775d",
+  "pmaports_tree": "88cf8d61ccb00907eeeee3d83306370bf687f73e",
   "build": [
    "linux-postmarketos-qcom-msm8996",
    "device-samsung-gts3lwifi",
