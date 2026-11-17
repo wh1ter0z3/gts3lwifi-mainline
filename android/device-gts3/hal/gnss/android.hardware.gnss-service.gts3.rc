@@ -1,0 +1,4 @@
+service vendor.gnss-gts3 /vendor/bin/hw/android.hardware.gnss-service.gts3
+    class hal
+    user gps
+    group gps

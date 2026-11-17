@@ -47,9 +47,37 @@ on post-fs-data
     mkdir /data/vendor/wifi/hostapd 0770 wifi wifi
     mkdir /data/vendor/wifi/hostapd/sockets 0770 wifi wifi
 
+    # The modem DSP, which holds the GNSS engine: rmtfs serves it its file
+    # system from the modemst1/2, fsg and fsc partitions (in memory only, -r:
+    # nothing is written back) and starts it (-s); tqftpserv serves it files,
+    # its own read-write ones from here.
+    mkdir /data/vendor/tmp 0770 root system
+    start vendor.tqftpserv
+    start vendor.rmtfs
+
+on shutdown
+    stop vendor.rmtfs
+
 service vendor.gts3-audio-init /vendor/bin/gts3-audio-init.sh
     class core
     user audio
     group audio
+    oneshot
+    disabled
+
+# Linaro's (device/linaro/dragonboard/shared/utils). A tablet without the
+# modem DSP in its DT (the SM-T825 for now) has nothing for rmtfs to start:
+# it exits, and oneshot keeps it from being started again.
+service vendor.rmtfs /vendor/bin/rmtfs -o /dev/block/by-name -P -r -s
+    class core
+    user root
+    group system
+    oneshot
+    disabled
+
+service vendor.tqftpserv /vendor/bin/tqftpserv
+    class core
+    user root
+    group system
     oneshot
     disabled

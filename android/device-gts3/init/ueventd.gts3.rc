@@ -33,3 +33,24 @@ firmware_directories /vendor/firmware/
 # CPU frequency limits for the power HAL
 /sys/devices/system/cpu/cpu*  cpufreq/scaling_min_freq  0664  system  system
 /sys/devices/system/cpu/cpu*  cpufreq/scaling_max_freq  0664  system  system
+
+# Sensors (qcom_smgr IIO devices): the multihal runs as system and turns
+# their buffers and channels on, sets the rate and the timestamp clock.
+# ueventd matches /sys/bus/iio/devices/<dev> for the iio subsystem.
+/sys/bus/iio/devices/iio:device*  buffer/enable  0664  system  system
+/sys/bus/iio/devices/iio:device*  current_timestamp_clock  0664  system  system
+/sys/bus/iio/devices/iio:device*  in_accel_sampling_frequency  0664  system  system
+/sys/bus/iio/devices/iio:device*  in_anglvel_sampling_frequency  0664  system  system
+/sys/bus/iio/devices/iio:device*  in_magn_sampling_frequency  0664  system  system
+/sys/bus/iio/devices/iio:device*  in_intensity_both_sampling_frequency  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_accel_x_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_accel_y_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_accel_z_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_anglvel_x_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_anglvel_y_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_anglvel_z_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_magn_x_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_magn_y_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_magn_z_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_intensity_both_en  0664  system  system
+/sys/bus/iio/devices/iio:device*  scan_elements/in_timestamp_en  0664  system  system

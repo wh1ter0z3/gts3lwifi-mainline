@@ -1,0 +1,51 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+// The sensors behind the SLPI (accelerometer, gyroscope, magnetometer,
+// light), which the kernel's qcom_smgr driver shows as IIO devices, as a
+// sub-HAL of AOSP's AIDL sensors multihal (android.hardware.sensors-
+// service.multihal loads it from vendor/etc/sensors/hals.conf). The
+// sensor class and thread come from AOSP's IIO sub-HAL in
+// device/google/trout/hal/sensors/2.1.
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_library_shared {
+    name: "android.hardware.sensors@2.1-gts3-iio-subhal",
+    vendor: true,
+    compile_multilib: "first",
+    srcs: [
+        "iio.cpp",
+        "Sensor.cpp",
+        "SensorThread.cpp",
+        "SensorsSubHal.cpp",
+    ],
+    header_libs: [
+        "android.hardware.sensors@2.1-multihal.header",
+    ],
+    shared_libs: [
+        "android.hardware.sensors@1.0",
+        "android.hardware.sensors@2.0",
+        "android.hardware.sensors@2.1",
+        "android.hardware.sensors@2.0-ScopedWakelock",
+        "libbase",
+        "libcutils",
+        "libfmq",
+        "libhardware",
+        "libhidlbase",
+        "liblog",
+        "libpower",
+        "libutils",
+    ],
+    static_libs: [
+        "android.hardware.sensors@2.X-multihal",
+    ],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
+}
