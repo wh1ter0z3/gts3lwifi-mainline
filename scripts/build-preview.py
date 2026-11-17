@@ -243,6 +243,9 @@ def step_builder(ctx):
 
 def step_packages(ctx):
     pkgs = ctx.lock["fork"]["build"]
+    if ctx.a.only:
+        # Rebuild only these; the others stay as the run's work directory has them
+        pkgs = [p for p in ctx.a.only.split(",") if p in pkgs] or die(f"--only: none of {ctx.a.only} in the lock")
     ctx.pmbootstrap("build", "--force", "--arch", "aarch64", *pkgs, log=ctx.log("packages"))
     ctx.pmbootstrap("shutdown", log=ctx.log("packages"))
 
@@ -385,6 +388,7 @@ def step_release(ctx):
         "run": ctx.run,
         "built": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "unpinned": bool(ctx.a.unpinned),
+        "only": ctx.a.only,
         "lock": ctx.lock,
         "source_tree_head": git("rev-parse", "HEAD"),
         "drift_against_committed_manifest": drift,
@@ -472,6 +476,7 @@ def main():
     ap.add_argument("--lock", default=LOCK)
     ap.add_argument("--out")
     ap.add_argument("--unpinned", action="store_true", help="use pmaports/ from the working tree; recorded in BUILDINFO.json")
+    ap.add_argument("--only", help="packages step: rebuild only these (comma separated) of the lock's list; recorded in BUILDINFO.json")
     ap.add_argument("--no-drift", action="store_true", help="fail if the apks differ from the committed manifest")
     ap.add_argument("--seed-distfiles", help="copy source tarballs from this directory first (abuild still checks hashes)")
     ap.add_argument("--t820-donor", help="boot image with the SM-T820's stock device trees")

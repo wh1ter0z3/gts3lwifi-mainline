@@ -13,7 +13,8 @@
    "kwin",
    "libcamera",
    "iio-sensor-proxy",
-   "gnss-share"
+   "gnss-share",
+   "ocellus"
   ],
   "overlay": {
    "linux-postmarketos-qcom-msm8996": "device/testing/linux-postmarketos-qcom-msm8996",
@@ -21,7 +22,8 @@
    "kwin": "extra-repos/systemd/kwin",
    "libcamera": "temp/libcamera",
    "iio-sensor-proxy": "temp/iio-sensor-proxy",
-   "gnss-share": "temp/gnss-share"
+   "gnss-share": "temp/gnss-share",
+   "ocellus": "temp/ocellus"
   }
  },
  "kernel": {
@@ -47,7 +49,8 @@
   "locale": "en_US.UTF-8",
   "boot_size_mb": 512,
   "add": [
-   "device-samsung-gts3lwifi-preview"
+   "device-samsung-gts3lwifi-preview",
+   "ocellus"
   ],
   "providers": {
    "postmarketos-base-ui-audio-backend": "postmarketos-base-ui-audio-backend-pipewire"
