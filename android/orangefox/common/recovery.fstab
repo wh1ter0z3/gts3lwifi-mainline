@@ -1,0 +1,10 @@
+# Galaxy Tab S3 (SM-T820, SM-T825): the partitions Android's own code in the
+# recovery has to find, in Android's fstab format. Everything else is in
+# recovery/root/system/etc/twrp.flags, in TWRP's format: one TWRP-format line
+# here and Android's parser rejects the whole file.
+#
+# /misc: the bootloader message. Android writes "boot-recovery" there before
+# restarting to recovery and the recovery clears it. Without this line it
+# can't, and S-Boot keeps starting the recovery.
+
+/dev/block/bootdevice/by-name/misc      /misc   emmc    defaults    defaults
