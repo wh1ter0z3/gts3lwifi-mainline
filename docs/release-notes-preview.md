@@ -63,7 +63,7 @@ use it.
 | Compass heading | Not yet |
 | Video playback across a resolution change | A stream that switches size in the middle (adaptive streaming) to one that needs a crop, such as 1080p, shows 8 extra lines at the bottom. Files play correctly |
 | Microphone level | Quiet, peaks near 5 %: gain never tuned |
-| Camera app | None in this image. The kernel and libcamera side work. Plasma Camera, from the repositories, is broken on this tablet (wrong resolution, smeared photos, empty video, crash when switching cameras) |
+| Plasma Camera | Broken on this tablet (wrong resolution, smeared photos, empty video, crash when switching cameras). Use Ocellus, which this image has |
 | Bluetooth | On some boots there's no controller (`Opcode 0x0c03 failed: -110` in the log). Bring it back with `sudo rmmod hci_uart; sudo modprobe hci_uart` |
 | Kernel log | `pclk0_clk_src: rcg didn't update its configuration` on most boots. Looks harmless: the picture was right on a boot with it |
 | DNS on some routers | On our home router, systemd-resolved's DNSSEC check fails and no names resolve. We turned the check off by hand; this image has the default. Fix: [the install guide, step 6](install-preview.md#6-reboot-once) |
@@ -95,8 +95,8 @@ is untested there.
 | Battery gauge, charging | Works | battery temperature from its own thermistor since kernel r8: no more false "Warm" throttling on fast chargers |
 | Speakers, headphones, mics | Works | by ear; mic quiet |
 | Headphone jack detection, headset mic and button | Works | plug and unplug switch the output; centre button tested |
-| Venus video | Works | H.264, HEVC, VP8, VP9 decode frame-for-frame identical to software, with the right picture size, and stable under `tests/venus-stress.sh` (parallel decoders, encode during decode, killed decodes, seeks, resolution changes). 4K HEVC about 20 fps |
-| Cameras | Works | both capture, in Ocellus, which this image doesn't have |
+| Venus video | Works | H.264, HEVC, VP8, VP9 decode frame-for-frame identical to software, with the right picture size, and stable under `tests/venus-stress.sh` (parallel decoders, encode during decode, killed decodes, seeks, resolution changes). 4K HEVC about 20 fps. Works from the first boot: the device package starts the video driver again once the firmware is copied (r14) |
+| Cameras | Works | both capture; the rear one focuses by itself, with our libcamera 0.8.0 build (contrast autofocus), checked with GStreamer. This image has Jayden's camera app, [Ocellus](https://github.com/jaydens-tasty-slop/ocellus), not yet checked in this image |
 | Sensors | Works | accelerometer (streamed at 12 Hz to save power), gyroscope, magnetometer, light, ADC; orientation reads normal |
 | Waydroid, Widevine | Optional extras, not in this image | not rechecked |
 
