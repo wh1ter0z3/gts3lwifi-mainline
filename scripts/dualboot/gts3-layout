@@ -6,7 +6,9 @@
 #   android_vendor  raw: our vendor image
 #   android_data    ext4 "android_data": Android's /data
 #   nura            ext4 "pmOS_root": Nura's root
-#   shared          exFAT "Shared": files for both (the rest of the disk)
+#   shared          exFAT "Shared": files for both (the rest of the disk);
+#                   SHARED=no leaves it out (a microSD card is the shared
+#                   storage) and nura gets the rest
 #
 # and the hybrid MBR entry lk2nd needs to find gts3_boot (it reads MBR only;
 # Linux keeps using the GPT). The disk is the userdata partition (the layout
@@ -15,12 +17,14 @@
 #
 # usage: gts3-layout <disk> [yes]       (yes: don't ask)
 #   sizes (sfdisk units: M, G): BOOT=512M SYSTEM=8G VENDOR=1G DATA=6G NURA=7G
+#   SHARED=no: no shared partition, nura to the end (NURA is ignored)
 # Needs sfdisk, mke2fs; mkfs.exfat for the shared partition (else left empty).
 set -eu
 
 [ $# -ge 1 ] || { sed -n '2,20p' "$0" >&2; exit 1; }
 DISK=$1
 BOOT=${BOOT:-512M} SYSTEM=${SYSTEM:-8G} VENDOR=${VENDOR:-1G} DATA=${DATA:-6G} NURA=${NURA:-7G}
+SHARED=${SHARED:-yes}
 [ -e "$DISK" ] || { echo "no $DISK" >&2; exit 1; }
 
 if [ "${2:-}" != yes ]; then
@@ -37,14 +41,19 @@ ESP=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 LINUX=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 MSDATA=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
 
+if [ "$SHARED" = no ]; then
+	LAST=5 NURAPART="type=$LINUX, name=nura" SHAREDPART=
+else
+	LAST=6 NURAPART="size=$NURA, type=$LINUX, name=nura" SHAREDPART="type=$MSDATA, name=shared"
+fi
 sfdisk -q --wipe always --wipe-partitions always "$DISK" <<EOF
 label: gpt
 size=$BOOT, type=$ESP, name=gts3_boot
 size=$SYSTEM, type=$LINUX, name=android_system
 size=$VENDOR, type=$LINUX, name=android_vendor
 size=$DATA, type=$LINUX, name=android_data
-size=$NURA, type=$LINUX, name=nura
-type=$MSDATA, name=shared
+$NURAPART
+$SHAREDPART
 EOF
 
 # start and size (512-byte sectors) of partition $1, from sfdisk's dump
@@ -52,13 +61,13 @@ part() {
 	sfdisk -d "$DISK" | sed -n "s/^[^ ]*[^0-9]$1 : *start= *\([0-9]*\), *size= *\([0-9]*\),.*/\1 \2/p"
 }
 
-# shared up to the last sector: sfdisk ends it on a MiB boundary, and with
+# The last partition up to the last sector: sfdisk ends it on a MiB boundary, and with
 # any free space at the end of a nested GPT ("subpartitions") the pmOS
 # initramfs runs `parted resizepart 2 100%` at boot (partition 2 is
 # android_system here; parted refuses, but it shouldn't try)
 last=$(sfdisk -d "$DISK" | sed -n 's/^last-lba: *//p')
-set -- $(part 6)
-echo "$1, $((last - $1 + 1))" | sfdisk -q --no-reread -N 6 "$DISK"
+set -- $(part $LAST)
+echo "$1, $((last - $1 + 1))" | sfdisk -q --no-reread -N $LAST "$DISK"
 
 # Hybrid MBR: entry 0 = gts3_boot (type 0x83), entry 1 = 0xEE from LBA 1 up
 # to it, so Linux still takes the disk as GPT. Bytes 446..511 of sector 0.
@@ -76,16 +85,25 @@ rm -f /tmp/gts3-mbr.$$
 
 # File systems, at their partitions' offsets (works for image files too);
 # no discard: it must not touch the other partitions
-fs() {	# <partition number> <type> <label>
-	set -- $(part "$1") "$2" "$3"
-	mke2fs -q -F -t "$3" -L "$4" -E offset=$(($1 * 512)),nodiscard "$DISK" $(($2 / 2))
+fs() {	# <partition number> <type> <label> [mke2fs options]
+	p=$(part "$1"); t=$2 l=$3; shift 3
+	set -- "$@" $p
+	eval "start=\${$(($# - 1))} size=\${$#}"
+	n=$(($# - 2))
+	# the options are the first $n arguments
+	o=; i=0; for a in "$@"; do [ $i -lt $n ] && o="$o $a"; i=$((i + 1)); done
+	# shellcheck disable=SC2086
+	mke2fs -q -F -t "$t" -L "$l" $o -E offset=$((start * 512)),nodiscard "$DISK" $((size / 2))
 }
-fs 1 ext2 pmOS_boot
+# 1 KiB blocks for lk2nd, as pmbootstrap makes pmOS_boot
+fs 1 ext2 pmOS_boot -b 1024
 fs 4 ext4 android_data
 fs 5 ext4 pmOS_root
 
 # exFAT has no offset option: through the partition's own device
-if command -v mkfs.exfat > /dev/null 2>&1; then
+if [ "$SHARED" = no ]; then
+	:
+elif command -v mkfs.exfat > /dev/null 2>&1; then
 	if [ -b "$DISK" ]; then
 		case $DISK in *[0-9]) pdev=${DISK}p6 ;; *) pdev=${DISK}6 ;; esac
 		partprobe "$DISK" 2>/dev/null || blockdev --rereadpt "$DISK" 2>/dev/null || true
