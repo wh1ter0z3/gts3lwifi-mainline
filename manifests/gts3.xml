@@ -21,6 +21,10 @@
   <remote name="github" fetch="https://github.com/" />
   <project path="vendor/camera/libcamera" name="libcamera/libcamera.git" remote="libcamera"
            revision="191e202178f02430b5942397c70d215cdd2056fa" />
+  <!-- libyaml for libcamera, where its wrap would put it (no network in
+       the build: patch 0102 adds the meson.build) -->
+  <project path="vendor/camera/libcamera/subprojects/yaml-0.2.5" name="yaml/libyaml"
+           remote="github" revision="2c891fc7a770e8ba2fec34fc6b545c672beb37e6" />
   <project path="vendor/camera/aospext" name="GloDroid/aospext" remote="github"
            revision="8c3075ffb6005b1c317e69d4da4071dc2403e0f9" />
   <project path="vendor/camera/hardware-peripheral-camera"
