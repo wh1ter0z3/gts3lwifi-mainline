@@ -233,6 +233,20 @@ def replace_in_file(path, pairs):
     return n
 
 
+def append_cmdline(path, extra):
+    """Append to an Android boot image's command line (header v0-v2: 512
+    bytes at offset 64, not covered by the header's hash)"""
+    with open(path, "r+b") as f:
+        head = f.read(576)
+        if head[:8] != b"ANDROID!":
+            sys.exit(f"{path} is no Android boot image")
+        cmd = head[64:576].split(b"\0")[0] + extra.encode()
+        if len(cmd) >= 512:
+            sys.exit(f"{path}: command line too long")
+        f.seek(64)
+        f.write(cmd.ljust(512, b"\0"))
+
+
 def main():
     job = json.load(open(sys.argv[1]))
     out = job["out"]
@@ -267,6 +281,9 @@ def main():
         d = os.path.join(out, "sdtest")
         os.makedirs(d, exist_ok=True)
         shutil.copyfile(boot_img, os.path.join(d, "boot-sd.img"))
+        # The initramfs grows a root partition that isn't in subpartitions
+        # (the card's) only when asked to: the card's root fills the card
+        append_cmdline(os.path.join(d, "boot-sd.img"), " pmos.force-partition-resize")
         sd_img = os.path.join(d, "microsd.img")
         build_image(job, sd, root, boot, sd_img, root_mib)
         sh("zstd", "-q", "-f", "-3", f"-T{job['jobs']}", sd_img)
