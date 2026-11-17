@@ -28,4 +28,5 @@ done <<'LIST'
 09-system-media.patch system/media
 14-external-libdrm.patch external/libdrm
 16-external-tinyalsa.patch external/tinyalsa
+17-external-v4l2_codec2.patch external/v4l2_codec2
 LIST

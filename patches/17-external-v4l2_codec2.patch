@@ -1,0 +1,38 @@
+diff --git a/components/EncodeInterface.cpp b/components/EncodeInterface.cpp
+index 12152e6..a99ab80 100644
+--- a/components/EncodeInterface.cpp
++++ b/components/EncodeInterface.cpp
+@@ -314,9 +314,13 @@ void EncodeInterface::Initialize(const C2String& name, const SupportedCapabiliti
+                     .withConstValue(new C2StreamBufferTypeSetting::input(0u, C2BufferData::GRAPHIC))
+                     .build());
+ 
++    // CPU_READ: the format converter reads RGB input (an input surface's
++    // frames) on the CPU, and a gralloc that enforces usage (minigbm) won't
++    // map a buffer that wasn't allocated for it
+     addParameter(DefineParam(mInputMemoryUsage, C2_PARAMKEY_INPUT_STREAM_USAGE)
+                          .withConstValue(new C2StreamUsageTuning::input(
+-                                 0u, static_cast<uint64_t>(BufferUsage::VIDEO_ENCODER)))
++                                 0u, static_cast<uint64_t>(BufferUsage::VIDEO_ENCODER) |
++                                             C2MemoryUsage::CPU_READ))
+                          .build());
+ 
+     addParameter(
+diff --git a/v4l2/V4L2Decoder.cpp b/v4l2/V4L2Decoder.cpp
+index d0d862d..eb303ca 100644
+--- a/v4l2/V4L2Decoder.cpp
++++ b/v4l2/V4L2Decoder.cpp
+@@ -170,8 +170,12 @@ bool V4L2Decoder::start(const VideoCodec& codec, const size_t inputBufferSize,
+         return false;
+     }
+     if (!setupInitialOutput()) {
+-        ALOGE("Unable to setup initial output");
+-        return false;
++        // The initial EOS buffer is for ARCVM. A decoder that reports no
++        // CAPTURE format before the stream header is parsed (Venus returns
++        // EINVAL from G_FMT until the source change event) can't take it:
++        // carry on without it, as before it existed
++        ALOGW("Unable to setup initial output, continuing without it");
++        mInitialEosBuffer = nullptr;
+     }
+ 
+     if (!mDevice->startPolling(mTaskRunner,

@@ -101,9 +101,13 @@ PRODUCT_COPY_FILES += \
 # Android 15 vendor doesn't declare). Pool mask: the defaults plus
 # V4L2_BUFFERPOOL (bit 22), else the decoder's output pool is never made.
 # Four instances each way, as listed in media_codecs_v4l2_c2.xml.
+# c2inputsurface -1: the framework makes encoder input surfaces (screen
+# recording, camera video) itself. Otherwise it asks the vendor's OMX service,
+# which an AIDL-only vendor doesn't have, and crashes (screenrecord, 2026-11-17).
 PRODUCT_VENDOR_PROPERTIES += \
     media.c2.hal.selection=aidl \
     debug.stagefright.c2-poolmask=0x6c0000 \
+    debug.stagefright.c2inputsurface=-1 \
     ro.vendor.v4l2_codec2.decode_concurrent_instances=4 \
     ro.vendor.v4l2_codec2.encode_concurrent_instances=4
 
