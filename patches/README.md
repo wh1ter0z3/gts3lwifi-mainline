@@ -18,7 +18,7 @@ are; they were written against LineageOS 22.0 and may need rebasing on AOSP 15.
 | 09 | system/media | ALSA device proxy (libalsautils, used by the audio HAL) |
 | 14 | external/libdrm | root headers for vendor modules |
 | 16 | external/tinyalsa | tinymix and friends on the vendor partition |
-| 17 (ours) | external/v4l2_codec2 | Decoder: AOSP 15 asks for the CAPTURE format before any bitstream (for an ARCVM workaround) and gave up when Venus answered EINVAL, so no hardware decoding; now it carries on without that. Decoding into byte buffers: AIDL bufferpool blocks accepted (the plugin knew only HIDL ones) and no crash on a basic-pool block. Encoder: input buffers also CPU-readable, else the RGB-to-NV12 converter can't map an input surface's frames (screen recording failed) |
+| 17 (ours) | external/v4l2_codec2 | Decoder: AOSP 15 asks for the CAPTURE format before any bitstream (for an ARCVM workaround) and gave up when Venus answered EINVAL, so no hardware decoding; now it carries on without that. Decoding into byte buffers: AIDL bufferpool blocks accepted (the plugin knew only HIDL ones) and no crash on a basic-pool block. Decoding into a surface: IGBA blocks accepted (Android 15+ hands an AIDL HAL's surface buffers through IGraphicBufferAllocator, which the plugin didn't know). Encoder: input buffers also CPU-readable, else the RGB-to-NV12 converter can't map an input surface's frames (screen recording failed) |
 
 Not taken from that series: his Mesa (we use upstream Mesa 26), and every
 system-side change (system/core, frameworks/*, linkerconfig, recovery,

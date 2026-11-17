@@ -30,7 +30,7 @@ index 12152e6..a99ab80 100644
  
      addParameter(
 diff --git a/components/VideoFramePool.cpp b/components/VideoFramePool.cpp
-index 9927acf..fcdc053 100644
+index 9927acf..ca9a9f7 100644
 --- a/components/VideoFramePool.cpp
 +++ b/components/VideoFramePool.cpp
 @@ -12,6 +12,7 @@
@@ -49,7 +49,20 @@ index 9927acf..fcdc053 100644
  
  namespace android {
  
-@@ -48,6 +50,20 @@ std::optional<uint32_t> VideoFramePool::getBufferIdFromGraphicBlock(C2BlockPool&
+@@ -36,7 +38,11 @@ std::optional<uint32_t> VideoFramePool::getBufferIdFromGraphicBlock(C2BlockPool&
+     switch (blockPool.getAllocatorId()) {
+     case V4L2AllocatorId::SECURE_GRAPHIC:
+         FALLTHROUGH;
+-    case C2PlatformAllocatorStore::BUFFERQUEUE: {
++    case C2PlatformAllocatorStore::BUFFERQUEUE:
++        FALLTHROUGH;
++    // A surface through IGraphicBufferAllocator (Codec2 AIDL HAL, Android 15+):
++    // the same gralloc buffer, its first fd the dmabuf
++    case C2PlatformAllocatorStore::IGBA: {
+         auto dmabufId = android::getDmabufId(block.handle()->data[0]);
+         if (!dmabufId) {
+             return std::nullopt;
+@@ -48,6 +54,20 @@ std::optional<uint32_t> VideoFramePool::getBufferIdFromGraphicBlock(C2BlockPool&
      case V4L2AllocatorId::SECURE_LINEAR: {
          std::shared_ptr<_C2BlockPoolData> blockPoolData =
                  _C2BlockFactory::GetGraphicBlockPoolData(block);
