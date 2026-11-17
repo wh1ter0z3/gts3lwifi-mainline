@@ -98,15 +98,18 @@ PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/seccomp/mediaswcodec.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediaswcodec.policy
 
 # The framework on AIDL Codec2 (HIDL needs hwservicemanager, which an
-# Android 15 vendor doesn't declare). Pool mask: the defaults plus
-# V4L2_BUFFERPOOL (bit 22), else the decoder's output pool is never made.
+# Android 15 vendor doesn't declare). Pool mask, by allocator ID (AOSP 15+;
+# the v4l2_codec2 README's numbers are from before IGBA): GRALLOC (17),
+# BUFFERQUEUE (18), BLOB (19), SECURE_LINEAR (21), SECURE_GRAPHIC (22).
+# GRALLOC: without it a decoder into byte buffers gets the basic pool, and
+# the V4L2 plugin needs a bufferpool there (dectest, 2026-11-17).
 # Four instances each way, as listed in media_codecs_v4l2_c2.xml.
 # c2inputsurface -1: the framework makes encoder input surfaces (screen
 # recording, camera video) itself. Otherwise it asks the vendor's OMX service,
 # which an AIDL-only vendor doesn't have, and crashes (screenrecord, 2026-11-17).
 PRODUCT_VENDOR_PROPERTIES += \
     media.c2.hal.selection=aidl \
-    debug.stagefright.c2-poolmask=0x6c0000 \
+    debug.stagefright.c2-poolmask=0x6e0000 \
     debug.stagefright.c2inputsurface=-1 \
     ro.vendor.v4l2_codec2.decode_concurrent_instances=4 \
     ro.vendor.v4l2_codec2.encode_concurrent_instances=4

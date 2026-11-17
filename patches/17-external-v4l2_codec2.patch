@@ -1,3 +1,15 @@
+diff --git a/components/Android.bp b/components/Android.bp
+index 73efcf2..dba0bab 100644
+--- a/components/Android.bp
++++ b/components/Android.bp
+@@ -38,6 +38,7 @@ cc_library {
+         "libc2plugin_store",
+         "libchrome",
+         "libcodec2_soft_common",
++        "libstagefright_aidl_bufferpool2",
+         "libcutils",
+         "liblog",
+         "libsfplugin_ccodec_utils",
 diff --git a/components/EncodeInterface.cpp b/components/EncodeInterface.cpp
 index 12152e6..a99ab80 100644
 --- a/components/EncodeInterface.cpp
@@ -17,6 +29,47 @@ index 12152e6..a99ab80 100644
                           .build());
  
      addParameter(
+diff --git a/components/VideoFramePool.cpp b/components/VideoFramePool.cpp
+index 9927acf..fcdc053 100644
+--- a/components/VideoFramePool.cpp
++++ b/components/VideoFramePool.cpp
+@@ -12,6 +12,7 @@
+ 
+ #include <C2BlockInternal.h>
+ #include <bufferpool/BufferPoolTypes.h>
++#include <bufferpool2/BufferPoolTypes.h>
+ 
+ #include <android/hardware/graphics/common/1.0/types.h>
+ #include <base/bind.h>
+@@ -25,6 +26,7 @@
+ 
+ using android::hardware::graphics::common::V1_0::BufferUsage;
+ using android::hardware::media::bufferpool::BufferPoolData;
++using AidlBufferPoolData = aidl::android::hardware::media::bufferpool2::BufferPoolData;
+ 
+ namespace android {
+ 
+@@ -48,6 +50,20 @@ std::optional<uint32_t> VideoFramePool::getBufferIdFromGraphicBlock(C2BlockPool&
+     case V4L2AllocatorId::SECURE_LINEAR: {
+         std::shared_ptr<_C2BlockPoolData> blockPoolData =
+                 _C2BlockFactory::GetGraphicBlockPoolData(block);
++        if (!blockPoolData) {
++            // A basic pool's block: the framework made no bufferpool (pool mask)
++            ALOGE("Obtained C2GraphicBlock is not from a block pool.");
++            return std::nullopt;
++        }
++        // The pools of a Codec2 AIDL HAL are AIDL bufferpools
++        if (blockPoolData->getType() == _C2BlockPoolData::TYPE_BUFFERPOOL2) {
++            std::shared_ptr<AidlBufferPoolData> bpData;
++            if (!_C2BlockFactory::GetBufferPoolData(blockPoolData, &bpData) || !bpData) {
++                ALOGE("BufferPoolData unavailable in block.");
++                return std::nullopt;
++            }
++            return bpData->mId;
++        }
+         if (blockPoolData->getType() != _C2BlockPoolData::TYPE_BUFFERPOOL) {
+             ALOGE("Obtained C2GraphicBlock is not bufferpool-backed.");
+             return std::nullopt;
 diff --git a/v4l2/V4L2Decoder.cpp b/v4l2/V4L2Decoder.cpp
 index d0d862d..eb303ca 100644
 --- a/v4l2/V4L2Decoder.cpp
