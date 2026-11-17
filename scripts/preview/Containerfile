@@ -18,8 +18,11 @@ RUN apk add --no-cache \
 	util-linux-misc \
 	zstd
 COPY mknod chmod /usr/local/sbin/
+# The builder's user has the uid of whoever runs the build, so the bind-mounted
+# work dir is theirs inside too (git refuses a repository owned by someone else)
+ARG UID=1000
 RUN /bin/busybox chmod 755 /usr/local/sbin/mknod /usr/local/sbin/chmod && \
-	adduser -D -u 1000 pmos && \
+	adduser -D -u ${UID} pmos && \
 	echo 'pmos ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/pmos
 USER pmos
 WORKDIR /home/pmos
