@@ -1,0 +1,78 @@
+From 7bf23f3babc9b266a7efee0c980232c7b37b4f12 Mon Sep 17 00:00:00 2001
+From: Robert Mader <robert.mader@collabora.com>
+Date: Sat, 26 Sep 2026 14:56:46 +0200
+Subject: [PATCH 4/6] debayer: Further demote 'Unsupported input format' log
+
+On some platforms such as the PinePhone these logs clutter the output of
+tools and the journal a lot. Let's silence them for normal usage.
+
+Also add error logs for the cases where hitting the path would actually
+be errors.
+
+Signed-off-by: Robert Mader <robert.mader@collabora.com>
+Reviewed-by: Kieran Bingham <kieran.bingham@ideasonboard.com>
+Reviewed-by: Milan Zamazal <mzamazal@redhat.com>
+Signed-off-by: Kieran Bingham <kieran.bingham@ideasonboard.com>
+(cherry picked from commit 4f21700fb08da155f3e76cfd586215fa63462582)
+---
+ src/libcamera/software_isp/debayer_cpu.cpp | 9 ++++++---
+ src/libcamera/software_isp/debayer_egl.cpp | 7 +++++--
+ 2 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/src/libcamera/software_isp/debayer_cpu.cpp b/src/libcamera/software_isp/debayer_cpu.cpp
+index 49382b4c2719..c84832cf3a49 100644
+--- a/src/libcamera/software_isp/debayer_cpu.cpp
++++ b/src/libcamera/software_isp/debayer_cpu.cpp
+@@ -469,8 +469,8 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
+ 		return 0;
+ 	}
+ 
+-	LOG(Debayer, Info)
+-		<< "Unsupported input format " << inputFormat.toString();
++	LOG(Debayer, Debug)
++		<< "Unsupported input format " << inputFormat;
+ 	return -EINVAL;
+ }
+ 
+@@ -643,8 +643,11 @@ int DebayerCpu::configure(const StreamConfiguration &inputCfg,
+ 			  const std::vector<std::reference_wrapper<const StreamConfiguration>> &outputCfgs,
+ 			  bool ccmEnabled)
+ {
+-	if (getInputConfig(inputCfg.pixelFormat, inputConfig_) != 0)
++	if (getInputConfig(inputCfg.pixelFormat, inputConfig_) != 0) {
++		LOG(Debayer, Error)
++			<< "Unsupported input format " << inputCfg.pixelFormat;
+ 		return -EINVAL;
++	}
+ 
+ 	if (stats_->configure(inputCfg, threads_.size()) != 0)
+ 		return -EINVAL;
+diff --git a/src/libcamera/software_isp/debayer_egl.cpp b/src/libcamera/software_isp/debayer_egl.cpp
+index 5cd11c380243..fdb1efec2a7b 100644
+--- a/src/libcamera/software_isp/debayer_egl.cpp
++++ b/src/libcamera/software_isp/debayer_egl.cpp
+@@ -90,7 +90,7 @@ int DebayerEGL::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
+ 		return 0;
+ 	}
+ 
+-	LOG(Debayer, Info)
++	LOG(Debayer, Debug)
+ 		<< "Unsupported input format " << inputFormat;
+ 
+ 	return -EINVAL;
+@@ -288,8 +288,11 @@ int DebayerEGL::configure(const StreamConfiguration &inputCfg,
+ 			  const std::vector<std::reference_wrapper<const StreamConfiguration>> &outputCfgs,
+ 			  [[maybe_unused]] bool ccmEnabled)
+ {
+-	if (getInputConfig(inputCfg.pixelFormat, inputConfig_) != 0)
++	if (getInputConfig(inputCfg.pixelFormat, inputConfig_) != 0) {
++		LOG(Debayer, Error)
++			<< "Unsupported input format " << inputCfg.pixelFormat;
+ 		return -EINVAL;
++	}
+ 
+ 	if (stats_->configure(inputCfg) != 0)
+ 		return -EINVAL;
+-- 
+2.56.0
+

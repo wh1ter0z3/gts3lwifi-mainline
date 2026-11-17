@@ -1,0 +1,108 @@
+From 000bc30ae535ef3a430bd039b606b74e30c1306a Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Fri, 30 Oct 2026 14:03:04 -0600
+Subject: [PATCH 14/14] ipa: simple: Add IMX258 and S5K5E3 tuning files
+
+Add tuning files for the Sony IMX258 and Samsung S5K5E3 sensors, with
+their black level of 64 at 10 bits.
+
+The IMX258 file enables autofocus with scan parameters adapted to the
+software ISP statistics interval. Its lens map is a linear guess over
+the full range of the lens driver that still needs to be calibrated on
+the camera module. The S5K5E3 file doesn't enable autofocus, the sensor
+being found in fixed focus modules.
+
+[backport: moved to src/ipa/simple/data]
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ src/ipa/simple/data/imx258.yaml | 43 +++++++++++++++++++++++++++++++++
+ src/ipa/simple/data/meson.build |  2 ++
+ src/ipa/simple/data/s5k5e3.yaml | 11 +++++++++
+ 3 files changed, 56 insertions(+)
+ create mode 100644 src/ipa/simple/data/imx258.yaml
+ create mode 100644 src/ipa/simple/data/s5k5e3.yaml
+
+diff --git a/src/ipa/simple/data/imx258.yaml b/src/ipa/simple/data/imx258.yaml
+new file mode 100644
+index 00000000..bdaa4f9b
+--- /dev/null
++++ b/src/ipa/simple/data/imx258.yaml
+@@ -0,0 +1,43 @@
++# SPDX-License-Identifier: CC0-1.0
++%YAML 1.1
++---
++version: 1
++algorithms:
++  - BlackLevel:
++      blackLevel: 4096
++  - Awb:
++  - Adjust:
++  - Agc:
++  - Af:
++      ranges:
++        normal:
++          min: 0.0
++          max: 10.0
++          default: 1.0
++        macro:
++          min: 3.0
++          max: 10.0
++          default: 5.0
++      speeds:
++        normal:
++          step_coarse: 1.0
++          step_fine: 0.25
++          contrast_ratio: 0.75
++          retrigger_ratio: 0.75
++          retrigger_delay: 12
++          max_slew: 2.0
++          step_frames: 4
++        fast:
++          step_coarse: 1.5
++          step_fine: 0.0
++          contrast_ratio: 0.75
++          retrigger_ratio: 0.75
++          retrigger_delay: 8
++          max_slew: 4.0
++          step_frames: 4
++      skip_frames: 5
++      # Lens positions in dioptres to focus lens driver units. This linear
++      # map over the full range of the voice coil motor driver has not been
++      # calibrated and needs to be measured on the module.
++      map: [ 0.0, 0, 10.0, 1023 ]
++...
+diff --git a/src/ipa/simple/data/meson.build b/src/ipa/simple/data/meson.build
+index 92795ee4..80de1417 100644
+--- a/src/ipa/simple/data/meson.build
++++ b/src/ipa/simple/data/meson.build
+@@ -1,6 +1,8 @@
+ # SPDX-License-Identifier: CC0-1.0
+ 
+ conf_files = files([
++    'imx258.yaml',
++    's5k5e3.yaml',
+     'uncalibrated.yaml',
+ ])
+ 
+diff --git a/src/ipa/simple/data/s5k5e3.yaml b/src/ipa/simple/data/s5k5e3.yaml
+new file mode 100644
+index 00000000..e903d96a
+--- /dev/null
++++ b/src/ipa/simple/data/s5k5e3.yaml
+@@ -0,0 +1,11 @@
++# SPDX-License-Identifier: CC0-1.0
++%YAML 1.1
++---
++version: 1
++algorithms:
++  - BlackLevel:
++      blackLevel: 4096
++  - Awb:
++  - Adjust:
++  - Agc:
++...
+-- 
+2.56.0
+

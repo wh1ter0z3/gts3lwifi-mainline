@@ -14,5 +14,18 @@
   <project path="external/mesa3d-upstream" name="mesa/mesa" remote="fdo"
            revision="refs/tags/mesa-26.3.0" clone-depth="1" />
 
+  <!-- Camera: upstream libcamera (patched in camera/libcamera-patches) and
+       its Android HAL3 module, built by GloDroid's aospext (meson in AOSP),
+       under STMicroelectronics' AIDL camera provider (Apache-2.0). -->
+  <remote name="libcamera" fetch="https://git.libcamera.org/" />
+  <remote name="github" fetch="https://github.com/" />
+  <project path="vendor/camera/libcamera" name="libcamera/libcamera.git" remote="libcamera"
+           revision="191e202178f02430b5942397c70d215cdd2056fa" />
+  <project path="vendor/camera/aospext" name="GloDroid/aospext" remote="github"
+           revision="8c3075ffb6005b1c317e69d4da4071dc2403e0f9" />
+  <project path="vendor/camera/hardware-peripheral-camera"
+           name="STMicroelectronics/hardware-peripheral-camera" remote="github"
+           revision="8a63cd4a0e8b8a0511e424953b041b38c9e6c0d6" />
+
   <!-- This tree goes to device/samsung/gts3 (not published yet: copied in). -->
 </manifest>

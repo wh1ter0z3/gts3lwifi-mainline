@@ -1,0 +1,42 @@
+From eb96c67fefdd9e7e7d8ba88542fa98e849baf79b Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Sat, 31 Oct 2026 16:38:10 -0600
+Subject: [PATCH 18/18] ipa: libipa: af_contrast: Keep the Raspberry Pi
+ copyright and licence
+
+AfContrast is a port of the contrast detection part of the Raspberry Pi
+autofocus algorithm, which is BSD-2-Clause.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+---
+ src/ipa/libipa/af_contrast.cpp | 3 ++-
+ src/ipa/libipa/af_contrast.h   | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/ipa/libipa/af_contrast.cpp b/src/ipa/libipa/af_contrast.cpp
+index 9e08f49d..1ac88c79 100644
+--- a/src/ipa/libipa/af_contrast.cpp
++++ b/src/ipa/libipa/af_contrast.cpp
+@@ -1,5 +1,6 @@
+-/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/* SPDX-License-Identifier: BSD-2-Clause */
+ /*
++ * Copyright (C) 2022-2023, Raspberry Pi Ltd
+  * Copyright (C) 2026, Jayden Milne
+  *
+  * Contrast detection autofocus algorithm
+diff --git a/src/ipa/libipa/af_contrast.h b/src/ipa/libipa/af_contrast.h
+index 371edef5..fcb94969 100644
+--- a/src/ipa/libipa/af_contrast.h
++++ b/src/ipa/libipa/af_contrast.h
+@@ -1,5 +1,6 @@
+-/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/* SPDX-License-Identifier: BSD-2-Clause */
+ /*
++ * Copyright (C) 2022-2023, Raspberry Pi Ltd
+  * Copyright (C) 2026, Jayden Milne
+  *
+  * Contrast detection autofocus algorithm
+-- 
+2.56.0
+

@@ -1,0 +1,1116 @@
+From 1d48b0c83e370979817ffb7e5505afbb7c7c1d47 Mon Sep 17 00:00:00 2001
+From: Frederic Laing <dev@fredfunk.tech>
+Date: Tue, 25 Aug 2026 18:16:06 +0000
+Subject: [PATCH 6/6] libcamera: Add quad-Bayer CFA layout support
+
+Quad-Bayer sensors arrange pixels in 2x2 same-colour cells. Treating
+the IMX371 full-resolution stream as a conventional Bayer pattern
+produces incorrect colours and exposes physical instead of logical
+output geometry.
+
+Describe native and software ISP CFA cell sizes per sensor. Use the
+metadata for the Raspberry Pi minimum debinning factor and enable cell
+collapse only for IMX371. Extend the EGL shader and statistics path to
+average cells, preserve Bayer order, crop in physical coordinates, and
+expose half-resolution logical sizes. Reject unsupported formats, sizes,
+and the CPU fallback.
+
+Add unit coverage for sensor metadata, format and size validation,
+geometry, Bayer order normalization, and cell averaging.
+
+Signed-off-by: Frederic Laing <dev@fredfunk.tech>
+---
+ include/libcamera/internal/meson.build        |   1 +
+ .../libcamera/internal/sensor_cfa_layout.h    |  46 ++++
+ .../internal/software_isp/meson.build         |   1 +
+ .../internal/software_isp/quad_bayer.h        | 158 ++++++++++++
+ .../internal/software_isp/swstats_cpu.h       |   6 +-
+ src/ipa/rpi/cam_helper/cam_helper.cpp         |   8 +-
+ src/ipa/rpi/cam_helper/cam_helper.h           |   8 +-
+ src/ipa/rpi/cam_helper/cam_helper_imx708.cpp  |   7 -
+ src/ipa/rpi/common/ipa_base.cpp               |   1 +
+ src/libcamera/shaders/bayer_1x_packed.frag    |  49 +++-
+ src/libcamera/software_isp/debayer.cpp        |   4 +-
+ src/libcamera/software_isp/debayer.h          |   3 +-
+ src/libcamera/software_isp/debayer_egl.cpp    |  62 +++--
+ src/libcamera/software_isp/debayer_egl.h      |   5 +-
+ src/libcamera/software_isp/software_isp.cpp   |  13 +-
+ src/libcamera/software_isp/swstats_cpu.cpp    |  58 ++++-
+ test/meson.build                              |   1 +
+ test/quad-bayer.cpp                           | 224 ++++++++++++++++++
+ 18 files changed, 614 insertions(+), 41 deletions(-)
+ create mode 100644 include/libcamera/internal/sensor_cfa_layout.h
+ create mode 100644 include/libcamera/internal/software_isp/quad_bayer.h
+ create mode 100644 test/quad-bayer.cpp
+
+diff --git a/include/libcamera/internal/meson.build b/include/libcamera/internal/meson.build
+index fd375134a5c4..f928d241f770 100644
+--- a/include/libcamera/internal/meson.build
++++ b/include/libcamera/internal/meson.build
+@@ -40,6 +40,7 @@ libcamera_internal_headers = files([
+     'process.h',
+     'pub_key.h',
+     'request.h',
++    'sensor_cfa_layout.h',
+     'shared_mem_object.h',
+     'source_paths.h',
+     'sysfs.h',
+diff --git a/include/libcamera/internal/sensor_cfa_layout.h b/include/libcamera/internal/sensor_cfa_layout.h
+new file mode 100644
+index 000000000000..2ab95e2bfc76
+--- /dev/null
++++ b/include/libcamera/internal/sensor_cfa_layout.h
+@@ -0,0 +1,46 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026 Frederic Laing
++ */
++
++#pragma once
++
++#include <algorithm>
++#include <string_view>
++
++#include <libcamera/geometry.h>
++
++namespace libcamera {
++
++struct SensorCfaLayout {
++	Size nativeCellSize;
++	Size softwareIspInputCellSize;
++
++	unsigned int minimumDebinFactor() const
++	{
++		return 2 * std::max(nativeCellSize.width, nativeCellSize.height);
++	}
++
++	bool softwareIspNeedsCellCollapse() const
++	{
++		return softwareIspInputCellSize != Size(1, 1);
++	}
++};
++
++inline SensorCfaLayout sensorCfaLayout(std::string_view model)
++{
++	/*
++	 * Native cell size describes the sensor construction. The software ISP
++	 * input size separately describes whether that pipeline receives physical
++	 * same-colour cells or an ordinary Bayer stream produced by the sensor.
++	 */
++	if (model == "imx371")
++		return { { 2, 2 }, { 2, 2 } };
++	if (model == "imx708" || model == "imx708_wide" ||
++	    model == "imx708_noir" || model == "imx708_wide_noir")
++		return { { 2, 2 }, { 1, 1 } };
++
++	return { { 1, 1 }, { 1, 1 } };
++}
++
++} /* namespace libcamera */
+diff --git a/include/libcamera/internal/software_isp/meson.build b/include/libcamera/internal/software_isp/meson.build
+index df7c3b97dbca..598b44873296 100644
+--- a/include/libcamera/internal/software_isp/meson.build
++++ b/include/libcamera/internal/software_isp/meson.build
+@@ -3,6 +3,7 @@
+ libcamera_internal_headers += files([
+     'benchmark.h',
+     'debayer_params.h',
++    'quad_bayer.h',
+     'software_isp.h',
+     'swisp_stats.h',
+     'swstats_cpu.h',
+diff --git a/include/libcamera/internal/software_isp/quad_bayer.h b/include/libcamera/internal/software_isp/quad_bayer.h
+new file mode 100644
+index 000000000000..9971e6def5ee
+--- /dev/null
++++ b/include/libcamera/internal/software_isp/quad_bayer.h
+@@ -0,0 +1,158 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026 Frederic Laing
++ */
++
++#pragma once
++
++#include <algorithm>
++#include <array>
++#include <string_view>
++
++#include <libcamera/geometry.h>
++
++#include "libcamera/internal/bayer_format.h"
++#include "libcamera/internal/sensor_cfa_layout.h"
++
++namespace libcamera {
++
++inline bool softwareIspNeedsCellCollapse(std::string_view model)
++{
++	return sensorCfaLayout(model).softwareIspNeedsCellCollapse();
++}
++
++inline Size quadBayerLogicalSize(const Size &physicalSize)
++{
++	return { physicalSize.width / 2, physicalSize.height / 2 };
++}
++
++inline bool isQuadBayerInputSizeSupported(const Size &size)
++{
++	return size.width >= 4 && size.height >= 4 &&
++	       size.width % 4 == 0 && size.height % 4 == 0;
++}
++
++inline Rectangle softwareIspViewport(const Size &physicalSize,
++				     const Size &outputSize,
++				     bool quadBayer)
++{
++	const Size &viewportSize = quadBayer ? outputSize : physicalSize;
++	return { 0, 0, viewportSize.width, viewportSize.height };
++}
++
++inline Rectangle quadBayerStatsWindow(const Size &physicalSize,
++				      const Size &logicalOutputSize)
++{
++	Size statsSize = physicalSize;
++	if (static_cast<uint64_t>(physicalSize.width) * logicalOutputSize.height >
++	    static_cast<uint64_t>(physicalSize.height) * logicalOutputSize.width) {
++		statsSize.width = static_cast<uint64_t>(physicalSize.height) *
++				  logicalOutputSize.width / logicalOutputSize.height;
++		statsSize.width &= ~3U;
++	} else {
++		statsSize.height = static_cast<uint64_t>(physicalSize.width) *
++				   logicalOutputSize.height / logicalOutputSize.width;
++		statsSize.height &= ~3U;
++	}
++	return {
++		static_cast<int>(((physicalSize.width - statsSize.width) / 2) & ~3U),
++		static_cast<int>(((physicalSize.height - statsSize.height) / 2) & ~3U),
++		statsSize.width,
++		statsSize.height,
++	};
++}
++
++inline std::array<float, 8> softwareIspTextureCoordinates(const Size &physicalSize,
++							  const Rectangle &window,
++							  bool quadBayer)
++{
++	if (!quadBayer) {
++		return {
++			0.0f,
++			0.0f,
++			0.0f,
++			1.0f,
++			1.0f,
++			1.0f,
++			1.0f,
++			0.0f,
++		};
++	}
++
++	const float left = static_cast<float>(window.x) / physicalSize.width;
++	const float top = static_cast<float>(window.y) / physicalSize.height;
++	const float right = static_cast<float>(window.x + window.width) / physicalSize.width;
++	const float bottom = static_cast<float>(window.y + window.height) / physicalSize.height;
++	return {
++		left,
++		top,
++		left,
++		bottom,
++		right,
++		bottom,
++		right,
++		top,
++	};
++}
++
++inline Point quadBayerCellOrigin(const Size &physicalSize, const Point &pixel)
++{
++	return {
++		std::clamp(pixel.x & ~1, 0, static_cast<int>(physicalSize.width) - 2),
++		std::clamp(pixel.y & ~1, 0, static_cast<int>(physicalSize.height) - 2),
++	};
++}
++
++inline Point quadBayerOrderShifts(BayerFormat::Order order)
++{
++	switch (order) {
++	case BayerFormat::RGGB:
++		return { 0, 0 };
++	case BayerFormat::GRBG:
++		return { 2, 0 };
++	case BayerFormat::GBRG:
++		return { 0, 2 };
++	case BayerFormat::BGGR:
++		return { 2, 2 };
++	default:
++		return { -1, -1 };
++	}
++}
++
++inline bool isQuadBayerInputFormatSupported(PixelFormat inputFormat)
++{
++	const BayerFormat bayerFormat = BayerFormat::fromPixelFormat(inputFormat);
++	return bayerFormat.bitDepth == 10 &&
++	       bayerFormat.packing == BayerFormat::Packing::CSI2 &&
++	       quadBayerOrderShifts(bayerFormat.order).x >= 0;
++}
++
++template<typename Sample>
++inline auto normalizeQuadBayerTile(Sample sample, BayerFormat::Order order)
++{
++	using Value = decltype(sample(0, 0));
++	const Point redShift = quadBayerOrderShifts(order);
++	const Point red(redShift.x / 2, redShift.y / 2);
++	const Point blue(1 - red.x, 1 - red.y);
++	const Value green0 = sample(1 - red.x, red.y);
++	const Value green1 = sample(red.x, 1 - red.y);
++	return std::array<Value, 3>{
++		sample(red.x, red.y),
++		static_cast<Value>((green0 + green1) / 2),
++		sample(blue.x, blue.y),
++	};
++}
++
++template<typename Sample>
++inline auto averageQuadBayerCell(Sample sample, unsigned int x, unsigned int y)
++{
++	const unsigned int physicalX = x * 2;
++	const unsigned int physicalY = y * 2;
++	return (sample(physicalX, physicalY) +
++		sample(physicalX + 1, physicalY) +
++		sample(physicalX, physicalY + 1) +
++		sample(physicalX + 1, physicalY + 1) + 2) /
++	       4;
++}
++
++} /* namespace libcamera */
+diff --git a/include/libcamera/internal/software_isp/swstats_cpu.h b/include/libcamera/internal/software_isp/swstats_cpu.h
+index 551870921862..6fe60e6a0bb2 100644
+--- a/include/libcamera/internal/software_isp/swstats_cpu.h
++++ b/include/libcamera/internal/software_isp/swstats_cpu.h
+@@ -35,7 +35,7 @@ struct StreamConfiguration;
+ class SwStatsCpu
+ {
+ public:
+-	SwStatsCpu(const CameraManager &cm);
++	SwStatsCpu(const CameraManager &cm, bool quadBayer = false);
+ 	~SwStatsCpu() = default;
+ 
+ 	/*
+@@ -98,11 +98,13 @@ private:
+ 	/* Bayer 10 bpp packed */
+ 	void statsBGGR10PLine0(const uint8_t *src[], SwIspStats &stats);
+ 	void statsGBRG10PLine0(const uint8_t *src[], SwIspStats &stats);
++	void statsQuadRGGB10P(const uint8_t *src[], SwIspStats &stats);
+ 	/* Bayer 12 bpp packed */
+ 	void statsBGGR12PLine0(const uint8_t *src[], SwIspStats &stats);
+ 	void statsGBRG12PLine0(const uint8_t *src[], SwIspStats &stats);
+ 
+ 	void processBayerFrame2(MappedFrameBuffer &in);
++	void processQuadBayerFrame(MappedFrameBuffer &in);
+ 
+ 	processFrameFn processFrame_;
+ 
+@@ -120,6 +122,8 @@ private:
+ 	unsigned int xShift_;
+ 	unsigned int stride_;
+ 	unsigned int sumShift_;
++	bool quadBayer_;
++	BayerFormat::Order quadBayerOrder_ = BayerFormat::RGGB;
+ 
+ 	std::vector<SwIspStats> stats_;
+ 	SharedMemObject<SwIspStats> sharedStats_;
+diff --git a/src/ipa/rpi/cam_helper/cam_helper.cpp b/src/ipa/rpi/cam_helper/cam_helper.cpp
+index dfdcd167839a..6c7cf3a29e30 100644
+--- a/src/ipa/rpi/cam_helper/cam_helper.cpp
++++ b/src/ipa/rpi/cam_helper/cam_helper.cpp
+@@ -206,8 +206,12 @@ unsigned int CamHelper::mistrustFramesModeSwitch() const
+ 
+ unsigned int CamHelper::getMinDebinFactor() const
+ {
+-	/* Most cameras require debinning from 2x2 binning upwards. */
+-	return 2;
++	return cfaLayout_.minimumDebinFactor();
++}
++
++void CamHelper::setCfaLayout(const libcamera::SensorCfaLayout &layout)
++{
++	cfaLayout_ = layout;
+ }
+ 
+ void CamHelper::parseEmbeddedData(Span<const uint8_t> buffer,
+diff --git a/src/ipa/rpi/cam_helper/cam_helper.h b/src/ipa/rpi/cam_helper/cam_helper.h
+index bd101895f23e..6dac8c7a7b62 100644
+--- a/src/ipa/rpi/cam_helper/cam_helper.h
++++ b/src/ipa/rpi/cam_helper/cam_helper.h
+@@ -13,12 +13,14 @@
+ #include <libcamera/base/span.h>
+ #include <libcamera/base/utils.h>
+ 
++#include "libcamera/internal/sensor_cfa_layout.h"
++#include "libcamera/internal/v4l2_videodevice.h"
++
+ #include "controller/camera_mode.h"
+ #include "controller/controller.h"
+ #include "controller/metadata.h"
+-#include "md_parser.h"
+ 
+-#include "libcamera/internal/v4l2_videodevice.h"
++#include "md_parser.h"
+ 
+ namespace RPiController {
+ 
+@@ -99,6 +101,7 @@ public:
+ 	virtual unsigned int mistrustFramesStartup() const;
+ 	virtual unsigned int mistrustFramesModeSwitch() const;
+ 	virtual unsigned int getMinDebinFactor() const;
++	void setCfaLayout(const libcamera::SensorCfaLayout &layout);
+ 
+ protected:
+ 	void parseEmbeddedData(libcamera::Span<const uint8_t> buffer,
+@@ -109,6 +112,7 @@ protected:
+ 	std::unique_ptr<MdParser> parser_;
+ 	CameraMode mode_;
+ 	Controller::HardwareConfig hwConfig_;
++	libcamera::SensorCfaLayout cfaLayout_{ { 1, 1 }, { 1, 1 } };
+ 
+ private:
+ 	/*
+diff --git a/src/ipa/rpi/cam_helper/cam_helper_imx708.cpp b/src/ipa/rpi/cam_helper/cam_helper_imx708.cpp
+index e7b8d6712185..6150909ca34f 100644
+--- a/src/ipa/rpi/cam_helper/cam_helper_imx708.cpp
++++ b/src/ipa/rpi/cam_helper/cam_helper_imx708.cpp
+@@ -58,7 +58,6 @@ public:
+ 	double getModeSensitivity(const CameraMode &mode) const override;
+ 	unsigned int hideFramesModeSwitch() const override;
+ 	unsigned int hideFramesStartup() const override;
+-	unsigned int getMinDebinFactor() const override;
+ 
+ private:
+ 	/*
+@@ -238,12 +237,6 @@ unsigned int CamHelperImx708::hideFramesStartup() const
+ 	return hideFramesModeSwitch();
+ }
+ 
+-unsigned int CamHelperImx708::getMinDebinFactor() const
+-{
+-	/* Quad-Bayer sensor, so debinning required only at 4x4 binning. */
+-	return 4;
+-}
+-
+ void CamHelperImx708::populateMetadata(const MdParser::RegisterMap &registers,
+ 				       Metadata &metadata) const
+ {
+diff --git a/src/ipa/rpi/common/ipa_base.cpp b/src/ipa/rpi/common/ipa_base.cpp
+index dacafa578c98..8f6b987edcd3 100644
+--- a/src/ipa/rpi/common/ipa_base.cpp
++++ b/src/ipa/rpi/common/ipa_base.cpp
+@@ -144,6 +144,7 @@ int32_t IpaBase::init(const IPASettings &settings, const InitParams &params, Ini
+ 				   << settings.sensorModel;
+ 		return -EINVAL;
+ 	}
++	helper_->setCfaLayout(sensorCfaLayout(settings.sensorModel));
+ 
+ 	/* Pass out the sensor metadata to the pipeline handler */
+ 	int sensorMetadata = helper_->sensorEmbeddedDataPresent();
+diff --git a/src/libcamera/shaders/bayer_1x_packed.frag b/src/libcamera/shaders/bayer_1x_packed.frag
+index 0b641a5f35c5..d20d9d6fb694 100644
+--- a/src/libcamera/shaders/bayer_1x_packed.frag
++++ b/src/libcamera/shaders/bayer_1x_packed.frag
+@@ -71,6 +71,26 @@ uniform vec3 blacklevel;
+ uniform float gamma;
+ uniform float contrastExp;
+ 
++#if defined (QUAD_BAYER)
++vec2 quad_cell(vec2 pixel)
++{
++	return clamp(floor(pixel / 2.0) * 2.0, vec2(0.0), tex_size - vec2(2.0));
++}
++
++float quad_fetch(vec2 pixel)
++{
++	vec2 cell = quad_cell(pixel);
++	vec2 byte_pos = vec2(floor(BPP * cell.x + 0.02), cell.y) * tex_step;
++	vec2 byte_pos_x1 = vec2(floor(BPP * (cell.x + 1.0) + 0.02), cell.y) * tex_step;
++	vec2 byte_pos_y1 = byte_pos + vec2(0.0, tex_step.y);
++	vec2 byte_pos_xy1 = vec2(byte_pos_x1.x, byte_pos_y1.y);
++	return (texture2D(tex_y, byte_pos).r +
++		texture2D(tex_y, byte_pos_x1).r +
++		texture2D(tex_y, byte_pos_y1).r +
++		texture2D(tex_y, byte_pos_xy1).r) * 0.25;
++}
++#endif
++
+ float apply_contrast(float value)
+ {
+ 	// Apply simple S-curve
+@@ -108,6 +128,9 @@ void main(void)
+ 	 * by hand.
+ 	 */
+ 	center_pixel = floor(textureOut * tex_size);
++#if defined (QUAD_BAYER)
++	center_pixel = quad_cell(center_pixel);
++#endif
+ 	center_bytes.y = center_pixel.y;
+ 
+ 	/*
+@@ -127,6 +150,10 @@ void main(void)
+ 	center_bytes.x = floor(center_bytes.x);
+ 	center_bytes *= tex_step;
+ 
++#if defined (QUAD_BAYER)
++	xcoords = center_pixel.x + vec2(-2.0, 2.0);
++	ycoords = center_pixel.y + vec2(-2.0, 2.0);
++#else
+ 	xcoords = center_bytes.x + vec2(-tex_step.x, tex_step.x);
+ 	ycoords = center_bytes.y + vec2(-tex_step.y, tex_step.y);
+ 
+@@ -143,8 +170,12 @@ void main(void)
+ 	 * byte forward.
+ 	 */
+ 	xcoords[1] += (fract_x > THRESHOLD_H) ? tex_step.x : 0.0;
++#endif
+ 
+-	vec2 alternate = mod(center_pixel.xy + tex_bayer_first_red, 2.0);
++	vec2 alternate = mod(center_pixel.xy / 2.0 + tex_bayer_first_red, 2.0);
++#if !defined (QUAD_BAYER)
++	alternate = mod(center_pixel.xy + tex_bayer_first_red, 2.0);
++#endif
+ 	bool even_col = alternate.x < 1.0;
+ 	bool even_row = alternate.y < 1.0;
+ 
+@@ -199,17 +230,31 @@ void main(void)
+ 	 *   patterns.z = (A0 + A1 + B0 + B1) / 4.0
+ 	 *   patterns.w = (D0 + D1 + D2 + D3) / 4.0
+ 	 */
++#if defined (QUAD_BAYER)
++	#define fetch(x, y) quad_fetch(vec2(x, y))
++	float C = quad_fetch(center_pixel);
++#else
+ 	#define fetch(x, y) texture2D(tex_y, vec2(x, y)).r
+-
+ 	float C = texture2D(tex_y, center_bytes).r;
++#endif
+ 	vec4 patterns = vec4(
++#if defined (QUAD_BAYER)
++		fetch(center_pixel.x, ycoords[0]),	/* A0: (0,-1) */
++		fetch(xcoords[0], center_pixel.y),	/* B0: (-1,0) */
++#else
+ 		fetch(center_bytes.x, ycoords[0]),	/* A0: (0,-1) */
+ 		fetch(xcoords[0], center_bytes.y),	/* B0: (-1,0) */
++#endif
+ 		fetch(xcoords[0], ycoords[0]),		/* D0: (-1,-1) */
+ 		fetch(xcoords[1], ycoords[0]));		/* D1: (1,-1) */
+ 	vec4 temp = vec4(
++#if defined (QUAD_BAYER)
++		fetch(center_pixel.x, ycoords[1]),	/* A1: (0,1) */
++		fetch(xcoords[1], center_pixel.y),	/* B1: (1,0) */
++#else
+ 		fetch(center_bytes.x, ycoords[1]),	/* A1: (0,1) */
+ 		fetch(xcoords[1], center_bytes.y),	/* B1: (1,0) */
++#endif
+ 		fetch(xcoords[1], ycoords[1]),		/* D3: (1,1) */
+ 		fetch(xcoords[0], ycoords[1]));		/* D2: (-1,1) */
+ 	patterns = (patterns + temp) * 0.5;
+diff --git a/src/libcamera/software_isp/debayer.cpp b/src/libcamera/software_isp/debayer.cpp
+index 56446f55d44f..d60b2a2318a8 100644
+--- a/src/libcamera/software_isp/debayer.cpp
++++ b/src/libcamera/software_isp/debayer.cpp
+@@ -56,8 +56,8 @@ LOG_DEFINE_CATEGORY(Debayer)
+  * \brief Construct a Debayer object
+  * \param[in] cm The camera manager
+  */
+-Debayer::Debayer(const CameraManager &cm)
+-	: bench_(cm, "Debayer")
++Debayer::Debayer(const CameraManager &cm, bool quadBayer)
++	: bench_(cm, "Debayer"), quadBayer_(quadBayer)
+ {
+ }
+ 
+diff --git a/src/libcamera/software_isp/debayer.h b/src/libcamera/software_isp/debayer.h
+index 28f1b857b388..6c52ed0249a4 100644
+--- a/src/libcamera/software_isp/debayer.h
++++ b/src/libcamera/software_isp/debayer.h
+@@ -35,7 +35,7 @@ LOG_DECLARE_CATEGORY(Debayer)
+ class Debayer : public Object
+ {
+ public:
+-	Debayer(const CameraManager &cm);
++	Debayer(const CameraManager &cm, bool quadBayer = false);
+ 	virtual ~Debayer() = 0;
+ 
+ 	virtual int configure(const StreamConfiguration &inputCfg,
+@@ -81,6 +81,7 @@ public:
+ 	PixelFormat outputPixelFormat_;
+ 	bool swapRedBlueGains_;
+ 	Benchmark bench_;
++	bool quadBayer_;
+ 
+ private:
+ 	virtual Size patternSize(PixelFormat inputFormat) = 0;
+diff --git a/src/libcamera/software_isp/debayer_egl.cpp b/src/libcamera/software_isp/debayer_egl.cpp
+index fdb1efec2a7b..aaa42b5b3932 100644
+--- a/src/libcamera/software_isp/debayer_egl.cpp
++++ b/src/libcamera/software_isp/debayer_egl.cpp
+@@ -24,6 +24,7 @@
+ 
+ #include "libcamera/internal/formats.h"
+ #include "libcamera/internal/framebuffer.h"
++#include "libcamera/internal/software_isp/quad_bayer.h"
+ 
+ #include "../shaders/glsl_shaders.h"
+ 
+@@ -40,9 +41,11 @@ namespace libcamera {
+  * \brief Construct a DebayerEGL object
+  * \param[in] stats Statistics processing object
+  * \param[in] cm The camera manager
++ * \param[in] quadBayer Whether the sensor uses 2x2 same-colour cells
+  */
+-DebayerEGL::DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm)
+-	: Debayer(cm), stats_(std::move(stats))
++DebayerEGL::DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm,
++		       bool quadBayer)
++	: Debayer(cm, quadBayer), stats_(std::move(stats))
+ {
+ }
+ 
+@@ -152,6 +155,8 @@ int DebayerEGL::initBayerShaders(PixelFormat inputFormat, PixelFormat outputForm
+ 
+ 	/* Target gles 100 glsl requires "#version x" as first directive in shader */
+ 	egl_.pushEnv(shaderEnv, "#version 100");
++	if (quadBayer_)
++		egl_.pushEnv(shaderEnv, "#define QUAD_BAYER");
+ 
+ 	/* Specify GL_OES_EGL_image_external */
+ 	egl_.pushEnv(shaderEnv, "#extension GL_OES_EGL_image_external: enable");
+@@ -294,6 +299,9 @@ int DebayerEGL::configure(const StreamConfiguration &inputCfg,
+ 		return -EINVAL;
+ 	}
+ 
++	if (quadBayer_)
++		inputConfig_.patternSize = { 4, 4 };
++
+ 	if (stats_->configure(inputCfg) != 0)
+ 		return -EINVAL;
+ 
+@@ -335,18 +343,22 @@ int DebayerEGL::configure(const StreamConfiguration &inputCfg,
+ 	outputSize_ = outputCfg.size;
+ 	nativeOutputSize_ = outSizeRange.max;
+ 
+-	window_.x = ((inputCfg.size.width - outputCfg.size.width) / 2) &
+-		    ~(inputConfig_.patternSize.width - 1);
+-	window_.y = ((inputCfg.size.height - outputCfg.size.height) / 2) &
+-		    ~(inputConfig_.patternSize.height - 1);
+-	window_.width = outputCfg.size.width;
+-	window_.height = outputCfg.size.height;
++	if (quadBayer_) {
++		window_ = quadBayerStatsWindow(inputCfg.size, outputCfg.size);
++	} else {
++		window_.x = ((inputCfg.size.width - outputCfg.size.width) / 2) &
++			    ~(inputConfig_.patternSize.width - 1);
++		window_.y = ((inputCfg.size.height - outputCfg.size.height) / 2) &
++			    ~(inputConfig_.patternSize.height - 1);
++		window_.width = outputCfg.size.width;
++		window_.height = outputCfg.size.height;
++	}
+ 
+ 	/*
+ 	 * Don't pass x,y from window_ since process() already adjusts for it.
+ 	 * But crop the window to 2/3 of its width and height for speedup.
+ 	 */
+-	stats_->setWindow(Rectangle(window_.size()));
++	stats_->setWindow(quadBayer_ ? window_ : Rectangle(window_.size()));
+ 
+ 	inputBufferCount_ = inputCfg.bufferCount;
+ 	outputBufferCount_ = outputCfg.bufferCount;
+@@ -366,6 +378,9 @@ Size DebayerEGL::patternSize(PixelFormat inputFormat)
+ 
+ std::vector<PixelFormat> DebayerEGL::formats(PixelFormat inputFormat)
+ {
++	if (quadBayer_ && !isQuadBayerInputFormatSupported(inputFormat))
++		return {};
++
+ 	DebayerEGL::DebayerInputConfig config;
+ 
+ 	if (getInputConfig(inputFormat, config) != 0)
+@@ -412,8 +427,10 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
+ 	 * the input size. Keep the aspect ratio and prefer cropping over black
+ 	 * bars.
+ 	 */
+-	GLfloat scale = std::max((GLfloat)outputSize_.width / nativeOutputSize_.width,
+-				 (GLfloat)outputSize_.height / nativeOutputSize_.height);
++	GLfloat scale = quadBayer_
++				? 1.0f
++				: std::max((GLfloat)outputSize_.width / nativeOutputSize_.width,
++					   (GLfloat)outputSize_.height / nativeOutputSize_.height);
+ 	GLfloat trans = -(1.0f - scale);
+ 	GLfloat projMatrix[] = {
+ 		scale, 0, 0, 0,
+@@ -428,12 +445,8 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
+ 		{ +1.0f, +1.0f },
+ 		{ +1.0f, -1.0f },
+ 	};
+-	static const GLfloat tcoordinates[4][2] = {
+-		{ 0.0f, 0.0f },
+-		{ 0.0f, 1.0f },
+-		{ 1.0f, 1.0f },
+-		{ 1.0f, 0.0f },
+-	};
++	textureCoordinates_ = softwareIspTextureCoordinates({ width_, height_ }, window_,
++							    quadBayer_);
+ 
+ 	/* vertexIn - bayer_8.vert */
+ 	glEnableVertexAttribArray(attributeVertex_);
+@@ -443,7 +456,7 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
+ 	/* textureIn - bayer_8.vert */
+ 	glEnableVertexAttribArray(attributeTexture_);
+ 	glVertexAttribPointer(attributeTexture_, 2, GL_FLOAT, GL_TRUE,
+-			      2 * sizeof(GLfloat), tcoordinates);
++			      2 * sizeof(GLfloat), textureCoordinates_.data());
+ 
+ 	/*
+ 	 * Set the sampler2D to the respective texture unit for each texutre
+@@ -626,7 +639,9 @@ int DebayerEGL::debayerGPU(FrameBuffer *input, FrameBuffer *output, const Debaye
+ 	egl_.attachTextureToFBO(*eglImageOut);
+ 	setShaderVariableValues(*eglImageIn, params);
+ 
+-	glViewport(0, 0, width_, height_);
++	const Rectangle viewport = softwareIspViewport({ width_, height_ }, outputSize_,
++						       quadBayer_);
++	glViewport(viewport.x, viewport.y, viewport.width, viewport.height);
+ 	glClear(GL_COLOR_BUFFER_BIT);
+ 	glDrawArrays(GL_TRIANGLE_FAN, 0, DEBAYER_OPENGL_COORDS);
+ 
+@@ -721,6 +736,15 @@ void DebayerEGL::stop()
+ 
+ SizeRange DebayerEGL::sizes(PixelFormat inputFormat, const Size &inputSize)
+ {
++	if (quadBayer_) {
++		if (!isQuadBayerInputFormatSupported(inputFormat) ||
++		    !isQuadBayerInputSizeSupported(inputSize))
++			return {};
++
++		Size logicalSize = quadBayerLogicalSize(inputSize);
++		return SizeRange(Size(2, 2), logicalSize, 2, 2);
++	}
++
+ 	Size patternSize = this->patternSize(inputFormat);
+ 	unsigned int borderHeight = patternSize.height;
+ 
+diff --git a/src/libcamera/software_isp/debayer_egl.h b/src/libcamera/software_isp/debayer_egl.h
+index d6223f3a9724..8e6b4af91476 100644
+--- a/src/libcamera/software_isp/debayer_egl.h
++++ b/src/libcamera/software_isp/debayer_egl.h
+@@ -9,6 +9,7 @@
+ 
+ #pragma once
+ 
++#include <array>
+ #include <deque>
+ #include <memory>
+ #include <stdint.h>
+@@ -40,7 +41,8 @@ class CameraManager;
+ class DebayerEGL : public Debayer
+ {
+ public:
+-	DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm);
++	DebayerEGL(std::unique_ptr<SwStatsCpu> stats, const CameraManager &cm,
++		   bool quadBayer = false);
+ 	~DebayerEGL();
+ 
+ 	int configure(const StreamConfiguration &inputCfg,
+@@ -93,6 +95,7 @@ private:
+ 	GLint textureUniformStrideFactor_;
+ 	GLint textureUniformBayerFirstRed_;
+ 	GLint textureUniformProjMatrix_;
++	std::array<GLfloat, 8> textureCoordinates_;
+ 
+ 	GLint textureUniformBayerDataIn_;
+ 
+diff --git a/src/libcamera/software_isp/software_isp.cpp b/src/libcamera/software_isp/software_isp.cpp
+index c73a16ce0a29..74973d9ef99e 100644
+--- a/src/libcamera/software_isp/software_isp.cpp
++++ b/src/libcamera/software_isp/software_isp.cpp
+@@ -26,6 +26,7 @@
+ #include "libcamera/internal/bayer_format.h"
+ #include "libcamera/internal/framebuffer.h"
+ #include "libcamera/internal/software_isp/debayer_params.h"
++#include "libcamera/internal/software_isp/quad_bayer.h"
+ 
+ #include "debayer_cpu.h"
+ #if HAVE_DEBAYER_EGL
+@@ -98,8 +99,9 @@ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
+ 	}
+ 
+ 	const CameraManager &cm = *pipe->cameraManager();
++	const bool quadBayer = softwareIspNeedsCellCollapse(sensor->model());
+ 
+-	auto stats = std::make_unique<SwStatsCpu>(cm);
++	auto stats = std::make_unique<SwStatsCpu>(cm, quadBayer);
+ 	if (!stats->isValid()) {
+ 		LOG(SoftwareIsp, Error) << "Failed to create SwStatsCpu object";
+ 		return;
+@@ -121,7 +123,7 @@ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
+ 
+ 	if (!softISPMode || softISPMode == "gpu") {
+ 		if (eGL::isAvailable()) {
+-			debayer_ = std::make_unique<DebayerEGL>(std::move(stats), cm);
++			debayer_ = std::make_unique<DebayerEGL>(std::move(stats), cm, quadBayer);
+ 		} else {
+ 			LOG(SoftwareIsp, Info)
+ 				<< "EGL not available, falling back to CPU debayer";
+@@ -129,6 +131,13 @@ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
+ 	}
+ 
+ #endif
++	if (!debayer_ && quadBayer) {
++		LOG(SoftwareIsp, Error)
++			<< "Quad Bayer sensor " << sensor->model()
++			<< " requires the EGL software ISP";
++		return;
++	}
++
+ 	if (!debayer_)
+ 		debayer_ = std::make_unique<DebayerCpu>(std::move(stats), cm);
+ 
+diff --git a/src/libcamera/software_isp/swstats_cpu.cpp b/src/libcamera/software_isp/swstats_cpu.cpp
+index 7fb77ce7ddd6..0d3359422caf 100644
+--- a/src/libcamera/software_isp/swstats_cpu.cpp
++++ b/src/libcamera/software_isp/swstats_cpu.cpp
+@@ -17,6 +17,7 @@
+ 
+ #include "libcamera/internal/bayer_format.h"
+ #include "libcamera/internal/mapped_framebuffer.h"
++#include "libcamera/internal/software_isp/quad_bayer.h"
+ 
+ namespace libcamera {
+ 
+@@ -159,8 +160,8 @@ namespace libcamera {
+ 
+ LOG_DEFINE_CATEGORY(SwStatsCpu)
+ 
+-SwStatsCpu::SwStatsCpu(const CameraManager &cm)
+-	: sharedStats_("softIsp_stats"), bench_(cm, "CPU stats")
++SwStatsCpu::SwStatsCpu(const CameraManager &cm, bool quadBayer)
++	: quadBayer_(quadBayer), sharedStats_("softIsp_stats"), bench_(cm, "CPU stats")
+ {
+ 	if (!sharedStats_)
+ 		LOG(SwStatsCpu, Error)
+@@ -323,6 +324,34 @@ void SwStatsCpu::statsGBRG10PLine0(const uint8_t *src[], SwIspStats &stats)
+ 	SWSTATS_FINISH_LINE_STATS()
+ }
+ 
++void SwStatsCpu::statsQuadRGGB10P(const uint8_t *src[], SwIspStats &stats)
++{
++	const unsigned int widthInBytes = window_.width * 5 / 4;
++
++	SWSTATS_START_LINE_STATS(uint8_t)
++	(void)g2;
++
++	/* One logical RGGB tile occupies a 4x4 physical quad-cell block. */
++	for (unsigned int x = 0; x + 4 < widthInBytes; x += 10) {
++		auto rgb = normalizeQuadBayerTile(
++			[&](unsigned int cellX, unsigned int cellY) {
++				const unsigned int row = cellY * 2;
++				const unsigned int column = x + cellX * 2;
++				return static_cast<uint8_t>(
++					(src[row][column] + src[row][column + 1] +
++					 src[row + 1][column] + src[row + 1][column + 1]) /
++					4);
++			},
++			quadBayerOrder_);
++		r = rgb[0];
++		g = rgb[1];
++		b = rgb[2];
++		SWSTATS_ACCUMULATE_LINE_STATS(1)
++	}
++
++	SWSTATS_FINISH_LINE_STATS()
++}
++
+ void SwStatsCpu::statsBGGR12PLine0(const uint8_t *src[], SwIspStats &stats)
+ {
+ 	const uint8_t *src0 = src[1] + window_.x * 3 / 2;
+@@ -473,6 +502,18 @@ int SwStatsCpu::configure(const StreamConfiguration &inputCfg, unsigned int stat
+ 	BayerFormat bayerFormat =
+ 		BayerFormat::fromPixelFormat(inputCfg.pixelFormat);
+ 
++	if (quadBayer_) {
++		if (!isQuadBayerInputFormatSupported(inputCfg.pixelFormat) ||
++		    !isQuadBayerInputSizeSupported(inputCfg.size))
++			return -EINVAL;
++		quadBayerOrder_ = bayerFormat.order;
++		patternSize_ = { 4, 4 };
++		xShift_ = 0;
++		sumShift_ = 0;
++		processFrame_ = &SwStatsCpu::processQuadBayerFrame;
++		return 0;
++	}
++
+ 	if (bayerFormat.packing == BayerFormat::Packing::None &&
+ 	    setupStandardBayerOrder(bayerFormat.order) == 0) {
+ 		processFrame_ = &SwStatsCpu::processBayerFrame2;
+@@ -594,6 +635,19 @@ void SwStatsCpu::processBayerFrame2(MappedFrameBuffer &in)
+ 	}
+ }
+ 
++void SwStatsCpu::processQuadBayerFrame(MappedFrameBuffer &in)
++{
++	const uint8_t *src = in.planes()[0].data() + window_.y * stride_;
++	const uint8_t *rows[4];
++
++	for (unsigned int y = 0; y + 3 < window_.height; y += 8) {
++		for (unsigned int row = 0; row < 4; ++row)
++			rows[row] = src + row * stride_ + window_.x * 5 / 4;
++		statsQuadRGGB10P(rows, stats_[0]);
++		src += stride_ * 8;
++	}
++}
++
+ /**
+  * \brief Calculate statistics for a frame in one go
+  * \param[in] frame The frame number
+diff --git a/test/meson.build b/test/meson.build
+index e4450625ee4c..d41ce23c0fd3 100644
+--- a/test/meson.build
++++ b/test/meson.build
+@@ -51,6 +51,7 @@ public_tests = [
+ 
+ internal_tests = [
+     {'name': 'bayer-format', 'sources': ['bayer-format.cpp']},
++    {'name': 'quad-bayer', 'sources': ['quad-bayer.cpp']},
+     {'name': 'byte-stream-buffer', 'sources': ['byte-stream-buffer.cpp']},
+     {'name': 'camera-sensor', 'sources': ['camera-sensor.cpp']},
+     {'name': 'delayed_controls', 'sources': ['delayed_controls.cpp']},
+diff --git a/test/quad-bayer.cpp b/test/quad-bayer.cpp
+new file mode 100644
+index 000000000000..ddbee01c3f12
+--- /dev/null
++++ b/test/quad-bayer.cpp
+@@ -0,0 +1,224 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++/*
++ * Copyright (C) 2026 Frederic Laing
++ */
++
++#include <array>
++#include <cmath>
++#include <iostream>
++#include <stdint.h>
++#include <string_view>
++
++#include <libcamera/formats.h>
++
++#include "libcamera/internal/bayer_format.h"
++#include "libcamera/internal/sensor_cfa_layout.h"
++#include "libcamera/internal/software_isp/quad_bayer.h"
++
++#include "test.h"
++
++using namespace libcamera;
++
++class QuadBayerTest : public Test
++{
++protected:
++	int run()
++	{
++		const SensorCfaLayout imx371Layout = sensorCfaLayout("imx371");
++		const SensorCfaLayout ordinaryLayout = sensorCfaLayout("imx519");
++		constexpr std::array<std::string_view, 4> imx708Models = {
++			"imx708", "imx708_wide", "imx708_noir", "imx708_wide_noir"
++		};
++
++		if (imx371Layout.nativeCellSize != Size(2, 2) ||
++		    imx371Layout.softwareIspInputCellSize != Size(2, 2) ||
++		    imx371Layout.minimumDebinFactor() != 4) {
++			std::cerr << "unexpected IMX371 CFA layout" << std::endl;
++			return TestFail;
++		}
++
++		for (std::string_view model : imx708Models) {
++			const SensorCfaLayout layout = sensorCfaLayout(model);
++			if (layout.nativeCellSize != Size(2, 2) ||
++			    layout.softwareIspInputCellSize != Size(1, 1) ||
++			    layout.minimumDebinFactor() != 4 ||
++			    softwareIspNeedsCellCollapse(model)) {
++				std::cerr << "unexpected IMX708 CFA layout for " << model
++					  << std::endl;
++				return TestFail;
++			}
++		}
++
++		if (ordinaryLayout.nativeCellSize != Size(1, 1) ||
++		    ordinaryLayout.softwareIspInputCellSize != Size(1, 1) ||
++		    ordinaryLayout.minimumDebinFactor() != 2) {
++			std::cerr << "unexpected ordinary Bayer CFA layout" << std::endl;
++			return TestFail;
++		}
++
++		if (!softwareIspNeedsCellCollapse("imx371") ||
++		    softwareIspNeedsCellCollapse("imx519") ||
++		    softwareIspNeedsCellCollapse("")) {
++			std::cerr << "software ISP quad-cell collapse selection is not narrow"
++				  << std::endl;
++			return TestFail;
++		}
++
++		if (!isQuadBayerInputFormatSupported(formats::SRGGB10_CSI2P) ||
++		    isQuadBayerInputFormatSupported(formats::SRGGB8) ||
++		    isQuadBayerInputFormatSupported(formats::SRGGB10) ||
++		    isQuadBayerInputFormatSupported(formats::SRGGB12_CSI2P)) {
++			std::cerr << "unexpected quad Bayer input format support" << std::endl;
++			return TestFail;
++		}
++
++		if (!isQuadBayerInputSizeSupported({ 4656, 3456 }) ||
++		    isQuadBayerInputSizeSupported({ 4655, 3456 }) ||
++		    isQuadBayerInputSizeSupported({ 4656, 3454 })) {
++			std::cerr << "unexpected quad Bayer input size support" << std::endl;
++			return TestFail;
++		}
++
++		if (quadBayerLogicalSize({ 4656, 3456 }) != Size(2328, 1728)) {
++			std::cerr << "unexpected IMX371 logical size" << std::endl;
++			return TestFail;
++		}
++
++		if (softwareIspViewport({ 4656, 3456 }, { 2328, 1728 }, true) !=
++			    Rectangle(0, 0, 2328, 1728) ||
++		    softwareIspViewport({ 4656, 3456 }, { 1600, 1200 }, true) !=
++			    Rectangle(0, 0, 1600, 1200)) {
++			std::cerr << "quad Bayer viewport does not match the logical FBO" << std::endl;
++			return TestFail;
++		}
++		if (softwareIspViewport({ 4656, 3456 }, { 1600, 1200 }, false) !=
++		    Rectangle(0, 0, 4656, 3456)) {
++			std::cerr << "ordinary Bayer viewport no longer uses physical geometry" << std::endl;
++			return TestFail;
++		}
++
++		if (quadBayerStatsWindow({ 4656, 3456 }, { 1600, 1200 }) !=
++		    Rectangle(24, 0, 4608, 3456)) {
++			std::cerr << "quad Bayer statistics window is not centered physically" << std::endl;
++			return TestFail;
++		}
++
++		const auto ordinaryCoordinates = softwareIspTextureCoordinates(
++			{ 4656, 3456 }, { 0, 0, 4656, 3456 }, false);
++		constexpr std::array<float, 8> fullTexture = {
++			0.0f,
++			0.0f,
++			0.0f,
++			1.0f,
++			1.0f,
++			1.0f,
++			1.0f,
++			0.0f,
++		};
++		if (ordinaryCoordinates != fullTexture) {
++			std::cerr << "ordinary Bayer texture coordinates changed" << std::endl;
++			return TestFail;
++		}
++
++		const Rectangle previewWindow =
++			quadBayerStatsWindow({ 4656, 3456 }, { 1454, 1080 });
++		const auto quadCoordinates = softwareIspTextureCoordinates(
++			{ 4656, 3456 }, previewWindow, true);
++		constexpr float tolerance = 0.000001f;
++		const std::array<float, 8> expectedQuad = {
++			0.0f,
++			0.0f,
++			0.0f,
++			1.0f,
++			4652.0f / 4656.0f,
++			1.0f,
++			4652.0f / 4656.0f,
++			0.0f,
++		};
++		for (unsigned int i = 0; i < quadCoordinates.size(); ++i) {
++			if (std::abs(quadCoordinates[i] - expectedQuad[i]) > tolerance) {
++				std::cerr << "quad Bayer texture coordinate " << i
++					  << " is incorrect" << std::endl;
++				return TestFail;
++			}
++		}
++
++		if (quadBayerCellOrigin({ 4656, 3456 }, { 4656, 3456 }) != Point(4654, 3454) ||
++		    quadBayerCellOrigin({ 4656, 3456 }, { -2, -2 }) != Point(0, 0)) {
++			std::cerr << "quad Bayer edge sampling is not clamped to complete cells" << std::endl;
++			return TestFail;
++		}
++
++		if (quadBayerOrderShifts(BayerFormat::RGGB) != Point(0, 0) ||
++		    quadBayerOrderShifts(BayerFormat::GRBG) != Point(2, 0) ||
++		    quadBayerOrderShifts(BayerFormat::GBRG) != Point(0, 2) ||
++		    quadBayerOrderShifts(BayerFormat::BGGR) != Point(2, 2)) {
++			std::cerr << "quad Bayer order shifts are incorrect" << std::endl;
++			return TestFail;
++		}
++
++		constexpr std::array<std::array<uint16_t, 4>, 4> orderTiles = { {
++			{ 100, 200, 204, 300 }, /* RGGB */
++			{ 200, 100, 300, 204 }, /* GRBG */
++			{ 200, 300, 100, 204 }, /* GBRG */
++			{ 300, 200, 204, 100 }, /* BGGR */
++		} };
++		constexpr std::array<BayerFormat::Order, 4> orders = {
++			BayerFormat::RGGB,
++			BayerFormat::GRBG,
++			BayerFormat::GBRG,
++			BayerFormat::BGGR,
++		};
++		for (unsigned int index = 0; index < orders.size(); ++index) {
++			auto rgb = normalizeQuadBayerTile(
++				[&](unsigned int x, unsigned int y) {
++					return orderTiles[index][y * 2 + x];
++				},
++				orders[index]);
++			if (rgb != std::array<uint16_t, 3>{ 100, 202, 300 }) {
++				std::cerr << "quad Bayer order normalization failed" << std::endl;
++				return TestFail;
++			}
++		}
++
++		/* Physical quad-RGGB tile: 2x2 samples for each logical colour. */
++		constexpr std::array<uint16_t, 16> physical = {
++			100,
++			104,
++			200,
++			204,
++			108,
++			112,
++			208,
++			212,
++			300,
++			304,
++			400,
++			404,
++			308,
++			312,
++			408,
++			412,
++		};
++		constexpr std::array<uint16_t, 4> expected = { 106, 206, 306, 406 };
++
++		for (unsigned int y = 0; y < 2; ++y) {
++			for (unsigned int x = 0; x < 2; ++x) {
++				uint16_t value = averageQuadBayerCell(
++					[&](unsigned int px, unsigned int py) {
++						return physical[py * 4 + px];
++					},
++					x, y);
++				if (value != expected[y * 2 + x]) {
++					std::cerr << "unexpected logical sample at " << x << ',' << y
++						  << ": " << value << std::endl;
++					return TestFail;
++				}
++			}
++		}
++
++		return TestPass;
++	}
++};
++
++TEST_REGISTER(QuadBayerTest)
+-- 
+2.56.0
+

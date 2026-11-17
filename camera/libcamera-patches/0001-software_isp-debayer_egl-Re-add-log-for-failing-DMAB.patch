@@ -1,0 +1,40 @@
+From a694d962ae264e95de1d0d5b6035f21e844151a8 Mon Sep 17 00:00:00 2001
+From: Robert Mader <robert.mader@collabora.com>
+Date: Thu, 23 Jul 2026 09:19:33 +0200
+Subject: [PATCH 1/6] software_isp: debayer_egl: Re-add log for failing DMABuf
+ import
+
+The log was introduced in commit
+93f0db167a8d ("debayer_egl: Implement dmabuf import for input buffers")
+and dropped in the commit mentioned below. Let's readd it as failing
+imports majorly impact performance and indicate actionable issues in the
+V4L2 or GPU drivers. Ensure the log is only printed once, now that we use
+multiple eGLImages.
+
+Fixes: 13f7b921acdf ("libcamera: software_isp: debayer_egl: Implement input/output frame caching mechanism")
+Signed-off-by: Robert Mader <robert.mader@collabora.com>
+Reviewed-by: Milan Zamazal <mzamazal@redhat.com>
+Reviewed-by: Kieran Bingham <kieran.bingham@ideasonboard.com>
+Signed-off-by: Kieran Bingham <kieran.bingham@ideasonboard.com>
+(cherry picked from commit 69005af97f24691eeb851012ec909fc468312615)
+---
+ src/libcamera/software_isp/debayer_egl.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/libcamera/software_isp/debayer_egl.cpp b/src/libcamera/software_isp/debayer_egl.cpp
+index 02651fe87922..09ab5a58c994 100644
+--- a/src/libcamera/software_isp/debayer_egl.cpp
++++ b/src/libcamera/software_isp/debayer_egl.cpp
+@@ -533,6 +533,9 @@ eGLImage *DebayerEGL::getCachedInputFrameBuffer(FrameBuffer *input, std::optiona
+ 		if (egl_.createInputDMABufTexture2D(*eglImageIn, input->planes()[0].fd.get()) == 0)
+ 			return eglImageIn;
+ 
++		if (eglImageInCache_.size() == 1)
++			LOG(Debayer, Info)
++				<< "Importing input DMABuf failed, falling back to upload";
+ 	} else if (!eglImageIn->dmabuf_import_failed_) {
+ 		egl_.activateBindTexture(*eglImageIn);
+ 		return eglImageIn;
+-- 
+2.56.0
+

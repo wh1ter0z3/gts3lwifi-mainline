@@ -1,0 +1,42 @@
+From 989ade15f682cc719cb47bb2e30564504b4d29d5 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Fri, 30 Oct 2026 13:35:30 -0600
+Subject: [PATCH 07/14] ipa: libipa: camera_sensor_helper: Add S5K5E3
+
+Add a camera sensor helper for the Samsung S5K5E3. The analogue gain
+code in register 0x0204 scales linearly, with 32 corresponding to unity
+gain, and the black level is 64 at 10 bits.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ src/ipa/libipa/camera_sensor_helper.cpp | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sensor_helper.cpp
+index bb957005..018f96e5 100644
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -839,6 +839,19 @@ public:
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("ov13858", CameraSensorHelperOv13858)
+ 
++class CameraSensorHelperS5k5e3 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperS5k5e3()
++	{
++		/* 0x40 at 10bits. */
++		blackLevel_ = 4096;
++		/* Analogue gain code is linear with 32 for unity gain. */
++		gain_ = AnalogueGainLinear{ 1, 0, 0, 32 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("s5k5e3", CameraSensorHelperS5k5e3)
++
+ class CameraSensorHelperVd55g1 : public CameraSensorHelper
+ {
+ public:
+-- 
+2.56.0
+

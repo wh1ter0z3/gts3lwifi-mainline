@@ -247,8 +247,29 @@ PRODUCT_PACKAGES += \
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.location.gps.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.location.gps.xml
 
+# --- Camera: libcamera's Android HAL3 module (camera/libcamera.mk: the
+# simple pipeline and software ISP, as in Nura) under ST's AIDL camera
+# provider (vendor/camera/hardware-peripheral-camera), which opens the
+# "camera" HAL module: camera.libcamera ---
+PRODUCT_PACKAGES += \
+    android.hardware.camera.provider-service.libcamera \
+    camera.libcamera \
+    libcamera \
+    libcamera-base \
+    ipa_simple.so \
+    ipa_simple.so.sign \
+    simple_ipa_proxy \
+    imx258.yaml \
+    s5k5e3.yaml \
+    uncalibrated.yaml
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.hardware.camera=libcamera
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.camera.front.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.front.xml \
+    frameworks/native/data/etc/android.hardware.camera.autofocus.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.autofocus.xml
+
 # Still to come (each its own step, tested on the tablet):
 #  - sensors: the hall sensor (cover), once the kernel has it;
 #  - audio: headphone/headset routing on jack events; Bluetooth audio;
-#  - camera (libcamera), Vulkan (turnip on a5xx), fingerprint;
+#  - Vulkan (turnip on a5xx), fingerprint;
 #  - kernel modules and firmware links in this build, not after it.

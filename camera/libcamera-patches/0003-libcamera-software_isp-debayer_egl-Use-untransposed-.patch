@@ -1,0 +1,65 @@
+From 2a50fed07b672fe9bba9353edf909ef000748a10 Mon Sep 17 00:00:00 2001
+From: Robert Mader <robert.mader@collabora.com>
+Date: Sat, 29 Aug 2026 16:27:09 +0200
+Subject: [PATCH 3/6] libcamera: software_isp: debayer_egl: Use untransposed
+ matrix to fix GLES 2.0
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The softISP curently fails on Mali-400 on Mesa. It turns out that
+transposed matrices are not allowed by the specification:
+
+> The UniformMatrix{234}fv commands will load count 2 × 2, 3 × 3, or 4 × 4
+> matrices (corresponding to 2, 3, or 4 in the command name) of floating-point
+> values into a uniform location defined as a matrix or an array of matrices.
+> The matrix is specified in column-major order. transpose must be FALSE.
+
+Thus partially revert the commit mentioned below and manually transpose
+the matrix.
+
+Fixes: d780e285b593 ("shaders: bayer: Use native matrix multiplication")
+Closes: https://gitlab.freedesktop.org/camera/libcamera/-/work_items/342
+Signed-off-by: Robert Mader <robert.mader@collabora.com>
+Tested-by: Barnabás Pőcze <barnabas.pocze@ideasonboard.com> # pinephone
+Reviewed-by: Barnabás Pőcze <barnabas.pocze@ideasonboard.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Reviewed-by: Milan Zamazal <mzamazal@redhat.com>
+[Adjust commit message slightly.]
+Signed-off-by: Barnabás Pőcze <barnabas.pocze@ideasonboard.com>
+(cherry picked from commit 1df5cbe722a839ce4e257093550fa8107c02cf8b)
+---
+ src/libcamera/software_isp/debayer_egl.cpp | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/src/libcamera/software_isp/debayer_egl.cpp b/src/libcamera/software_isp/debayer_egl.cpp
+index 09ab5a58c994..5cd11c380243 100644
+--- a/src/libcamera/software_isp/debayer_egl.cpp
++++ b/src/libcamera/software_isp/debayer_egl.cpp
+@@ -479,8 +479,21 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
+ 			    << " textureUniformStep_.y " << Step[1]
+ 			    << " textureUniformStrideFactor_ " << Stride
+ 			    << " textureUniformProjMatrix_ " << textureUniformProjMatrix_;
+-
+-	glUniformMatrix3fv(ccmUniformDataIn_, 1, GL_TRUE, params.combinedMatrix.data().data());
++	/*
++	 * Pre-transpose matrix for GLES 2.0
++	 */
++	GLfloat ccm[9] = {
++		params.combinedMatrix[0][0],
++		params.combinedMatrix[1][0],
++		params.combinedMatrix[2][0],
++		params.combinedMatrix[0][1],
++		params.combinedMatrix[1][1],
++		params.combinedMatrix[2][1],
++		params.combinedMatrix[0][2],
++		params.combinedMatrix[1][2],
++		params.combinedMatrix[2][2],
++	};
++	glUniformMatrix3fv(ccmUniformDataIn_, 1, GL_FALSE, ccm);
+ 	LOG(Debayer, Debug) << " ccmUniformDataIn_ " << ccmUniformDataIn_ << " data " << params.combinedMatrix;
+ 
+ 	/*
+-- 
+2.56.0
+

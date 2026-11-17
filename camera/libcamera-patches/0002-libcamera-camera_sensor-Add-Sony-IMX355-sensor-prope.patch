@@ -1,0 +1,73 @@
+From f357c675a42b6d80ecda513818eb820b9c0657a4 Mon Sep 17 00:00:00 2001
+From: Naushir Patuck <naush@raspberrypi.com>
+Date: Fri, 17 Jul 2026 14:42:11 +0100
+Subject: [PATCH 2/6] libcamera: camera_sensor: Add Sony IMX355 sensor
+ properties and helper
+
+Add the camera sensor properties and camera helper entry for the Sony
+IMX355 sensor.
+
+Signed-off-by: Naushir Patuck <naush@raspberrypi.com>
+Reviewed-by: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+Tested-by: Robert Mader <robert.mader@collabora.com>
+Reviewed-by: David Plowman <david.plowman@raspberrypi.com>
+Signed-off-by: Kieran Bingham <kieran.bingham@ideasonboard.com>
+(cherry picked from commit a1db25dabaee98676024ae11e9ed3a736e982d03)
+---
+ src/ipa/libipa/camera_sensor_helper.cpp          | 12 ++++++++++++
+ .../sensor/camera_sensor_properties.cpp          | 16 ++++++++++++++++
+ 2 files changed, 28 insertions(+)
+
+diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sensor_helper.cpp
+index 9457d62b3339..bb9570053ecf 100644
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -617,6 +617,18 @@ public:
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("imx335", CameraSensorHelperImx335)
+ 
++class CameraSensorHelperImx355 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperImx355()
++	{
++		/* From datasheet: 64 at 10bits. */
++		blackLevel_ = 4096;
++		gain_ = AnalogueGainLinear{ 0, 1024, -1, 1024 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("imx355", CameraSensorHelperImx355)
++
+ class CameraSensorHelperImx415 : public CameraSensorHelper
+ {
+ public:
+diff --git a/src/libcamera/sensor/camera_sensor_properties.cpp b/src/libcamera/sensor/camera_sensor_properties.cpp
+index 28043150e2cb..cbe55bc5076c 100644
+--- a/src/libcamera/sensor/camera_sensor_properties.cpp
++++ b/src/libcamera/sensor/camera_sensor_properties.cpp
+@@ -261,6 +261,22 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
+ 			.testPatternModes = {},
+ 			.sensorDelays = { },
+ 		} },
++		{ "imx355", {
++			.unitCellSize = { 1120, 1120 },
++			.testPatternModes = {
++				{ controls::draft::TestPatternModeOff, 0 },
++				{ controls::draft::TestPatternModeColorBars, 1 },
++				{ controls::draft::TestPatternModeSolidColor, 2 },
++				{ controls::draft::TestPatternModeColorBarsFadeToGray, 3 },
++				{ controls::draft::TestPatternModePn9, 4 },
++			},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
+ 		{ "imx415", {
+ 			.unitCellSize = { 1450, 1450 },
+ 			.testPatternModes = {},
+-- 
+2.56.0
+

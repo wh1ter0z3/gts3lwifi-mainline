@@ -1,0 +1,85 @@
+From e27a28ef46e1008dcd1d75e82dc97588087a55fc Mon Sep 17 00:00:00 2001
+From: Emilio Miranda <gemilio@gmail.com>
+Date: Tue, 25 Aug 2026 14:06:30 +0200
+Subject: [PATCH 5/6] ipa: simple: Derive AGC minimum gain step from sensor
+ granularity
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The minimum gain step is computed as 1% of the sensor's gain range. For a
+sensor with a wide gain range that is far larger than the hardware can
+resolve: the OV01A10 spans 1-63.9961, giving a step of 0.629961, which is
+63% at unity gain where the sensor resolves 1/256 = 0.0039.
+
+updateExposure() substitutes againMinStep whenever the proportional
+correction is smaller than it. Once the exposure saturates and gain is
+the only remaining control, the AGC therefore applies a 63% change every
+time it computes a 2% one, and never settles:
+
+  again 1.00000 exposureMSV 1.99 error +0.51 factor 1.020 -> 1.62996
+  again 1.62996 exposureMSV 2.90 error -0.41 factor 0.984 -> 1.00000
+
+That is 0.7 EV of brightness flicker at frame rate, observed on a Dell
+XPS 13 9315 (IPU6, simple pipeline and software ISP).
+
+This is not specific to one sensor. Without a CameraSensorHelper the gain
+values are raw register codes, where a step of 1.0 is by definition the
+smallest possible change in gain; adding a helper switches the units to
+real multipliers, and 1% of the range then bears no relation to what the
+sensor can resolve. Any sensor with a wide gain range is exposed to this
+once it gains a helper.
+
+Sample the step at both ends of the gain range and take the smaller one,
+so that non-uniform gain models are covered as well. This yields
+0.00390625 for the OV01A10, and the gain then tracks continuously
+instead of alternating between two values.
+
+Link: https://bugzilla.redhat.com/show_bug.cgi?id=2483190
+Suggested-by: Barnabás Pőcze <barnabas.pocze@ideasonboard.com>
+Signed-off-by: Emilio Miranda <gemilio@gmail.com>
+---
+ src/ipa/simple/soft_simple.cpp | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/src/ipa/simple/soft_simple.cpp b/src/ipa/simple/soft_simple.cpp
+index 629e1a32de8a..8bffd2a441fd 100644
+--- a/src/ipa/simple/soft_simple.cpp
++++ b/src/ipa/simple/soft_simple.cpp
+@@ -6,6 +6,7 @@
+  */
+ 
+ #include <chrono>
++#include <cmath>
+ #include <stdint.h>
+ #include <sys/mman.h>
+ 
+@@ -228,10 +229,21 @@ int IPASoftSimple::configure(const IPAConfigInfo &configInfo)
+ 		context_.configuration.agc.againMin = camHelper_->gain(againMin);
+ 		context_.configuration.agc.againMax = camHelper_->gain(againMax);
+ 		context_.configuration.agc.again10 = std::max(context_.configuration.agc.againMin, 1.0);
+-		context_.configuration.agc.againMinStep =
+-			(context_.configuration.agc.againMax -
+-			 context_.configuration.agc.againMin) /
+-			100.0;
++		/*
++		 * The minimum gain step must reflect what the sensor can
++		 * actually resolve. Deriving it from a fraction of the gain
++		 * range yields a huge step for sensors with a wide range: the
++		 * OV01A10 spans 1-63.9961, giving 0.63 at unity gain where the
++		 * hardware resolves 1/256. The AGC can then make no correction
++		 * smaller than 63%, and oscillates around the target once the
++		 * exposure saturates and gain is the only remaining control.
++		 *
++		 * Sample the step at both ends of the range and take the
++		 * smaller one, so that non-uniform gain models are covered.
++		 */
++		context_.configuration.agc.againMinStep = std::min(
++			std::abs(camHelper_->gain(againMin + 1) - camHelper_->gain(againMin)),
++			std::abs(camHelper_->gain(againMax) - camHelper_->gain(againMax - 1)));
+ 		if (camHelper_->blackLevel().has_value()) {
+ 			/*
+ 			 * The black level from camHelper_ is a 16 bit value, software ISP
+-- 
+2.56.0
+

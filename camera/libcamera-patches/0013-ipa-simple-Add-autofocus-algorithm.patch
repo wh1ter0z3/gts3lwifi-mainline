@@ -1,0 +1,302 @@
+From 55a5fc489e999083bfb68b3081f709999835aab6 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Fri, 30 Oct 2026 14:01:55 -0600
+Subject: [PATCH 13/14] ipa: simple: Add autofocus algorithm
+
+Add an Af algorithm to the software ISP IPA, built on the libipa
+AfContrast algorithm and the focus statistics of the software ISP.
+
+The contrast of each focus region is the mean squared green difference,
+normalised by the square of the mean level above black of the whole
+statistics window. This keeps the measurement independent of the
+exposure, without giving flat regions as much weight as textured ones.
+Lens positions computed by the algorithm are sent to the pipeline
+handler with the sensor controls.
+
+The algorithm only registers the autofocus controls when the camera has
+a focus lens, and otherwise only reports FocusFoM. Enable it in the
+uncalibrated tuning file.
+
+[backport: moved to the simple IPA of v0.7.2, in src/ipa/simple and the
+ ipa::soft namespace]
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ src/ipa/simple/algorithms/af.cpp      | 160 ++++++++++++++++++++++++++
+ src/ipa/simple/algorithms/af.h        |  49 ++++++++
+ src/ipa/simple/algorithms/meson.build |   1 +
+ src/ipa/simple/data/uncalibrated.yaml |   3 +
+ src/ipa/simple/ipa_context.h          |   2 +
+ 5 files changed, 215 insertions(+)
+ create mode 100644 src/ipa/simple/algorithms/af.cpp
+ create mode 100644 src/ipa/simple/algorithms/af.h
+
+diff --git a/src/ipa/simple/algorithms/af.cpp b/src/ipa/simple/algorithms/af.cpp
+new file mode 100644
+index 00000000..59956ee0
+--- /dev/null
++++ b/src/ipa/simple/algorithms/af.cpp
+@@ -0,0 +1,160 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026, Jayden Milne
++ *
++ * Autofocus
++ */
++
++#include "af.h"
++
++#include <algorithm>
++#include <optional>
++#include <span>
++#include <stdint.h>
++
++#include <libcamera/base/log.h>
++
++#include <libcamera/geometry.h>
++
++namespace libcamera {
++
++LOG_DEFINE_CATEGORY(IPASoftAf)
++
++namespace ipa::soft::algorithms {
++
++/*
++ * Mean level above black, on an 8-bit scale, below which the image is too
++ * dark to measure focus.
++ */
++static constexpr double kMinLevel = 4.0;
++
++/* Scale applied to the normalised contrast, so that FocusFoM is usable. */
++static constexpr double kContrastScale = 1e6;
++
++/**
++ * \class Af
++ * \brief Contrast detection autofocus
++ *
++ * The Af algorithm drives the focus lens, when the camera has one, using the
++ * libipa AfContrast algorithm and the focus statistics of the software ISP.
++ * Without a focus lens, it only reports the FocusFoM metadata.
++ *
++ * The software ISP computes statistics every SwStatsCpu::kStatPerNumFrames
++ * frames. The step_frames tuning parameter, which counts frames, should be at
++ * least that value so that the statistics used after a lens movement are
++ * measured on a frame captured with the lens in its new position.
++ */
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::init
++ */
++int Af::init(IPAContext &context, const ValueNode &tuningData)
++{
++	return af_.init(tuningData, context.lensControls, context.ctrlMap);
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::configure
++ */
++int Af::configure(IPAContext &context, const IPAConfigInfo &configInfo)
++{
++	/*
++	 * \todo The statistics cover the debayered area, which is centred in
++	 * the sensor output and can be smaller than it. Account for it when
++	 * mapping the AF windows, and use the analogue crop of the configured
++	 * sensor mode instead of the one available at init time.
++	 */
++	return af_.configure(configInfo.lensControls,
++			     Size(SwIspStats::kFocusGridWidth,
++				  SwIspStats::kFocusGridHeight),
++			     context.sensorInfo.analogCrop);
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::queueRequest
++ */
++void Af::queueRequest([[maybe_unused]] IPAContext &context,
++		      [[maybe_unused]] const uint32_t frame,
++		      [[maybe_unused]] IPAFrameContext &frameContext,
++		      const ControlList &controls)
++{
++	af_.queueRequest(controls);
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::prepare
++ */
++void Af::prepare([[maybe_unused]] IPAContext &context,
++		 [[maybe_unused]] const uint32_t frame,
++		 IPAFrameContext &frameContext,
++		 [[maybe_unused]] DebayerParams *params)
++{
++	af_.prepare(frameContext.af);
++}
++
++bool Af::computeRegions(const IPAContext &context, const SwIspStats *stats)
++{
++	const double blackLevel = context.activeState.blc.level;
++
++	uint64_t sum = 0;
++	uint64_t count = 0;
++	for (const SwIspStats::FocusRegion &region : stats->focus) {
++		sum += region.sum;
++		count += region.count;
++	}
++
++	if (!count)
++		return false;
++
++	/*
++	 * Normalise the contrast by the square of the mean level of the whole
++	 * window rather than of each region, so that the measurement doesn't
++	 * depend on the exposure while textured regions keep more weight than
++	 * flat ones.
++	 */
++	const double level = static_cast<double>(sum) / count - blackLevel;
++	if (level < kMinLevel) {
++		LOG(IPASoftAf, Debug) << "Image too dark to measure focus";
++		return false;
++	}
++
++	const double scale = kContrastScale / (level * level);
++
++	for (unsigned int i = 0; i < regions_.size(); i++) {
++		const SwIspStats::FocusRegion &region = stats->focus[i];
++
++		if (!region.count) {
++			regions_[i] = { 0.0, 0.0 };
++			continue;
++		}
++
++		regions_[i].contrast = region.contrast * scale / region.count;
++		regions_[i].average = std::max(static_cast<double>(region.sum) / region.count - blackLevel,
++					       0.0);
++	}
++
++	return true;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::process
++ */
++void Af::process(IPAContext &context, const uint32_t frame,
++		 IPAFrameContext &frameContext, const SwIspStats *stats,
++		 ControlList &metadata)
++{
++	std::span<const AfContrast::RegionStats> regions;
++	if (stats->valid && computeRegions(context, stats))
++		regions = regions_;
++
++	af_.process(frame, frameContext.af, regions, metadata);
++
++	if (std::optional<int32_t> setting = af_.lensSetting())
++		context.activeState.lens.focusPosition = *setting;
++}
++
++REGISTER_IPA_ALGORITHM(Af, "Af")
++
++} /* namespace ipa::soft::algorithms */
++
++} /* namespace libcamera */
+diff --git a/src/ipa/simple/algorithms/af.h b/src/ipa/simple/algorithms/af.h
+new file mode 100644
+index 00000000..fb5ceaec
+--- /dev/null
++++ b/src/ipa/simple/algorithms/af.h
+@@ -0,0 +1,49 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026, Jayden Milne
++ *
++ * Autofocus
++ */
++
++#pragma once
++
++#include <array>
++
++#include <libipa/af_contrast.h>
++
++#include "algorithm.h"
++
++namespace libcamera {
++
++namespace ipa::soft::algorithms {
++
++class Af : public Algorithm
++{
++public:
++	int init(IPAContext &context, const ValueNode &tuningData) override;
++
++	int configure(IPAContext &context, const IPAConfigInfo &configInfo) override;
++
++	void queueRequest(IPAContext &context, const uint32_t frame,
++			  IPAFrameContext &frameContext, const ControlList &controls) override;
++
++	void prepare(IPAContext &context, const uint32_t frame,
++		     IPAFrameContext &frameContext, DebayerParams *params) override;
++
++	void process(IPAContext &context, const uint32_t frame,
++		     IPAFrameContext &frameContext, const SwIspStats *stats,
++		     ControlList &metadata) override;
++
++private:
++	static constexpr unsigned int kRegions =
++		SwIspStats::kFocusGridWidth * SwIspStats::kFocusGridHeight;
++
++	bool computeRegions(const IPAContext &context, const SwIspStats *stats);
++
++	AfContrast af_;
++	std::array<AfContrast::RegionStats, kRegions> regions_;
++};
++
++} /* namespace ipa::soft::algorithms */
++
++} /* namespace libcamera */
+diff --git a/src/ipa/simple/algorithms/meson.build b/src/ipa/simple/algorithms/meson.build
+index 73c63722..1cd58d5e 100644
+--- a/src/ipa/simple/algorithms/meson.build
++++ b/src/ipa/simple/algorithms/meson.build
+@@ -2,6 +2,7 @@
+ 
+ soft_simple_ipa_algorithms = files([
+     'adjust.cpp',
++    'af.cpp',
+     'awb.cpp',
+     'agc.cpp',
+     'blc.cpp',
+diff --git a/src/ipa/simple/data/uncalibrated.yaml b/src/ipa/simple/data/uncalibrated.yaml
+index fc90ca52..6c5c2822 100644
+--- a/src/ipa/simple/data/uncalibrated.yaml
++++ b/src/ipa/simple/data/uncalibrated.yaml
+@@ -16,4 +16,7 @@ algorithms:
+   #                0, 0, 1]
+   - Adjust:
+   - Agc:
++  # Autofocus only drives the lens of cameras that have one. Without a lens
++  # map, lens positions in dioptres are uncalibrated.
++  - Af:
+ ...
+diff --git a/src/ipa/simple/ipa_context.h b/src/ipa/simple/ipa_context.h
+index a24c0ce7..29801170 100644
+--- a/src/ipa/simple/ipa_context.h
++++ b/src/ipa/simple/ipa_context.h
+@@ -16,6 +16,7 @@
+ #include "libcamera/internal/matrix.h"
+ #include "libcamera/internal/vector.h"
+ 
++#include <libipa/af_contrast.h>
+ #include <libipa/fc_queue.h>
+ 
+ #include "core_ipa_interface.h"
+@@ -68,6 +69,7 @@ struct IPAActiveState {
+ };
+ 
+ struct IPAFrameContext : public FrameContext {
++	ipa::af::FrameContext af;
+ 	Matrix<float, 3, 3> ccm;
+ 
+ 	struct {
+-- 
+2.56.0
+

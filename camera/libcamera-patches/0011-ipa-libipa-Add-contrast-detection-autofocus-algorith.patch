@@ -1,0 +1,1049 @@
+From 00e591ed09f01084c6ab5a62537bf1221537573e Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Fri, 30 Oct 2026 14:00:35 -0600
+Subject: [PATCH 11/14] ipa: libipa: Add contrast detection autofocus algorithm
+
+Add an autofocus algorithm based on a contrast measurement over a grid
+of regions, for IPA modules whose statistics provide no phase detection
+data.
+
+The algorithm implements the libcamera autofocus controls (AfMode,
+AfRange, AfSpeed, AfMetering, AfWindows, AfTrigger, AfPause and
+LensPosition) and reports AfState, AfPauseState, LensPosition and
+FocusFoM. Its structure follows the contrast detection part of the
+Raspberry Pi autofocus algorithm, and so does the tuning data format:
+lens positions are in dioptres, mapped to lens driver units through a
+piecewise linear function, and scans are parametrised per range and
+speed. A coarse scan, reversed when the peak may lie behind its start,
+is followed by a fine scan around the interpolated peak. In continuous
+mode, a change in the contrast or brightness of the focus area followed
+by a stable period starts a new scan.
+
+The statistics are only used once a configurable number of frames has
+elapsed after each lens movement, which lets IPA modules account for
+the latency between a lens command and the statistics of the first
+frame captured with the lens in its new position.
+
+[backport: use libcamera::Span for the AfWindows control default, as the
+ v0.7.2 control API predates the switch to std::span]
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ src/ipa/libipa/af_contrast.cpp | 819 +++++++++++++++++++++++++++++++++
+ src/ipa/libipa/af_contrast.h   | 156 +++++++
+ src/ipa/libipa/meson.build     |   2 +
+ 3 files changed, 977 insertions(+)
+ create mode 100644 src/ipa/libipa/af_contrast.cpp
+ create mode 100644 src/ipa/libipa/af_contrast.h
+
+diff --git a/src/ipa/libipa/af_contrast.cpp b/src/ipa/libipa/af_contrast.cpp
+new file mode 100644
+index 00000000..5084f6fa
+--- /dev/null
++++ b/src/ipa/libipa/af_contrast.cpp
+@@ -0,0 +1,819 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026, Jayden Milne
++ *
++ * Contrast detection autofocus algorithm
++ */
++
++#include "af_contrast.h"
++
++#include <algorithm>
++#include <cmath>
++#include <limits>
++
++#include <linux/v4l2-controls.h>
++
++#include <libcamera/base/log.h>
++#include <libcamera/base/span.h>
++
++/**
++ * \file af_contrast.h
++ * \brief Contrast detection autofocus algorithm
++ */
++
++namespace libcamera {
++
++LOG_DEFINE_CATEGORY(AfContrast)
++
++namespace ipa {
++
++namespace {
++
++/* Upper end of the lens map used when the tuning file doesn't provide one. */
++constexpr double kDefaultMapMax = 15.0;
++
++/* Number of positions sampled by the fine scan. */
++constexpr unsigned int kFineSteps = 5;
++
++} /* namespace */
++
++namespace af {
++
++/**
++ * \struct FrameContext
++ * \brief Per-frame autofocus state
++ *
++ * \var FrameContext::lensPosition
++ * \brief Lens position in dioptres when the frame was captured
++ */
++
++} /* namespace af */
++
++/**
++ * \class AfContrast
++ * \brief Contrast detection autofocus algorithm
++ *
++ * The AfContrast class implements the libcamera autofocus controls on top of
++ * a contrast measurement provided by the IPA module for a grid of regions.
++ * Its structure follows the contrast detection part of the Raspberry Pi
++ * autofocus algorithm: lens positions are expressed in dioptres and
++ * converted to lens driver units through a piecewise linear map, and the
++ * tuning data describes the scan ranges and speeds in the same way.
++ *
++ * A scan steps the lens in coarse steps until the contrast drops below a
++ * fraction of the maximum seen so far, or a range limit is reached. When the
++ * scan starts in the middle of the range and the peak may lie behind the
++ * starting position, the scan reverses. A fine scan around the interpolated
++ * peak then refines the result before the lens settles on the final
++ * position.
++ *
++ * In continuous mode, the algorithm watches the contrast and brightness of
++ * the focus area once a scan completes. When either changes by more than a
++ * configurable ratio and then stays stable for a number of frames, a new scan
++ * is started.
++ *
++ * The statistics must be measured on frames captured after the lens has
++ * settled. The algorithm ignores statistics until the configured number of
++ * frames has elapsed after each lens movement, counted with the frame numbers
++ * passed to process().
++ *
++ * The tuning data supports the following keys, all of them optional:
++ *
++ * - ranges: The normal, macro and full ranges, each with min, max and default
++ *   lens positions in dioptres
++ * - speeds: The normal and fast speeds, each with step_coarse and step_fine
++ *   (in dioptres), contrast_ratio, retrigger_ratio, retrigger_delay (in
++ *   frames), max_slew (in dioptres per frame) and step_frames (the number of
++ *   frames to wait after a lens movement)
++ * - skip_frames: The number of frames to skip at start
++ * - map: A piecewise linear function from dioptres to lens driver units
++ */
++
++/**
++ * \struct AfContrast::RegionStats
++ * \brief Focus statistics for one region of the grid
++ *
++ * \var AfContrast::RegionStats::contrast
++ * \brief The focus figure of merit of the region
++ *
++ * The value must not depend on the exposure time and gain, larger values
++ * indicating sharper images. It is reported, rounded to an integer and
++ * weighted over the focus area, through the FocusFoM control.
++ *
++ * \var AfContrast::RegionStats::average
++ * \brief The average brightness of the region, used to detect scene changes
++ */
++
++void AfContrast::RangeParams::read(const ValueNode &params)
++{
++	focusMin = params["min"].get<double>(focusMin);
++	focusMax = params["max"].get<double>(focusMax);
++	focusDefault = params["default"].get<double>(focusDefault);
++}
++
++void AfContrast::SpeedParams::read(const ValueNode &params)
++{
++	stepCoarse = params["step_coarse"].get<double>(stepCoarse);
++	stepFine = params["step_fine"].get<double>(stepFine);
++	contrastRatio = params["contrast_ratio"].get<double>(contrastRatio);
++	retriggerRatio = params["retrigger_ratio"].get<double>(retriggerRatio);
++	retriggerDelay = params["retrigger_delay"].get<uint32_t>(retriggerDelay);
++	maxSlew = params["max_slew"].get<double>(maxSlew);
++	stepFrames = params["step_frames"].get<uint32_t>(stepFrames);
++}
++
++void AfContrast::parseTuning(const ValueNode &tuningData)
++{
++	const ValueNode &ranges = tuningData["ranges"];
++
++	RangeParams &normal = ranges_[controls::AfRangeNormal];
++	normal = { 0.0, 12.0, 1.0 };
++	normal.read(ranges["normal"]);
++
++	RangeParams &macro = ranges_[controls::AfRangeMacro];
++	macro = normal;
++	macro.read(ranges["macro"]);
++
++	RangeParams &full = ranges_[controls::AfRangeFull];
++	full = {
++		std::min(normal.focusMin, macro.focusMin),
++		std::max(normal.focusMax, macro.focusMax),
++		normal.focusDefault,
++	};
++	full.read(ranges["full"]);
++
++	const ValueNode &speeds = tuningData["speeds"];
++
++	SpeedParams &normalSpeed = speeds_[controls::AfSpeedNormal];
++	normalSpeed = { 1.0, 0.25, 0.75, 0.75, 10, 2.0, 4 };
++	normalSpeed.read(speeds["normal"]);
++
++	SpeedParams &fastSpeed = speeds_[controls::AfSpeedFast];
++	fastSpeed = normalSpeed;
++	fastSpeed.read(speeds["fast"]);
++
++	skipFrames_ = tuningData["skip_frames"].get<uint32_t>(5);
++
++	map_ = tuningData["map"].get<Pwl>(Pwl{});
++	if (map_.size() < 2) {
++		LOG(AfContrast, Warning)
++			<< "No lens map in tuning data, lens positions are uncalibrated";
++		map_ = Pwl({
++			Pwl::Point({ 0.0, static_cast<double>(lensMin_) }),
++			Pwl::Point({ kDefaultMapMax, static_cast<double>(lensMax_) }),
++		});
++	}
++
++	/* Keep the scan ranges within the positions the lens can reach. */
++	Pwl::Interval limits = map_.domain();
++	for (RangeParams &range : ranges_) {
++		range.focusMin = limits.clamp(range.focusMin);
++		range.focusMax = limits.clamp(range.focusMax);
++		range.focusDefault = std::clamp(range.focusDefault,
++						range.focusMin, range.focusMax);
++	}
++}
++
++/**
++ * \brief Initialise the algorithm
++ * \param[in] tuningData The tuning data for the algorithm
++ * \param[in] lensControls The V4L2 controls of the focus lens
++ * \param[inout] controls The control info map to register controls in
++ *
++ * The autofocus controls are only registered when \a lensControls contains a
++ * V4L2_CID_FOCUS_ABSOLUTE control. Without a lens, the algorithm only reports
++ * the FocusFoM metadata.
++ *
++ * \return 0 on success, a negative error code otherwise
++ */
++int AfContrast::init(const ValueNode &tuningData,
++		     const ControlInfoMap &lensControls,
++		     ControlInfoMap::Map &controls)
++{
++	auto focus = lensControls.find(V4L2_CID_FOCUS_ABSOLUTE);
++	lensPresent_ = focus != lensControls.end();
++	if (!lensPresent_) {
++		LOG(AfContrast, Debug) << "No focus lens, autofocus disabled";
++		return 0;
++	}
++
++	lensMin_ = focus->second.min().get<int32_t>();
++	lensMax_ = focus->second.max().get<int32_t>();
++
++	parseTuning(tuningData);
++
++	Pwl::Interval limits = map_.domain();
++
++	controls[&controls::AfMode] = ControlInfo(controls::AfModeValues);
++	controls[&controls::AfRange] = ControlInfo(controls::AfRangeValues);
++	controls[&controls::AfSpeed] = ControlInfo(controls::AfSpeedValues);
++	controls[&controls::AfMetering] = ControlInfo(controls::AfMeteringValues);
++	controls[&controls::AfWindows] =
++		ControlInfo(Rectangle{}, Rectangle(65535, 65535, 65535, 65535),
++			    Span<const Rectangle, 1>{ { Rectangle{} } });
++	controls[&controls::AfTrigger] = ControlInfo(controls::AfTriggerValues);
++	controls[&controls::AfPause] = ControlInfo(controls::AfPauseValues);
++	controls[&controls::LensPosition] =
++		ControlInfo(static_cast<float>(limits.start),
++			    static_cast<float>(limits.end),
++			    static_cast<float>(ranges_[controls::AfRangeNormal].focusDefault));
++
++	return 0;
++}
++
++/**
++ * \brief Configure the algorithm for a streaming session
++ * \param[in] lensControls The V4L2 controls of the focus lens
++ * \param[in] grid The size of the focus statistics grid, in regions
++ * \param[in] statsRegion The area covered by the statistics grid, in the
++ * coordinates of the ScalerCropMaximum property
++ *
++ * The first time the camera is configured, the lens is driven to the default
++ * position of the normal range.
++ *
++ * \return 0 on success, a negative error code otherwise
++ */
++int AfContrast::configure(const ControlInfoMap &lensControls, const Size &grid,
++			  const Rectangle &statsRegion)
++{
++	grid_ = grid;
++	statsRegion_ = statsRegion;
++	computeWeights();
++
++	if (!lensPresent_)
++		return 0;
++
++	auto focus = lensControls.find(V4L2_CID_FOCUS_ABSOLUTE);
++	if (focus == lensControls.end()) {
++		LOG(AfContrast, Error) << "Focus lens control not available";
++		return -EINVAL;
++	}
++
++	lensMin_ = focus->second.min().get<int32_t>();
++	lensMax_ = focus->second.max().get<int32_t>();
++
++	if (!initialised_)
++		target_ = ranges_[range_].focusDefault;
++
++	skipCount_ = skipFrames_;
++	lastFrame_.reset();
++	lastMoveFrame_.reset();
++	sceneContrast_.reset();
++	sceneChangeFrame_.reset();
++
++	/* A scan interrupted by a reconfiguration starts again. */
++	if (scanning())
++		scanState_ = ScanState::Trigger;
++
++	return 0;
++}
++
++/**
++ * \brief Handle the autofocus controls of a request
++ * \param[in] controls The request controls
++ */
++void AfContrast::queueRequest(const ControlList &controls)
++{
++	if (!lensPresent_)
++		return;
++
++	/* The mode is handled first, the other controls depend on it. */
++	if (const auto &mode = controls.get(controls::AfMode))
++		setMode(static_cast<controls::AfModeEnum>(*mode));
++
++	if (const auto &range = controls.get(controls::AfRange))
++		range_ = static_cast<controls::AfRangeEnum>(*range);
++
++	if (const auto &speed = controls.get(controls::AfSpeed))
++		speed_ = static_cast<controls::AfSpeedEnum>(*speed);
++
++	if (const auto &metering = controls.get(controls::AfMetering)) {
++		useWindows_ = *metering == controls::AfMeteringWindows;
++		computeWeights();
++	}
++
++	if (const auto &windows = controls.get(controls::AfWindows)) {
++		windows_.assign(windows->begin(), windows->end());
++		computeWeights();
++	}
++
++	if (const auto &pause = controls.get(controls::AfPause))
++		setPause(static_cast<controls::AfPauseEnum>(*pause));
++
++	if (const auto &trig = controls.get(controls::AfTrigger)) {
++		if (*trig == controls::AfTriggerStart)
++			trigger();
++		else
++			cancel();
++	}
++
++	if (const auto &position = controls.get(controls::LensPosition)) {
++		if (mode_ == controls::AfModeManual)
++			target_ = map_.domain().clamp(*position);
++		else
++			LOG(AfContrast, Debug)
++				<< "LensPosition ignored outside of manual mode";
++	}
++}
++
++/**
++ * \brief Record the lens position for a frame
++ * \param[out] frameContext The frame context
++ *
++ * This function shall be called when a frame is captured, to record the lens
++ * position reported in the frame metadata.
++ */
++void AfContrast::prepare(af::FrameContext &frameContext) const
++{
++	frameContext.lensPosition = position_;
++}
++
++/**
++ * \brief Process the focus statistics of a frame
++ * \param[in] frame The frame number
++ * \param[in] frameContext The frame context
++ * \param[in] stats The focus statistics, empty if none are available for
++ * the frame
++ * \param[out] metadata The frame metadata
++ *
++ * The \a stats regions are stored in raster scan order and their number must
++ * match the grid size passed to configure(). This function shall be called
++ * for every frame, with or without statistics, as lens movements are rate
++ * limited on a per-frame basis.
++ */
++void AfContrast::process(uint32_t frame, const af::FrameContext &frameContext,
++			 std::span<const RegionStats> stats, ControlList &metadata)
++{
++	double contrast = 0.0;
++	double average = 0.0;
++	bool valid = combineStats(stats, &contrast, &average);
++
++	if (valid) {
++		constexpr double kMaxFoM = std::numeric_limits<int32_t>::max();
++		metadata.set(controls::FocusFoM,
++			     static_cast<int32_t>(std::min(std::round(contrast), kMaxFoM)));
++	}
++
++	if (!lensPresent_)
++		return;
++
++	/* Frame numbers restart from zero when the camera is restarted. */
++	if (lastFrame_ && frame < *lastFrame_) {
++		lastMoveFrame_.reset();
++		sceneChangeFrame_.reset();
++		skipCount_ = skipFrames_;
++	}
++	lastFrame_ = frame;
++
++	if (skipCount_)
++		skipCount_--;
++
++	const bool settled = !lastMoveFrame_ ||
++			     frame >= *lastMoveFrame_ + speeds_[speed_].stepFrames;
++
++	if (scanState_ == ScanState::Trigger)
++		startScan();
++	else if (mode_ != controls::AfModeManual && valid && settled && !skipCount_)
++		doAf(frame, contrast, average);
++
++	updateLensPosition(frame);
++
++	controls::AfStateEnum state = mode_ == controls::AfModeManual
++					      ? controls::AfStateIdle
++					      : reportState_;
++
++	controls::AfPauseStateEnum pauseState = controls::AfPauseStateRunning;
++	if (mode_ == controls::AfModeContinuous && pauseFlag_)
++		pauseState = scanning() ? controls::AfPauseStatePausing
++					: controls::AfPauseStatePaused;
++
++	metadata.set(controls::AfState, state);
++	metadata.set(controls::AfPauseState, pauseState);
++	metadata.set(controls::LensPosition,
++		     static_cast<float>(frameContext.lensPosition));
++}
++
++/**
++ * \brief Retrieve the lens position to apply
++ *
++ * This function shall be called after process(), and the returned value sent
++ * to the lens driver straight away.
++ *
++ * \return The lens position in lens driver units if the lens has to move,
++ * std::nullopt otherwise
++ */
++std::optional<int32_t> AfContrast::lensSetting()
++{
++	if (!lensChanged_)
++		return std::nullopt;
++
++	lensChanged_ = false;
++
++	double setting = map_.eval(map_.domain().clamp(position_));
++
++	return std::clamp(static_cast<int32_t>(std::lround(setting)),
++			  lensMin_, lensMax_);
++}
++
++void AfContrast::setMode(controls::AfModeEnum mode)
++{
++	if (mode == mode_)
++		return;
++
++	LOG(AfContrast, Debug) << "Mode " << mode_ << " -> " << mode;
++
++	mode_ = mode;
++	pauseFlag_ = false;
++
++	if (mode == controls::AfModeContinuous) {
++		scanState_ = ScanState::Trigger;
++		reportState_ = controls::AfStateScanning;
++	} else {
++		goIdle();
++	}
++}
++
++void AfContrast::setPause(controls::AfPauseEnum pause)
++{
++	if (mode_ != controls::AfModeContinuous)
++		return;
++
++	switch (pause) {
++	case controls::AfPauseImmediate:
++		pauseFlag_ = true;
++		if (scanning()) {
++			scanState_ = ScanState::Idle;
++			scanData_.clear();
++			target_ = position_;
++		}
++		break;
++
++	case controls::AfPauseDeferred:
++		pauseFlag_ = true;
++		break;
++
++	case controls::AfPauseResume:
++		if (!pauseFlag_)
++			break;
++
++		pauseFlag_ = false;
++
++		/* Restart a scan interrupted by an immediate pause. */
++		if (scanState_ == ScanState::Idle &&
++		    reportState_ == controls::AfStateScanning) {
++			scanState_ = ScanState::Trigger;
++		} else {
++			sceneContrast_.reset();
++			sceneChangeFrame_.reset();
++		}
++		break;
++	}
++}
++
++void AfContrast::trigger()
++{
++	if (mode_ != controls::AfModeAuto || scanning())
++		return;
++
++	scanState_ = ScanState::Trigger;
++	reportState_ = controls::AfStateScanning;
++}
++
++void AfContrast::cancel()
++{
++	if (mode_ != controls::AfModeAuto || !scanning())
++		return;
++
++	goIdle();
++}
++
++void AfContrast::goIdle()
++{
++	scanState_ = ScanState::Idle;
++	reportState_ = controls::AfStateIdle;
++	scanData_.clear();
++
++	/* Leave the lens where it is. */
++	target_ = position_;
++}
++
++void AfContrast::computeWeights()
++{
++	weights_.assign(grid_.width * grid_.height, 0.0);
++
++	if (grid_.isNull() || !statsRegion_.width || !statsRegion_.height)
++		return;
++
++	std::vector<Rectangle> windows;
++	if (useWindows_) {
++		for (const Rectangle &window : windows_) {
++			Rectangle area = window.boundedTo(statsRegion_);
++			if (area.width && area.height)
++				windows.push_back(area);
++		}
++	}
++
++	/* Default to the centre half of the width and third of the height. */
++	if (windows.empty())
++		windows.emplace_back(statsRegion_.x + statsRegion_.width / 4,
++				     statsRegion_.y + statsRegion_.height / 3,
++				     statsRegion_.width / 2,
++				     statsRegion_.height / 3);
++
++	for (unsigned int y = 0; y < grid_.height; y++) {
++		int top = statsRegion_.y + statsRegion_.height * y / grid_.height;
++		int bottom = statsRegion_.y + statsRegion_.height * (y + 1) / grid_.height;
++
++		for (unsigned int x = 0; x < grid_.width; x++) {
++			int left = statsRegion_.x + statsRegion_.width * x / grid_.width;
++			int right = statsRegion_.x + statsRegion_.width * (x + 1) / grid_.width;
++			Rectangle cell(left, top, right - left, bottom - top);
++
++			double cellArea = static_cast<double>(cell.width) * cell.height;
++			if (!cellArea)
++				continue;
++
++			double &weight = weights_[y * grid_.width + x];
++			for (const Rectangle &window : windows) {
++				Rectangle overlap = window.boundedTo(cell);
++				weight += static_cast<double>(overlap.width) *
++					  overlap.height / cellArea;
++			}
++		}
++	}
++}
++
++bool AfContrast::combineStats(std::span<const RegionStats> stats,
++			      double *contrast, double *average) const
++{
++	if (stats.empty() || stats.size() != weights_.size())
++		return false;
++
++	double weightSum = 0.0;
++	double contrastSum = 0.0;
++	double averageSum = 0.0;
++
++	for (unsigned int i = 0; i < stats.size(); i++) {
++		weightSum += weights_[i];
++		contrastSum += weights_[i] * stats[i].contrast;
++		averageSum += weights_[i] * stats[i].average;
++	}
++
++	if (weightSum <= 0.0)
++		return false;
++
++	*contrast = contrastSum / weightSum;
++	*average = averageSum / weightSum;
++
++	return true;
++}
++
++void AfContrast::doAf(uint32_t frame, double contrast, double average)
++{
++	switch (scanState_) {
++	case ScanState::Idle:
++		if (mode_ == controls::AfModeContinuous && !pauseFlag_)
++			checkSceneChange(frame, contrast, average);
++		break;
++
++	case ScanState::Coarse1:
++	case ScanState::Coarse2:
++	case ScanState::Fine:
++		if (position_ == target_)
++			doScan(contrast);
++		break;
++
++	case ScanState::Settle:
++		if (position_ == target_)
++			finishScan(contrast, average);
++		break;
++
++	case ScanState::Trigger:
++		break;
++	}
++}
++
++void AfContrast::startScan()
++{
++	const RangeParams &range = ranges_[range_];
++	const SpeedParams &speed = speeds_[speed_];
++
++	scanData_.clear();
++	scanMaxContrast_ = 0.0;
++	scanMinContrast_ = std::numeric_limits<double>::max();
++	sceneChangeFrame_.reset();
++	reportState_ = controls::AfStateScanning;
++
++	/*
++	 * A continuous autofocus scan starts from the current position when it
++	 * is far enough from the range limits, towards infinity first. Other
++	 * scans sweep the whole range from one end.
++	 */
++	const double margin = 2.0 * speed.stepCoarse;
++	const bool continuous = mode_ == controls::AfModeContinuous && initialised_;
++
++	if (continuous && position_ > range.focusMin + margin &&
++	    position_ < range.focusMax - margin) {
++		scanState_ = ScanState::Coarse1;
++		scanStep_ = -speed.stepCoarse;
++		target_ = position_;
++	} else if (continuous && position_ >= range.focusMax - margin) {
++		scanState_ = ScanState::Coarse2;
++		scanStep_ = -speed.stepCoarse;
++		target_ = range.focusMax;
++	} else {
++		scanState_ = ScanState::Coarse2;
++		scanStep_ = speed.stepCoarse;
++		target_ = range.focusMin;
++	}
++
++	LOG(AfContrast, Debug)
++		<< "Start scan at " << target_ << ", step " << scanStep_;
++}
++
++void AfContrast::doScan(double contrast)
++{
++	const RangeParams &range = ranges_[range_];
++	const SpeedParams &speed = speeds_[speed_];
++
++	scanMaxContrast_ = std::max(scanMaxContrast_, contrast);
++	scanMinContrast_ = std::min(scanMinContrast_, contrast);
++	scanData_.push_back({ target_, contrast });
++
++	LOG(AfContrast, Debug)
++		<< "Scan position " << target_ << ", contrast " << contrast;
++
++	double phaseMax = 0.0;
++	for (const ScanRecord &record : scanData_)
++		phaseMax = std::max(phaseMax, record.contrast);
++
++	const bool limit = (scanStep_ > 0.0 && target_ >= range.focusMax) ||
++			   (scanStep_ < 0.0 && target_ <= range.focusMin);
++	const bool dropped = contrast < speed.contrastRatio * phaseMax;
++	const bool complete = scanState_ == ScanState::Fine &&
++			      scanData_.size() >= kFineSteps;
++
++	if (!limit && !dropped && !complete) {
++		target_ = std::clamp(target_ + scanStep_, range.focusMin,
++				     range.focusMax);
++		return;
++	}
++
++	/*
++	 * If the first scan didn't see the contrast drop on the side of its
++	 * starting position, the peak may lie beyond it. Scan in the other
++	 * direction, starting from the next position past the start.
++	 */
++	if (scanState_ == ScanState::Coarse1 &&
++	    scanData_.front().contrast >= speed.contrastRatio * phaseMax) {
++		scanState_ = ScanState::Coarse2;
++		scanStep_ = -scanStep_;
++		target_ = std::clamp(scanData_.front().position + scanStep_,
++				     range.focusMin, range.focusMax);
++		return;
++	}
++
++	double peak = findPeak(scanData_);
++
++	if (scanState_ != ScanState::Fine && speed.stepFine > 0.0) {
++		/* Approach the peak from the side of the current position. */
++		scanState_ = ScanState::Fine;
++		scanStep_ = target_ < peak ? speed.stepFine : -speed.stepFine;
++		target_ = std::clamp(peak - 2.0 * scanStep_, range.focusMin,
++				     range.focusMax);
++		scanData_.clear();
++		return;
++	}
++
++	scanState_ = ScanState::Settle;
++	target_ = peak;
++}
++
++void AfContrast::finishScan(double contrast, double average)
++{
++	const double ratio = speeds_[speed_].contrastRatio;
++
++	/*
++	 * The scan succeeds if the contrast at the final position is close to
++	 * the maximum, and if the scan saw a clear peak.
++	 */
++	const bool focused = contrast >= ratio * scanMaxContrast_ &&
++			     scanMinContrast_ <= ratio * scanMaxContrast_;
++
++	reportState_ = focused ? controls::AfStateFocused : controls::AfStateFailed;
++	scanState_ = ScanState::Idle;
++	scanData_.clear();
++
++	sceneContrast_ = contrast;
++	sceneAverage_ = average;
++	sceneChangeFrame_.reset();
++
++	LOG(AfContrast, Debug)
++		<< "Scan " << (focused ? "focused" : "failed") << " at " << position_
++		<< ", contrast " << contrast << " (range " << scanMinContrast_
++		<< " - " << scanMaxContrast_ << ")";
++}
++
++void AfContrast::checkSceneChange(uint32_t frame, double contrast, double average)
++{
++	const SpeedParams &speed = speeds_[speed_];
++
++	if (!sceneContrast_) {
++		sceneContrast_ = contrast;
++		sceneAverage_ = average;
++		return;
++	}
++
++	const double ratio = speed.retriggerRatio;
++	const bool changed = contrast < ratio * *sceneContrast_ ||
++			     *sceneContrast_ < ratio * contrast ||
++			     average < ratio * sceneAverage_ ||
++			     sceneAverage_ < ratio * average;
++
++	/* Wait for the scene to be stable again after a change. */
++	if (changed) {
++		sceneContrast_ = contrast;
++		sceneAverage_ = average;
++		sceneChangeFrame_ = frame;
++		return;
++	}
++
++	if (sceneChangeFrame_ && frame >= *sceneChangeFrame_ + speed.retriggerDelay) {
++		LOG(AfContrast, Debug) << "Scene changed, rescanning";
++		startScan();
++	}
++}
++
++/*
++ * Find the position of the contrast peak by fitting a parabola to the
++ * maximum and its neighbours.
++ */
++double AfContrast::findPeak(std::vector<ScanRecord> records)
++{
++	std::sort(records.begin(), records.end(),
++		  [](const ScanRecord &a, const ScanRecord &b) {
++			  return a.position < b.position;
++		  });
++
++	auto max = std::max_element(records.begin(), records.end(),
++				    [](const ScanRecord &a, const ScanRecord &b) {
++					    return a.contrast < b.contrast;
++				    });
++
++	if (max == records.begin() || max + 1 == records.end())
++		return max->position;
++
++	const double x0 = (max - 1)->position;
++	const double x1 = max->position;
++	const double x2 = (max + 1)->position;
++	const double y0 = (max - 1)->contrast;
++	const double y1 = max->contrast;
++	const double y2 = (max + 1)->contrast;
++
++	/* Coefficients of y = a * x^2 + b * x + c through the three points. */
++	const double d0 = (y1 - y0) / (x1 - x0);
++	const double d1 = (y2 - y1) / (x2 - x1);
++	const double a = (d1 - d0) / (x2 - x0);
++	if (a >= 0.0)
++		return x1;
++
++	const double b = d0 - a * (x0 + x1);
++
++	return std::clamp(-b / (2.0 * a), x0, x2);
++}
++
++void AfContrast::updateLensPosition(uint32_t frame)
++{
++	const double previous = position_;
++	const bool known = initialised_;
++
++	/* The scan range only limits the lens movements while scanning. */
++	target_ = map_.domain().clamp(target_);
++	if (scanning())
++		target_ = std::clamp(target_, ranges_[range_].focusMin,
++				     ranges_[range_].focusMax);
++
++	if (!initialised_) {
++		/* The lens position is unknown, go straight to the target. */
++		position_ = target_;
++		initialised_ = true;
++		skipCount_ = skipFrames_;
++	} else {
++		const double slew = speeds_[speed_].maxSlew;
++		position_ = std::clamp(target_, position_ - slew, position_ + slew);
++	}
++
++	if (!known || position_ != previous) {
++		lensChanged_ = true;
++		lastMoveFrame_ = frame;
++	}
++}
++
++bool AfContrast::scanning() const
++{
++	return scanState_ != ScanState::Idle;
++}
++
++} /* namespace ipa */
++
++} /* namespace libcamera */
+diff --git a/src/ipa/libipa/af_contrast.h b/src/ipa/libipa/af_contrast.h
+new file mode 100644
+index 00000000..e45f7675
+--- /dev/null
++++ b/src/ipa/libipa/af_contrast.h
+@@ -0,0 +1,156 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026, Jayden Milne
++ *
++ * Contrast detection autofocus algorithm
++ */
++
++#pragma once
++
++#include <array>
++#include <optional>
++#include <span>
++#include <stdint.h>
++#include <vector>
++
++#include <libcamera/control_ids.h>
++#include <libcamera/controls.h>
++#include <libcamera/geometry.h>
++
++#include "libcamera/internal/value_node.h"
++
++#include "pwl.h"
++
++namespace libcamera {
++
++namespace ipa {
++
++namespace af {
++
++struct FrameContext {
++	double lensPosition;
++};
++
++} /* namespace af */
++
++class AfContrast
++{
++public:
++	struct RegionStats {
++		double contrast;
++		double average;
++	};
++
++	int init(const ValueNode &tuningData, const ControlInfoMap &lensControls,
++		 ControlInfoMap::Map &controls);
++	int configure(const ControlInfoMap &lensControls, const Size &grid,
++		      const Rectangle &statsRegion);
++
++	void queueRequest(const ControlList &controls);
++	void prepare(af::FrameContext &frameContext) const;
++	void process(uint32_t frame, const af::FrameContext &frameContext,
++		     std::span<const RegionStats> stats, ControlList &metadata);
++
++	std::optional<int32_t> lensSetting();
++
++private:
++	enum class ScanState {
++		Idle,
++		Trigger,
++		Coarse1,
++		Coarse2,
++		Fine,
++		Settle,
++	};
++
++	struct RangeParams {
++		double focusMin;
++		double focusMax;
++		double focusDefault;
++
++		void read(const ValueNode &params);
++	};
++
++	struct SpeedParams {
++		double stepCoarse;
++		double stepFine;
++		double contrastRatio;
++		double retriggerRatio;
++		uint32_t retriggerDelay;
++		double maxSlew;
++		uint32_t stepFrames;
++
++		void read(const ValueNode &params);
++	};
++
++	struct ScanRecord {
++		double position;
++		double contrast;
++	};
++
++	void parseTuning(const ValueNode &tuningData);
++
++	void setMode(controls::AfModeEnum mode);
++	void setPause(controls::AfPauseEnum pause);
++	void trigger();
++	void cancel();
++	void goIdle();
++
++	void computeWeights();
++	bool combineStats(std::span<const RegionStats> stats,
++			  double *contrast, double *average) const;
++
++	void doAf(uint32_t frame, double contrast, double average);
++	void startScan();
++	void doScan(double contrast);
++	void finishScan(double contrast, double average);
++	void checkSceneChange(uint32_t frame, double contrast, double average);
++	static double findPeak(std::vector<ScanRecord> records);
++
++	void updateLensPosition(uint32_t frame);
++	bool scanning() const;
++
++	bool lensPresent_ = false;
++	int32_t lensMin_ = 0;
++	int32_t lensMax_ = 0;
++
++	std::array<RangeParams, 3> ranges_;
++	std::array<SpeedParams, 2> speeds_;
++	uint32_t skipFrames_;
++	Pwl map_;
++
++	Size grid_;
++	Rectangle statsRegion_;
++	std::vector<Rectangle> windows_;
++	std::vector<double> weights_;
++	bool useWindows_ = false;
++
++	controls::AfModeEnum mode_ = controls::AfModeManual;
++	controls::AfRangeEnum range_ = controls::AfRangeNormal;
++	controls::AfSpeedEnum speed_ = controls::AfSpeedNormal;
++	bool pauseFlag_ = false;
++
++	ScanState scanState_ = ScanState::Idle;
++	controls::AfStateEnum reportState_ = controls::AfStateIdle;
++
++	bool initialised_ = false;
++	double target_ = 0.0;
++	double position_ = 0.0;
++	bool lensChanged_ = false;
++	std::optional<uint32_t> lastFrame_;
++	std::optional<uint32_t> lastMoveFrame_;
++	uint32_t skipCount_ = 0;
++
++	double scanStep_ = 0.0;
++	std::vector<ScanRecord> scanData_;
++	double scanMaxContrast_ = 0.0;
++	double scanMinContrast_ = 0.0;
++
++	std::optional<double> sceneContrast_;
++	double sceneAverage_ = 0.0;
++	std::optional<uint32_t> sceneChangeFrame_;
++};
++
++} /* namespace ipa */
++
++} /* namespace libcamera */
+diff --git a/src/ipa/libipa/meson.build b/src/ipa/libipa/meson.build
+index 963c5ee7..e83ff1c1 100644
+--- a/src/ipa/libipa/meson.build
++++ b/src/ipa/libipa/meson.build
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: CC0-1.0
+ 
+ libipa_headers = files([
++    'af_contrast.h',
+     'agc_mean_luminance.h',
+     'algorithm.h',
+     'awb_bayes.h',
+@@ -22,6 +23,7 @@ libipa_headers = files([
+ ])
+ 
+ libipa_sources = files([
++    'af_contrast.cpp',
+     'agc_mean_luminance.cpp',
+     'algorithm.cpp',
+     'awb_bayes.cpp',
+-- 
+2.56.0
+

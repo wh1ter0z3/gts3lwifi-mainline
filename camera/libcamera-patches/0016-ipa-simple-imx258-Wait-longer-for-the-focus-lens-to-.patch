@@ -1,0 +1,68 @@
+From 2a0185b473e36c50bf97d4bc45dd05ef0845a8ac Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Fri, 30 Oct 2026 23:54:34 -0600
+Subject: [PATCH] ipa: simple: imx258: Wait longer for the focus lens to settle
+
+The autofocus algorithm counts the frames to wait after a lens movement
+with the frame numbers of the statistics it processes. The software ISP
+gathers the statistics when it processes a frame, which can happen
+several frames after the capture: when debayering takes most of the
+frame time, as at 3840x2160 on the GPU, the four internal raw buffers
+of the simple pipeline handler fill up. Waiting four frames then
+measures the contrast on frames captured before or while the lens
+moved.
+
+At 3840x2160, the contrast measured at the peak during a scan was half
+of the value measured once the lens had settled at the same position.
+In continuous mode, the algorithm took the rise for a scene change and
+rescanned about every 1.6 seconds, and reported each rescan as failed
+as its final contrast stayed below the starting one.
+
+Wait eight frames, for the four buffers, the frame being exposed and
+the lens settling time. Scans take longer, but the contrast measured
+during a scan now matches the settled value at 3840x2160 and continuous
+autofocus stays focused. Scans still converge at 1920x1080.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+---
+ src/ipa/simple/data/imx258.yaml | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/ipa/simple/data/imx258.yaml b/src/ipa/simple/data/imx258.yaml
+index bdaa4f9b..9c4b345f 100644
+--- a/src/ipa/simple/data/imx258.yaml
++++ b/src/ipa/simple/data/imx258.yaml
+@@ -18,6 +18,11 @@ algorithms:
+           min: 3.0
+           max: 10.0
+           default: 5.0
++      # Statistics come from the software ISP, which can process a frame
++      # up to four frames after its capture when debayering takes most of
++      # the frame time (the simple pipeline handler has four internal raw
++      # buffers). step_frames covers that, the frame being exposed and the
++      # lens settling time.
+       speeds:
+         normal:
+           step_coarse: 1.0
+@@ -26,7 +31,7 @@ algorithms:
+           retrigger_ratio: 0.75
+           retrigger_delay: 12
+           max_slew: 2.0
+-          step_frames: 4
++          step_frames: 8
+         fast:
+           step_coarse: 1.5
+           step_fine: 0.0
+@@ -34,7 +39,7 @@ algorithms:
+           retrigger_ratio: 0.75
+           retrigger_delay: 8
+           max_slew: 4.0
+-          step_frames: 4
++          step_frames: 8
+       skip_frames: 5
+       # Lens positions in dioptres to focus lens driver units. This linear
+       # map over the full range of the voice coil motor driver has not been
+-- 
+2.56.0
+
