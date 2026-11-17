@@ -1,33 +1,10 @@
-# Galaxy Tab S3 (SM-T820, SM-T825): partitions for OrangeFox.
-# From awesometic's TWRP trees, plus the Treble layout's vendor partition
-# (missing on the stock layout: the recovery then just doesn't list it).
+# Galaxy Tab S3 (SM-T820, SM-T825): the partitions Android's own code in the
+# recovery has to find, in Android's fstab format. Everything else is in
+# recovery/root/system/etc/twrp.flags, in TWRP's format: one TWRP-format line
+# here and Android's parser rejects the whole file.
 #
-# mount point   fstype  device                                      flags
+# /misc: the bootloader message. Android writes "boot-recovery" there before
+# restarting to recovery and the recovery clears it. Without this line it
+# can't, and S-Boot keeps starting the recovery.
 
-# boot holds lk2nd at its start and the OS boot image 4 MiB in: backed up, but
-# never flashed whole (that would overwrite lk2nd); our installer zips write it
-/boot           emmc    /dev/block/bootdevice/by-name/boot          flags=display="Boot (lk2nd)";backup=1;flashimg=0
-/recovery       emmc    /dev/block/bootdevice/by-name/recovery      flags=backup=1;flashimg=1
-
-# Treble: a GSI's system image (system-as-root) and our vendor image, by name
-/system_root    ext4    /dev/block/bootdevice/by-name/system        flags=display="System";backup=1;wipeingui
-/system_image   emmc    /dev/block/bootdevice/by-name/system        flags=display="System Image";backup=1;flashimg=1
-/vendor         ext4    /dev/block/bootdevice/by-name/vendor        flags=display="Vendor";backup=1;wipeingui
-/vendor_image   emmc    /dev/block/bootdevice/by-name/vendor        flags=display="Vendor Image";backup=1;flashimg=1
-
-/cache          ext4    /dev/block/bootdevice/by-name/cache
-/data           ext4    /dev/block/bootdevice/by-name/userdata      flags=length=-16384
-
-# The tablet's own firmware and data: back them up, never wipe them
-/firmware       vfat    /dev/block/bootdevice/by-name/apnhlos       flags=backup=1;display="Firmware"
-/modem          vfat    /dev/block/bootdevice/by-name/modem         flags=backup=1;display="Modem"
-/misc           emmc    /dev/block/bootdevice/by-name/misc
-/efs1           emmc    /dev/block/bootdevice/by-name/efs           flags=backup=1;display="EFS"
-/efs2           emmc    /dev/block/bootdevice/by-name/modemst1      flags=backup=1;subpartitionof=/efs1
-/efs3           emmc    /dev/block/bootdevice/by-name/modemst2      flags=backup=1;subpartitionof=/efs1
-/persist        ext4    /dev/block/bootdevice/by-name/persist       flags=backup=1;display="Persist"
-/dsp            emmc    /dev/block/bootdevice/by-name/dsp           flags=backup=1;display="DSP"
-
-# Removable storage
-/external_sd    auto    /dev/block/mmcblk1p1    /dev/block/mmcblk1  flags=display="MicroSD";storage;wipeingui;removable
-/usb_otg        vfat    /dev/block/sda1         /dev/block/sda      flags=display="USB-OTG";storage;wipeingui;removable
+/dev/block/bootdevice/by-name/misc      /misc   emmc    defaults    defaults

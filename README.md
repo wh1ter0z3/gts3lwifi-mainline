@@ -27,7 +27,8 @@ What's different:
 ## Layout
 
 ```
-common/     BoardConfigCommon.mk, recovery.fstab, recovery/root (init)
+common/     BoardConfigCommon.mk, recovery.fstab (Android format: /misc),
+            recovery/root (init; system/etc/twrp.flags: the partition list)
 gts3lwifi/  SM-T820: product, board config, prebuilt kernel
 gts3llte/   SM-T825: the same
 tools/      screen.sh: the recovery's screen on the PC over adb
