@@ -3,7 +3,7 @@ maintainer="psigod <psigod@example.com>"
 pkgname=device-samsung-gts3lwifi
 pkgdesc="Samsung Galaxy Tab S3 (SM-T820, SM-T825)"
 pkgver=1
-pkgrel=11
+pkgrel=12
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -36,6 +36,9 @@ source="
 	61-gts3-keys.hwdb
 	61-gts3-keys.rules
 	gts3-kglobalshortcutsrc
+	powerdevilrc
+	gts3-touch-resume
+	gts3-touch-resume.service
 	modules-initfs
 	51-gts3lwifi-audio.conf
 	ucm2-gts3lwifi.conf
@@ -77,6 +80,22 @@ package() {
 		"$pkgdir"/usr/lib/udev/rules.d/61-gts3-keys.rules
 	install -Dm644 "$srcdir"/gts3-kglobalshortcutsrc \
 		"$pkgdir"/etc/skel/.config/kglobalshortcutsrc
+
+	# Five-minute idle auto-suspend (suspend to RAM). etc/skel, so it reaches
+	# users created after this is installed.
+	install -Dm644 "$srcdir"/powerdevilrc \
+		"$pkgdir"/etc/skel/.config/powerdevilrc
+
+	# The touchscreen comes back from suspend with a stuck touch grab (the
+	# panel takes taps but popups ignore touch) when a touch was held across
+	# suspend. Rebind rmi4_i2c once the compositor has thawed (see the script).
+	install -Dm755 "$srcdir"/gts3-touch-resume \
+		"$pkgdir"/usr/sbin/gts3-touch-resume
+	install -Dm644 "$srcdir"/gts3-touch-resume.service \
+		"$pkgdir"/usr/lib/systemd/system/gts3-touch-resume.service
+	mkdir -p "$pkgdir"/usr/lib/systemd/system/systemd-suspend.service.wants
+	ln -s ../gts3-touch-resume.service \
+		"$pkgdir"/usr/lib/systemd/system/systemd-suspend.service.wants/gts3-touch-resume.service
 
 	# Samsung-signed firmware, Wi-Fi board data and the sensor registry
 	# from the tablet's own partitions (see gts3-firmware)
@@ -158,6 +177,9 @@ fea216bd764502941b8791803eeb06eab0ec299c0dd9351d57041966f6485aaa35d42b513e5c0c60
 3d487da4bce5e3a139cdc07056de5418b4dd53aef183529877a8826b46d1885ebc621fe7c7f9d0dbdbddf89552af168eda9b5d3b0049b26a2a34b802417212e8  61-gts3-keys.hwdb
 38b57e990757425d7cbc8670975d2d4b9db5e20bb4c7c1da545f6d797bcb62d7ed049618b5d6c19bae4820949d485df08a961ffd1028b113557a767520be625d  61-gts3-keys.rules
 a98319c55c3cfb406afd39bf1719334a1a90f9a4c4270d09929bb3bc5007270c8cabaed663478229e675f003a52b4bf9c20c788504f24e2083fd91b87ad30726  gts3-kglobalshortcutsrc
+2800392f85530bdc5c89e68a79c54ae73ed9c093edd3d87b5324052f54bc570d9354af7347e1d684aa9186ca431ea2065bfb9ce9635117928c5f5716cb1c017c  powerdevilrc
+8976fc27821ed91ccefa54f5e4b955f9fc23d8296690eb9b622cfef85a8a6c44504ce2d7b338a973d1d63c8b2de5d505429abfff2d5e79f0e8e7824d266c67bf  gts3-touch-resume
+ec0d2cddecf7448b9f62335a464f5864a485d07c05ff014357110c93fc0763b94f8e50e017f45545559cec235bae2e4a78053acbd1a6aaec00b24e0926c7e14f  gts3-touch-resume.service
 356575e074aed11df8486478a9cc4ab01c5752b23315ff007c9ae9300ecfd7fad0709da1f8b7e8affe2e0f2d82edeff8e6ad8ae95133de12f38ddd683fe07dd6  modules-initfs
 dbddae3d44f0d4370c9111e17fb287bb02d88bfe67d824f547805d24230378406eef99c3b970afadb546fb4ab966b90f95e1a7397e1cdb364caf34e98c7b860c  51-gts3lwifi-audio.conf
 1e4ce6c102487fb79b13ee3a62c7801bee9eb135992b93a5b1b8af4bba325eaa1527e0d2cc588a976c0956be652d4c579036237684ec5a4d209b37b5c5c188e7  ucm2-gts3lwifi.conf
