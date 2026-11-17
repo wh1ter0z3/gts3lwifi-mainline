@@ -256,9 +256,9 @@ PRODUCT_PACKAGES += \
     camera.libcamera \
     libcamera \
     libcamera-base \
-    ipa_simple.so \
-    ipa_simple.so.sign \
-    simple_ipa_proxy \
+    ipa_soft_simple.so \
+    ipa_soft_simple.so.sign \
+    soft_ipa_proxy \
     imx258.yaml \
     s5k5e3.yaml \
     uncalibrated.yaml

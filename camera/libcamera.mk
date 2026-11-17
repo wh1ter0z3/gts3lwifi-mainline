@@ -42,9 +42,9 @@ AOSPEXT_GEN_TARGETS := \
     lib:libcamera.so::libcamera: \
     lib:libcamera-base.so::libcamera-base: \
     lib:libcamera-hal.so:hw:camera.libcamera: \
-    libetc:libcamera/ipa/ipa_simple.so:libcamera/ipa:ipa_simple.so: \
-    libetc:libcamera/ipa/ipa_simple.so.sign:libcamera/ipa:ipa_simple.so.sign: \
-    bin:libcamera/simple_ipa_proxy:libcamera:simple_ipa_proxy: \
+    libetc:libcamera/ipa/ipa_soft_simple.so:libcamera/ipa:ipa_soft_simple.so: \
+    libetc:libcamera/ipa/ipa_soft_simple.so.sign:libcamera/ipa:ipa_soft_simple.so.sign: \
+    bin:libcamera/soft_ipa_proxy:libcamera:soft_ipa_proxy: \
     etc:shared/libcamera/ipa/simple/imx258.yaml:shared/libcamera/ipa/simple:imx258.yaml: \
     etc:shared/libcamera/ipa/simple/s5k5e3.yaml:shared/libcamera/ipa/simple:s5k5e3.yaml: \
     etc:shared/libcamera/ipa/simple/uncalibrated.yaml:shared/libcamera/ipa/simple:uncalibrated.yaml:
