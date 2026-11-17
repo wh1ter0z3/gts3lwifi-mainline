@@ -37,7 +37,8 @@ static const IioDevice kKnown[] = {
          .vendor = "STMicroelectronics",
          .toAndroid = 1.0f,
          .maxRange = 78.4532f,  // 8 g
-         .power = 0.25f},
+         .power = 0.25f,
+         .fastest = 416},
         {.name = "qcom-smgr-gyro",
          .type = SensorType::GYROSCOPE,
          .prefix = "in_anglvel",
@@ -45,7 +46,8 @@ static const IioDevice kKnown[] = {
          .vendor = "STMicroelectronics",
          .toAndroid = 1.0f,
          .maxRange = 34.906585f,  // 2000 dps
-         .power = 0.9f},
+         .power = 0.9f,
+         .fastest = 416},
         {.name = "qcom-smgr-mag",
          .type = SensorType::MAGNETIC_FIELD,
          .prefix = "in_magn",
@@ -53,7 +55,8 @@ static const IioDevice kKnown[] = {
          .vendor = "Asahi Kasei",
          .toAndroid = 100.0f,  // IIO's Gauss to Android's microtesla
          .maxRange = 4912.0f,
-         .power = 1.1f},
+         .power = 1.1f,
+         .fastest = 50},
         {.name = "qcom-smgr-light",
          .type = SensorType::LIGHT,
          .prefix = "in_intensity_both",
@@ -61,12 +64,14 @@ static const IioDevice kKnown[] = {
          .vendor = "Capella",
          .toAndroid = 1.0f,
          .maxRange = 65535.0f,
-         .power = 0.2f},
+         .power = 0.2f,
+         .fastest = 5},
 };
 
-// Rates offered below the device's own (its sampling_frequency at start,
-// which is its fastest): SMGR takes any of them, and the framework asks for
-// 5 (normal), 16 (UI), 50 (game) and the fastest
+// Rates offered below the device's fastest (from the table: the driver has
+// no list, and its sampling_frequency is whatever was last set, by us or by
+// the last user of the device): SMGR takes any of them, and the framework
+// asks for 5 (normal), 16 (UI), 50 (game) and the fastest
 static const unsigned kRates[] = {1, 5, 10, 16, 25, 50, 100, 200};
 
 static bool readStr(const std::string& path, std::string* out) {
@@ -177,10 +182,7 @@ std::vector<IioDevice> iioFindSensors() {
             ALOGE("%s: can't set up its scan elements", name.c_str());
             continue;
         }
-        unsigned fastest = 0;
-        if (readStr(sysfs + "/" + d.prefix + "_sampling_frequency", &v))
-            ::android::base::ParseUint(v, &fastest);
-        if (fastest == 0) fastest = 5;
+        const unsigned fastest = d.fastest;
         for (unsigned r : kRates)
             if (r < fastest) d.rates.push_back(r);
         d.rates.push_back(fastest);

@@ -38,6 +38,7 @@ struct IioDevice {
     float toAndroid;  // IIO unit -> Android unit (Gauss -> uT: 100)
     float maxRange;   // in Android units
     float power;      // mA, roughly
+    unsigned fastest;  // Hz: qcom_smgr's rate at probe, its highest
 
     // Read from sysfs
     std::string sysfs;  // /sys/bus/iio/devices/iio:deviceN
