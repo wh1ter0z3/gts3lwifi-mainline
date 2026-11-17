@@ -18,7 +18,8 @@ DEVICE_PATH := device/samsung/gts3
 
 PRODUCT_SOONG_NAMESPACES += \
     $(DEVICE_PATH) \
-    external/v4l2_codec2
+    external/v4l2_codec2 \
+    device/linaro/dragonboard
 
 # --- Treble level ---
 # Shipping API 33 and a VNDK version of 34, with an Android 15 build: what lets
@@ -237,7 +238,8 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.sensor.light.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.light.xml
 
 # --- GNSS: the engine in the modem DSP, through its QMI LOC service
-# (hal/gnss/); rmtfs and tqftpserv (init.gts3.rc) run the modem ---
+# (hal/gnss/); rmtfs and tqftpserv (init.gts3.rc) run the modem: Linaro's,
+# in device/linaro/dragonboard's namespace (above), which is in AOSP ---
 PRODUCT_PACKAGES += \
     android.hardware.gnss-service.gts3 \
     rmtfs \
