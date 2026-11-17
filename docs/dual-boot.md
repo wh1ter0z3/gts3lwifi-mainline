@@ -123,13 +123,77 @@ label fastboot
 	linux /gts3/no-kernel
 ```
 
-## Layout for users (planned)
+## The layout
 
-Inside userdata, GPT plus the hybrid MBR entry for the first partition:
+[scripts/dualboot/gts3-layout](../scripts/dualboot/gts3-layout) `<disk> [yes]`
+makes it. The disk is the userdata partition (through a loop device, so the
+layout is nested in it), a microSD card, or an image file. It **erases** the
+disk.
 
-| boot (ext2) | system 8G | vendor 1G | Android data | Nura | Shared (exFAT) |
+| # | GPT name | Content | Default size |
+|---|---|---|---|
+| 1 | gts3_boot | ext2 `pmOS_boot`: extlinux.conf, Nura's kernel (`/vmlinuz`, updated by Nura itself), Android's in `/gts3/android` | 512M |
+| 2 | android_system | raw: the GSI's system image | 8G |
+| 3 | android_vendor | raw: our vendor image | 1G |
+| 4 | android_data | ext4 `android_data`: /data, and gsi-init's `.gts3` (keep, logs, board files) | 6G |
+| 5 | nura | ext4 `pmOS_root` | 7G |
+| 6 | shared | exFAT `Shared`, for both | the rest |
 
-- boot holds extlinux.conf and both kernels.
-- gsi-init gets a partition mode next to today's image files.
-- The installer (PC and OrangeFox) creates the layout, writes the hybrid
-  MBR and extlinux.conf, and flashes lk2nd v2.
+Sizes are set with `BOOT= SYSTEM= VENDOR= DATA= NURA=`. The script also
+writes the hybrid MBR entry for lk2nd in plain shell (no Python, so it also
+runs in a recovery). It matches hybrid-mbr.py byte for byte.
+
+Shared ends exactly at the last usable sector. With a nested GPT, pmOS's
+initramfs runs `parted resizepart 2 100%` at boot whenever there is free
+space at the end. Partition 2 is android_system here, and parted refuses
+("Can't have overlapping partitions", tested), but without a free tail it
+never tries.
+
+Android uses the layout through gsi-init's `gsi.parts=1` (gsi branch
+dc08080). It finds the three partitions by name and attaches android_data to
+loop7 once, so /data and `.gts3` share one device and the vendor's fstab
+stays as it is. `gsi.disk=mmcblk1` points it at a microSD card, for tests
+(the Android DTB has the SD slot). lk2nd can't read the microSD ("SD card
+MMC is unavailable"), so it always boots from the boot partition inside
+userdata.
+
+## LineageOS (or any other ROM) from OrangeFox
+
+Flashing a ROM zip the normal way **ends the dual boot and erases Nura**:
+
+- The ROM writes its boot image over the whole boot partition. lk2nd lives in
+  its first 4 MiB, so it's gone, and S-Boot starts the ROM directly.
+- The ROM uses the userdata partition as its /data. Our layout lives there,
+  so the ROM can't mount it, and the "Format Data" it needs erases Nura,
+  Android and Shared.
+- Our Android and Nura read the Wi-Fi board file (bdwlan30.bin) from
+  Samsung's system partition. A ROM replaces that partition.
+
+Next to Nura, a ROM can only go in through our installer. It would:
+
+- keep lk2nd and put the ROM's kernel in an extlinux entry (or behind lk2nd);
+- point the ROM's /data at a partition of the layout;
+- copy the firmware it needs out of the system partition first.
+
+The ROM's updates would need the same treatment (an addon.d script). That's
+the "repack every update" cost from the group's poll. Our own Android
+doesn't have it: its kernel is in `/gts3/android`, and a GSI or vendor
+update doesn't touch it.
+
+## Installer (in progress)
+
+**PC (lk2nd fastboot):**
+- builds the userdata image with gts3-layout on an image file;
+- fills it: the GSI and vendor images, the boot partition's files, Nura's
+  root from the release image;
+- flashes it as a sparse image with `fastboot flash userdata`, as
+  install-gsi.sh does today;
+- then flashes lk2nd v2.
+
+**OrangeFox:** the same steps on the tablet. Two open points:
+- a GPT writer for the recovery;
+- the recovery's fstab must not format userdata, or Android's factory reset
+  would erase both systems. It must point at android_data instead.
+
+Before the installer copies anything, it saves the firmware it needs from
+Samsung's system partition.
