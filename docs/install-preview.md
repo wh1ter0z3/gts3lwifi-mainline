@@ -6,7 +6,8 @@ postmarketOS with Plasma in userdata. Read
 
 Status of this guide: the commands for lk2nd and for flashing userdata come from
 installs on one SM-T820. **This image has not been run on any hardware when this was
-written**, and the SM-T825 lk2nd in it is a new build that has never run.
+written**. There is no lk2nd for the SM-T825 in this release: keep the one you have
+(step 2).
 
 ## What gets destroyed
 
@@ -39,7 +40,7 @@ Check your model: Settings, About tablet, or the back of the tablet.
 | Model | Has a SIM slot | lk2nd files |
 |---|---|---|
 | SM-T820 | no | `lk2nd-gts3lwifi.img`, `lk2nd-gts3lwifi-odin.tar` |
-| SM-T825 | yes | `lk2nd-gts3llte.img`, `lk2nd-gts3llte-odin.tar` |
+| SM-T825 | yes | none in this release: keep the lk2nd you have |
 
 The boot image and userdata image are the same for both.
 
@@ -53,7 +54,7 @@ Download into one directory:
 
     pmos-gts3-preview1-userdata.simg.zst
     pmos-gts3-preview1-boot.img
-    lk2nd-gts3lwifi.img and lk2nd-gts3lwifi-odin.tar, or the gts3llte pair
+    lk2nd-gts3lwifi.img and lk2nd-gts3lwifi-odin.tar (SM-T820 only)
     SHA256SUMS
 
 Install the tools. One of:
@@ -82,7 +83,7 @@ Otherwise pick one of these. Each only writes the boot partition.
 
 **From TWRP** (Power + Volume Up + Home from off; let go when the TWRP logo shows):
 
-    adb push lk2nd-gts3lwifi.img /sdcard/     # or lk2nd-gts3llte.img on an SM-T825
+    adb push lk2nd-gts3lwifi.img /sdcard/
 
 Then on the tablet: Install, Install Image (bottom right), pick the file, select the
 partition *Boot*, swipe. Reboot, System.
@@ -91,7 +92,7 @@ partition *Boot*, swipe. Reboot, System.
 
 Power + Volume Down + Home from off; press Volume Up at the warning. Then:
 
-    heimdall flash --BOOT lk2nd-gts3lwifi.img  # or lk2nd-gts3llte.img on an SM-T825
+    heimdall flash --BOOT lk2nd-gts3lwifi.img
 
 **From Download mode with Odin:** see [Windows](#windows).
 

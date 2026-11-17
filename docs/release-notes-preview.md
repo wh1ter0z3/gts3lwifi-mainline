@@ -22,16 +22,18 @@ SM-T825. Install: [install-preview.md](install-preview.md).
 - **SM-T825: no modem.** No LTE and no SIM. GPS is off on this model too (the modem work
   is on the `t825-modem` branch, not in this image). Linux 7.3.1 has booted on an SM-T825:
   on 2026-11-07 a tester reported a smooth UI, and Wi-Fi and audio working from boot, on
-  our `main` plus the modem branch. This image itself hasn't run on one. The lk2nd for the
-  SM-T825 in this release is a new build that has not been run either; an lk2nd you
-  already have works too.
-- **Suspend and battery.** Suspend is s2idle only, no deep sleep. It passed 4 of 4 cycles of
-  20 s on the SM-T820. Battery life in suspend hasn't been measured, so don't count on
-  it lasting. Plasma's idle timer suspends after a while, and until the Power key wakes
-  it the tablet has no USB or Wi-Fi.
+  our `main` plus the modem branch. This image itself hasn't run on one. There is no
+  lk2nd for the SM-T825 in this release: keep the one you have.
+- **Suspend and battery.** Suspend is s2idle; deep sleep is work in progress. It passed 4 of
+  4 cycles of 20 s on the SM-T820. Battery life in suspend hasn't been measured, so don't
+  count on it lasting. Plasma suspends after 5 minutes idle on battery and 10 on mains;
+  until the Power key wakes it the tablet has no USB or Wi-Fi. Just after waking, the
+  touchscreen is reset once to clear a touch held across suspend (the screen may turn for
+  a second).
 - **Don't update.** Don't run `apk upgrade` or accept updates in Discover. This image
   mixes our packages with postmarketOS edge. An update can replace ours with stock ones
-  as soon as those have a higher version, and KWin will at 6.8.3. A new kernel also needs
+  as soon as those have a higher version: ours is KWin 6.8.3 with an orientation fix, and
+  edge's next KWin replaces it. A new kernel also needs
   a manual step to take effect ([details](install-preview.md#after-a-kernel-update)).
   Installing new apps with `apk add` can pull updates too.
 - **Crashes can freeze the tablet.** Core dumps are on, as in any postmarketOS install.
@@ -73,7 +75,7 @@ use it.
 All of this is from the SM-T820, from [the README](../README.md) and
 [kernel-7.3.md](kernel-7.3.md), most of it on the 7.3.1 kernel package this image builds,
 on a system installed and modified by hand over several weeks. This image differs: it
-has Plasma 6.8.2 and KWin 6.8.2, where our tablet has 6.8.1. On the SM-T825, a tester
+has Plasma 6.8.3 and KWin 6.8.3, where our tablet has 6.8.1. On the SM-T825, a tester
 reported the 7.3.1 kernel booting with a smooth UI, Wi-Fi and audio (2026-11-07); the rest
 is untested there.
 
@@ -81,8 +83,8 @@ is untested there.
 |---|---|---|
 | Boot, cpufreq, thermal, eMMC, microSD, reboot, power-off | Works | 13 of 13 boots clean; the rest not rechecked |
 | Display, brightness, rotation | Works | picture and brightness by eye, rotation by hand |
-| GPU (Adreno 530, freedreno) | Works | KWin running; memory clock votes give 20-27 % more fps in most scenes |
-| Touch, S-Pen, keyboard cover | Works | by hand |
+| GPU (Adreno 530, freedreno) | Works | KWin running; memory clock votes give 20-27 % more fps in most scenes; GPU buffers on huge pages since kernel r7: 14-27 % faster clears and resolves |
+| Touch, S-Pen, keyboard cover | Works | by hand; the keyboard cover works again after resume (kernel r5) |
 | Power, Volume keys | Works | Power: sleeps and wakes twice in a row |
 | Home key, Back and Recent touch keys | Works | Home opens the launcher, Recent opens Present Windows, Back is Back; the key lights time out |
 | Wi-Fi 2.4 and 5 GHz | Works | passes traffic after suspend |
@@ -90,7 +92,7 @@ is untested there.
 | USB device mode | Works | gadget running |
 | USB host, USB 3, USB-C power | Works | not rechecked |
 | GPS through geoclue (SM-T820) | Works | first fix after 80 s at a window, probably with orbit data kept from earlier fixes. README: 2.5 to 8 min after boot |
-| Battery gauge, charging | Works | not rechecked |
+| Battery gauge, charging | Works | battery temperature from its own thermistor since kernel r8: no more false "Warm" throttling on fast chargers |
 | Speakers, headphones, mics | Works | by ear; mic quiet |
 | Headphone jack detection, headset mic and button | Works | plug and unplug switch the output; centre button tested |
 | Venus video | Works | H.264, HEVC, VP8, VP9 decode frame-for-frame identical to software, with the right picture size, and stable under `tests/venus-stress.sh` (parallel decoders, encode during decode, killed decodes, seeks, resolution changes). 4K HEVC about 20 fps |
