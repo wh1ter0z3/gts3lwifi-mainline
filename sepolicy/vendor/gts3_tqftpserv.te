@@ -1,0 +1,18 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# tqftpserv (Linaro's): files for the modem DSP, from the firmware (read only)
+# and /data/vendor/tmp (its own)
+
+type gts3_tqftpserv, domain;
+type gts3_tqftpserv_exec, exec_type, vendor_file_type, file_type;
+
+init_daemon_domain(gts3_tqftpserv)
+
+allow gts3_tqftpserv self:qipcrtr_socket create_socket_perms_no_ioctl;
+r_dir_file(gts3_tqftpserv, vendor_file)
+allow gts3_tqftpserv sysfs:dir r_dir_perms;
+allow gts3_tqftpserv sysfs:file r_file_perms;
+allow gts3_tqftpserv sysfs:lnk_file read;
+allow gts3_tqftpserv gts3_tqftpserv_data_file:dir create_dir_perms;
+allow gts3_tqftpserv gts3_tqftpserv_data_file:file create_file_perms;

@@ -1,0 +1,36 @@
+//
+// Copyright (C) 2026 The gts3lwifi-mainline project
+// SPDX-License-Identifier: Apache-2.0
+//
+// GNSS: the engine in the modem DSP through its QMI LOC service over QRTR.
+// The modem needs rmtfs and tqftpserv (Linaro's, in device/linaro/dragonboard;
+// init.gts3.rc starts them).
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_binary {
+    name: "android.hardware.gnss-service.gts3",
+    relative_install_path: "hw",
+    vendor: true,
+    init_rc: ["android.hardware.gnss-service.gts3.rc"],
+    vintf_fragments: ["android.hardware.gnss-service.gts3.xml"],
+    srcs: [
+        "Gnss.cpp",
+        "QmiLoc.cpp",
+        "service.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.gnss-V4-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "liblog",
+        "libutils",
+    ],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
+}

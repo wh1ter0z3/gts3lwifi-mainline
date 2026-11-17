@@ -236,8 +236,17 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.sensor.compass.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.compass.xml \
     frameworks/native/data/etc/android.hardware.sensor.light.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.light.xml
 
+# --- GNSS: the engine in the modem DSP, through its QMI LOC service
+# (hal/gnss/); rmtfs and tqftpserv (init.gts3.rc) run the modem ---
+PRODUCT_PACKAGES += \
+    android.hardware.gnss-service.gts3 \
+    rmtfs \
+    tqftpserv
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.location.gps.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.location.gps.xml
+
 # Still to come (each its own step, tested on the tablet):
 #  - sensors: the hall sensor (cover), once the kernel has it;
 #  - audio: headphone/headset routing on jack events; Bluetooth audio;
-#  - camera (libcamera), GNSS, Vulkan (turnip on a5xx), fingerprint;
+#  - camera (libcamera), Vulkan (turnip on a5xx), fingerprint;
 #  - kernel modules and firmware links in this build, not after it.

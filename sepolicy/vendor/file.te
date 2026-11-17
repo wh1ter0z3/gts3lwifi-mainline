@@ -3,3 +3,8 @@
 
 # The SLPI's IIO devices (sensors HAL)
 type sysfs_gts3_iio, fs_type, sysfs_type;
+
+# The modem DSP's file system (rmtfs) and its helpers' files
+type gts3_rmtfs_device, dev_type;
+type gts3_modem_efs_block_device, dev_type;
+type gts3_tqftpserv_data_file, file_type, data_file_type;

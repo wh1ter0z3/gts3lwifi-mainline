@@ -24,3 +24,12 @@
 
 # The SLPI's sensors (qcom_smgr IIO devices, under the remoteproc's QRTR node)
 /sys/devices/platform/soc@0/1c00000\.remoteproc/remoteproc/remoteproc[0-9]+/.+/iio:device[0-9]+(/.*)?  u:object_r:sysfs_gts3_iio:s0
+
+# GNSS: our HAL, and the modem DSP's helpers (Linaro's rmtfs and tqftpserv)
+/vendor/bin/hw/android\.hardware\.gnss-service\.gts3                         u:object_r:hal_gnss_default_exec:s0
+/vendor/bin/rmtfs                                                            u:object_r:gts3_rmtfs_exec:s0
+/vendor/bin/tqftpserv                                                        u:object_r:gts3_tqftpserv_exec:s0
+/dev/qcom_rmtfs_mem[0-9]+                                                    u:object_r:gts3_rmtfs_device:s0
+/dev/block/platform/soc@0/7464900\.mmc/by-name/(modemst1|modemst2|fsg|fsc)   u:object_r:gts3_modem_efs_block_device:s0
+/dev/block/by-name/(modemst1|modemst2|fsg|fsc)                               u:object_r:gts3_modem_efs_block_device:s0
+/data/vendor/tmp(/.*)?                                                       u:object_r:gts3_tqftpserv_data_file:s0

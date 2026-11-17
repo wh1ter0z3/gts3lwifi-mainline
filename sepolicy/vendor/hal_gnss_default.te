@@ -1,0 +1,6 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# hal/gnss: QMI LOC over QRTR to the modem DSP
+
+allow hal_gnss_default self:qipcrtr_socket create_socket_perms_no_ioctl;
