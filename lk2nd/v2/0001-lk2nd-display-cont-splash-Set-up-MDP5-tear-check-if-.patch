@@ -1,0 +1,107 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 30 Oct 2026 12:18:37 +0530
+Subject: [PATCH 1/6] lk2nd: display: cont-splash: Set up MDP5 tear check if it
+ is off
+
+Autorefresh on MDP5 command-mode panels relies on the ping-pong tear
+check that the original bootloader configured; lk2nd only adjusts the
+vsync rate. Samsung S-Boot (seen on the Galaxy Tab S3) never enables
+tear check and kicks every frame by hand, so the vsync counter has no
+frame height, autorefresh never fires and the screen freezes on the
+last frame S-Boot sent.
+
+If tear check is off, enable the MDSS vsync clock and program it from
+scratch for ~60 Hz. If the bootloader already enabled it, keep the
+previous behaviour.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ lk2nd/display/cont-splash/refresh.c | 54 +++++++++++++++++++++++++++--
+ 1 file changed, 51 insertions(+), 3 deletions(-)
+
+diff --git a/lk2nd/display/cont-splash/refresh.c b/lk2nd/display/cont-splash/refresh.c
+index c7e4424de..356f93033 100644
+--- a/lk2nd/display/cont-splash/refresh.c
++++ b/lk2nd/display/cont-splash/refresh.c
+@@ -2,6 +2,7 @@
+ /* Copyright (c) 2020-2022, Stephan Gerhold <stephan@gerhold.net> */
+ 
+ #include <bits.h>
++#include <clock.h>
+ #include <debug.h>
+ #include <dev/fbcon.h>
+ #include <kernel/event.h>
+@@ -112,12 +113,53 @@ bool mdp_setup_refresh(struct fbcon_config *fb)
+ 
+ #ifdef MDSS_MDP_REG_PP_AUTOREFRESH_CONFIG /* MDP5 */
+ 
++#define MDP_PP_TEAR_CHECK_EN		0x000
+ #define MDP_PP_SYNC_CONFIG_VSYNC	0x004
++#define MDP_PP_SYNC_CONFIG_HEIGHT	0x008
++#define MDP_PP_SYNC_WRCOUNT		0x00C
++#define MDP_PP_VSYNC_INIT_VAL		0x010
++#define MDP_PP_SYNC_THRESH		0x018
++#define MDP_PP_START_POS		0x01C
++#define MDP_PP_RD_PTR_IRQ		0x020
+ #define MDP_PP_AUTOREFRESH_CONFIG	0x030
+ 
++/*
++ * Some bootloaders (e.g. Samsung S-Boot on the Galaxy Tab S3) never set up
++ * the ping-pong tear check and kick every frame by hand. Then the vsync
++ * counter has no frame height and autorefresh never fires, so program the
++ * tear check from scratch, with ~18 blanking lines as panel timings
++ * usually have.
++ */
++static void mdp5_pp_setup_tear_check(uint32_t pp_base, uint32_t height)
++{
++	uint32_t vtotal = height + 18;
++	uint32_t vclks_line = 19200000 / (vtotal * 60); /* 60 fps */
++
++	writel(vclks_line | BIT(19), pp_base + MDP_PP_SYNC_CONFIG_VSYNC);
++	writel(vtotal, pp_base + MDP_PP_SYNC_CONFIG_HEIGHT);
++	writel(height, pp_base + MDP_PP_VSYNC_INIT_VAL);
++	writel(height + 1, pp_base + MDP_PP_RD_PTR_IRQ);
++	writel(height, pp_base + MDP_PP_START_POS);
++	writel((4 << 16) | 4, pp_base + MDP_PP_SYNC_THRESH);
++	writel(height + 4 + 1, pp_base + MDP_PP_SYNC_WRCOUNT);
++	writel(1, pp_base + MDP_PP_TEAR_CHECK_EN);
++}
++
++static void mdp5_pp_enable_auto_refresh(uint32_t pp_base, uint32_t height)
++{
++	if (readl(pp_base + MDP_PP_TEAR_CHECK_EN) & BIT(0)) {
++		uint32_t vsync_count = 19200000 / (height * 60); /* 60 fps */
++
++		writel(vsync_count | BIT(19), pp_base + MDP_PP_SYNC_CONFIG_VSYNC);
++	} else {
++		mdp5_pp_setup_tear_check(pp_base, height);
++	}
++
++	writel(BIT(31) | 1, pp_base + MDP_PP_AUTOREFRESH_CONFIG);
++}
++
+ static void mdp5_enable_auto_refresh(struct fbcon_config *fb)
+ {
+-	uint32_t vsync_count = 19200000 / (fb->height * 60); /* 60 fps */
+ 	uint32_t mdss_mdp_rev = readl(MDP_HW_REV);
+ 	uint32_t pp0_base;
+ 
+@@ -128,8 +170,14 @@ static void mdp5_enable_auto_refresh(struct fbcon_config *fb)
+ 	else
+ 		pp0_base = REG_MDP(0x21B00);
+ 
+-	writel(vsync_count | BIT(19), pp0_base + MDP_PP_SYNC_CONFIG_VSYNC);
+-	writel(BIT(31) | 1, pp0_base + MDP_PP_AUTOREFRESH_CONFIG);
++	/*
++	 * Without tear check from the bootloader, the vsync clock that drives
++	 * the ping-pong counter is usually off as well.
++	 */
++	if (!(readl(pp0_base + MDP_PP_TEAR_CHECK_EN) & BIT(0)))
++		clk_get_set_enable("mdss_vsync_clk", 19200000, true);
++
++	mdp5_pp_enable_auto_refresh(pp0_base, fb->height);
+ 	writel(1, MDP_CTL_0_BASE + CTL_START);
+ }
+ #endif

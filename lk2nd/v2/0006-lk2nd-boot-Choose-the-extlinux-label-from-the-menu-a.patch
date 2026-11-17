@@ -1,0 +1,512 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 17 Nov 2026 23:36:00 +0530
+Subject: [PATCH 6/6] lk2nd: boot: Choose the extlinux label from the menu and
+ fastboot
+
+Devices with more than one operating system have one extlinux label for
+each, and lk2nd always boots the default one. Show the labels as the
+first entries of the fastboot menu, and add 'fastboot oem boot-label
+<label>' to boot one from a computer.
+
+Both stop fastboot before booting like Continue does, and reboot (into
+the default label) if the label cannot be booted.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Signed-off-by: psigod <psigod@example.com>
+---
+ lk2nd/boot/boot.c          | 147 ++++++++++++++++++++++++++++++-------
+ lk2nd/boot/boot.h          |   3 +-
+ lk2nd/boot/extlinux.c      |  62 ++++++++++++++--
+ lk2nd/device/menu/menu.c   |  79 ++++++++++++++++----
+ lk2nd/include/lk2nd/boot.h |   4 +
+ 5 files changed, 248 insertions(+), 47 deletions(-)
+
+diff --git a/lk2nd/boot/boot.c b/lk2nd/boot/boot.c
+index 7f37c612d..d6c92278f 100644
+--- a/lk2nd/boot/boot.c
++++ b/lk2nd/boot/boot.c
+@@ -2,9 +2,12 @@
+ /* Copyright (c) 2023 Nikita Travkin <nikita@trvn.ru> */
+ 
+ #include <debug.h>
++#include <err.h>
++#include <fastboot.h>
+ #include <lib/bio.h>
+ #include <lib/fs.h>
+ #include <list.h>
++#include <platform.h>
+ #include <stdlib.h>
+ #include <target.h>
+ 
+@@ -17,38 +20,62 @@
+ #define LK2ND_BOOT_MIN_SIZE (16 * 1024 * 1024)
+ #endif
+ 
++/**
++ * lk2nd_mount() - Mount a partition that may hold a boot file system
++ * @bdev: block device to mount
++ * @mountpoint: buffer for the mountpoint
++ * @len: size of @mountpoint
++ *
++ * Returns: true if the file system is mounted at @mountpoint (now or before).
++ */
++static bool lk2nd_mount(bdev_t *bdev, char *mountpoint, size_t len)
++{
++	int ret;
++
++	/* Skip top level block devices. */
++	if (!bdev->is_leaf)
++		return false;
++
++	/*
++	 * Skip partitions that are too small to have a boot fs on.
++	 *
++	 * 'boot' partition is explicitly allowed to have a small fs on it
++	 * in case one installs next stage bootloader package (i.e. u-boot)
++	 * there but still wants to make use of lk2nd's device database.
++	 */
++	if (bdev->size < LK2ND_BOOT_MIN_SIZE &&
++	    !(bdev->label && !strncmp(bdev->label, "boot", strlen("boot"))))
++		return false;
++
++	snprintf(mountpoint, len, "/%s", bdev->name);
++	ret = fs_mount(mountpoint, "ext2", bdev->name);
++	return ret >= 0 || ret == ERR_ALREADY_MOUNTED;
++}
++
++static void lk2nd_bdev_init_once(void)
++{
++	static bool init_done = false;
++
++	if (!init_done) {
++		lk2nd_bdev_init();
++		init_done = true;
++	}
++}
++
+ /**
+  * lk2nd_scan_devices() - Scan filesystems and try to boot
++ * @name: extlinux label to boot, or NULL for the default label
+  */
+-static void lk2nd_scan_devices(void)
++static void lk2nd_scan_devices(const char *name)
+ {
+ 	struct bdev_struct *bdevs = bio_get_bdevs();
+ 	char mountpoint[16];
+ 	bdev_t *bdev;
+-	int ret;
+ 
+ 	dprintf(INFO, "boot: Trying to boot from the file system...\n");
+ 
+ 	list_for_every_entry(&bdevs->list, bdev, bdev_t, node) {
+-
+-		/* Skip top level block devices. */
+-		if (!bdev->is_leaf)
+-			continue;
+-
+-		/*
+-		 * Skip partitions that are too small to have a boot fs on.
+-		 *
+-		 * 'boot' partition is explicitly allowed to have a small fs on it
+-		 * in case one installs next stage bootloader package (i.e. u-boot)
+-		 * there but still wants to make use of lk2nd's device database.
+-		 */
+-		if (bdev->size < LK2ND_BOOT_MIN_SIZE &&
+-		    !(bdev->label && !strncmp(bdev->label, "boot", strlen("boot"))))
+-			continue;
+-
+-		snprintf(mountpoint, sizeof(mountpoint), "/%s", bdev->name);
+-		ret = fs_mount(mountpoint, "ext2", bdev->name);
+-		if (ret < 0)
++		if (!lk2nd_mount(bdev, mountpoint, sizeof(mountpoint)))
+ 			continue;
+ 
+ 		if (DEBUGLEVEL >= SPEW) {
+@@ -57,7 +84,7 @@ static void lk2nd_scan_devices(void)
+ 			lk2nd_print_file_tree(mountpoint, " ");
+ 		}
+ 
+-		lk2nd_try_extlinux(mountpoint);
++		lk2nd_try_extlinux(mountpoint, name);
+ 	}
+ 
+ 	dprintf(INFO, "boot: Bootable file system not found. Reverting to android boot.\n");
+@@ -72,12 +99,78 @@ static void lk2nd_scan_devices(void)
+  */
+ void lk2nd_boot(void)
+ {
+-	static bool init_done = false;
++	lk2nd_bdev_init_once();
++	lk2nd_scan_devices(NULL);
++}
+ 
+-	if (!init_done) {
+-		lk2nd_bdev_init();
+-		init_done = true;
++/**
++ * lk2nd_boot_extlinux_label() - Boot an extlinux label other than the default.
++ * @name: label to boot
++ *
++ * Returns only if the label could not be booted.
++ */
++void lk2nd_boot_extlinux_label(const char *name)
++{
++	lk2nd_bdev_init_once();
++	lk2nd_scan_devices(name);
++}
++
++/**
++ * lk2nd_boot_list_labels() - List the labels lk2nd can boot.
++ * @names: array to write the label names to
++ * @max: length of @names
++ *
++ * Lists the labels of the first extlinux.conf found, the one lk2nd boots
++ * from unless it fails.
++ *
++ * Returns: number of labels.
++ */
++int lk2nd_boot_list_labels(char (*names)[LK2ND_LABEL_NAME_LEN], int max)
++{
++	struct bdev_struct *bdevs = bio_get_bdevs();
++	char mountpoint[16];
++	bdev_t *bdev;
++	int count;
++
++	lk2nd_bdev_init_once();
++
++	list_for_every_entry(&bdevs->list, bdev, bdev_t, node) {
++		if (!lk2nd_mount(bdev, mountpoint, sizeof(mountpoint)))
++			continue;
++
++		count = lk2nd_extlinux_labels(mountpoint, names, max);
++		if (count > 0)
++			return count;
++	}
++
++	return 0;
++}
++
++static void cmd_oem_boot_label(const char *arg, void *data, unsigned sz)
++{
++	char names[8][LK2ND_LABEL_NAME_LEN];
++	int i, count;
++
++	while (*arg == ' ')
++		arg++;
++
++	count = lk2nd_boot_list_labels(names, ARRAY_SIZE(names));
++	for (i = 0; i < count; i++)
++		if (!strcmp(names[i], arg))
++			break;
++
++	if (i == count) {
++		fastboot_fail("no such extlinux label");
++		return;
+ 	}
+ 
+-	lk2nd_scan_devices();
++	fastboot_okay("");
++	fastboot_stop();
++
++	lk2nd_boot_extlinux_label(arg);
++
++	/* The default label is the safe choice now that fastboot is gone. */
++	dprintf(CRITICAL, "Failed to boot '%s', rebooting\n", arg);
++	reboot_device(0);
+ }
++FASTBOOT_REGISTER("oem boot-label", cmd_oem_boot_label);
+diff --git a/lk2nd/boot/boot.h b/lk2nd/boot/boot.h
+index 0edcae564..235de4f1e 100644
+--- a/lk2nd/boot/boot.h
++++ b/lk2nd/boot/boot.h
+@@ -11,6 +11,7 @@
+ void lk2nd_print_file_tree(char *root, char *prefix);
+ 
+ /* extlinux.c */
+-void lk2nd_try_extlinux(const char *mountpoint);
++void lk2nd_try_extlinux(const char *mountpoint, const char *name);
++int lk2nd_extlinux_labels(const char *root, char (*names)[LK2ND_LABEL_NAME_LEN], int max);
+ 
+ #endif /* LK2ND_BOOT_BOOT_H */
+diff --git a/lk2nd/boot/extlinux.c b/lk2nd/boot/extlinux.c
+index 5bcf60747..279a64505 100644
+--- a/lk2nd/boot/extlinux.c
++++ b/lk2nd/boot/extlinux.c
+@@ -194,12 +194,13 @@ static int count_lines(char *data, size_t size)
+ }
+ 
+ /**
+- * parse_conf() - Extract default label from extlinux.conf
++ * parse_conf() - Extract a label from extlinux.conf
+  * @data: File contents
+  * @size: Length of the file
+  * @label: structure to write strings to
++ * @name: label to extract, or NULL for the default label
+  *
+- * Find the default label in the file and extract strings from it.
++ * Find the requested label in the file and extract strings from it.
+  * This function may destroy the file by changing some newlines to nulls
+  * as it may be implemented by pointing into the data buffer to return
+  * the configuration strings.
+@@ -208,7 +209,7 @@ static int count_lines(char *data, size_t size)
+  *
+  * Returns: 0 on success or negative error on parse failure.
+  */
+-static int parse_conf(char *data, size_t size, struct label *label)
++static int parse_conf(char *data, size_t size, struct label *label, const char *name)
+ {
+ 	char *command = NULL, *value = NULL;
+ 	char *overlay, *saveptr;
+@@ -302,7 +303,9 @@ static int parse_conf(char *data, size_t size, struct label *label)
+ 		}
+ 	}
+ 
+-	default_label = &labels[0];
++	default_label = name ? NULL : &labels[0];
++	if (name)
++		default_name = name;
+ 
+ 	for (i = 0; i < labels_count; ++i) {
+ 		if (!strcmp(default_name, labels[i].name)) {
+@@ -311,6 +314,13 @@ static int parse_conf(char *data, size_t size, struct label *label)
+ 		}
+ 	}
+ 
++	if (!default_label) {
++		dprintf(INFO, "No label '%s' in the extlinux.conf\n", name);
++		free(labels);
++		free(commands);
++		return -1;
++	}
++
+ 	memcpy(label, default_label, sizeof(*label));
+ 
+ 	free(labels);
+@@ -659,11 +669,13 @@ static void lk2nd_boot_label(struct label *label)
+ 
+ /**
+  * lk2nd_try_extlinux() - Try to boot with extlinux
++ * @root: mountpoint of the file system
++ * @name: label to boot, or NULL for the default label
+  *
+  * Check if /extlinux/extlinux.conf exists and try to
+  * boot it if so.
+  */
+-void lk2nd_try_extlinux(const char *root)
++void lk2nd_try_extlinux(const char *root, const char *name)
+ {
+ 	struct filehandle *fileh;
+ 	struct file_stat stat;
+@@ -684,7 +696,7 @@ void lk2nd_try_extlinux(const char *root)
+ 	fs_read_file(fileh, data, 0, stat.size);
+ 	fs_close_file(fileh);
+ 
+-	ret = parse_conf(data, stat.size, &label);
++	ret = parse_conf(data, stat.size, &label, name);
+ 	if (ret < 0)
+ 		goto error;
+ 
+@@ -708,3 +720,41 @@ error:
+ 	dprintf(INFO, "Failed to parse extlinux.conf\n");
+ 	free(data);
+ }
++
++/**
++ * lk2nd_extlinux_labels() - List the labels of an extlinux.conf
++ * @root: mountpoint of the file system
++ * @names: array to write the label names to
++ * @max: length of @names
++ *
++ * Returns: number of labels written, 0 if there is no extlinux.conf.
++ */
++int lk2nd_extlinux_labels(const char *root, char (*names)[LK2ND_LABEL_NAME_LEN], int max)
++{
++	struct filehandle *fileh;
++	struct file_stat stat;
++	char *command, *value;
++	char path[64];
++	char *data, *p;
++	size_t size;
++	int count = 0;
++
++	snprintf(path, sizeof(path), "%s/extlinux/extlinux.conf", root);
++	if (fs_open_file(path, &fileh) < 0)
++		return 0;
++
++	fs_stat_file(fileh, &stat);
++	data = malloc(stat.size + 1);
++	fs_read_file(fileh, data, 0, stat.size);
++	fs_close_file(fileh);
++
++	p = data;
++	size = stat.size;
++	while (count < max && parse_command(&p, &size, &command, &value) == 0) {
++		if (cmd_to_tok(command) == CMD_LABEL && value)
++			strlcpy(names[count++], value, LK2ND_LABEL_NAME_LEN);
++	}
++
++	free(data);
++	return count;
++}
+diff --git a/lk2nd/device/menu/menu.c b/lk2nd/device/menu/menu.c
+index 28ab377e7..3cbcbc610 100644
+--- a/lk2nd/device/menu/menu.c
++++ b/lk2nd/device/menu/menu.c
+@@ -6,12 +6,14 @@
+ #include <debug.h>
+ #include <dev/fbcon.h>
+ #include <display_menu.h>
++#include <fastboot.h>
+ #include <kernel/thread.h>
+ #include <platform.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/types.h>
+ 
++#include <lk2nd/boot.h>
+ #include <lk2nd/device/keys.h>
+ #include <lk2nd/util/minmax.h>
+ #include <lk2nd/version.h>
+@@ -134,19 +136,56 @@ static void opt_bootloader(void) { reboot_device(FASTBOOT_MODE); }
+ static void opt_edl(void)        { reboot_device(EMERGENCY_DLOAD); }
+ static void opt_shutdown(void)   { shutdown_device(); }
+ 
+-static struct {
++struct menu_option {
+ 	char *name;
+ 	unsigned color;
+ 	void (*action)(void);
+-} menu_options[] = {
+-	{ "  Reboot  ", GREEN,  opt_reboot },
+-	{ " Continue ", WHITE,  opt_continue },
+-	{ " Recovery ", ORANGE, opt_recovery },
+-	{ "Bootloader", ORANGE, opt_bootloader },
+-	{ "    EDL   ", RED,    opt_edl },
+-	{ " Shutdown ", RED,    opt_shutdown },
++	const char *label; /* extlinux label to boot instead of the action */
+ };
+ 
++static const struct menu_option fixed_options[] = {
++	{ "  Reboot  ", GREEN,  opt_reboot, NULL },
++	{ " Continue ", WHITE,  opt_continue, NULL },
++	{ " Recovery ", ORANGE, opt_recovery, NULL },
++	{ "Bootloader", ORANGE, opt_bootloader, NULL },
++	{ "    EDL   ", RED,    opt_edl, NULL },
++	{ " Shutdown ", RED,    opt_shutdown, NULL },
++};
++
++/*
++ * The operating systems in extlinux.conf come first, so one can choose what
++ * to boot on devices that have more than one.
++ */
++#define MAX_LABELS	4
++static char label_names[MAX_LABELS][LK2ND_LABEL_NAME_LEN];
++static char label_titles[MAX_LABELS][LK2ND_LABEL_NAME_LEN + 5];
++static struct menu_option menu_options[MAX_LABELS + ARRAY_SIZE(fixed_options)];
++static unsigned int menu_options_count;
++
++static void build_menu_options(void)
++{
++	int i, count = 0, len, pad;
++
++#if WITH_LK2ND_BOOT
++	count = lk2nd_boot_list_labels(label_names, MAX_LABELS);
++#endif
++	menu_options_count = 0;
++	for (i = 0; i < count; i++) {
++		/* Center the name in the width of the other options. */
++		len = strlen(label_names[i]);
++		pad = len < 10 ? (10 - len) / 2 : 0;
++		memset(label_titles[i], ' ', sizeof(label_titles[i]) - 1);
++		memcpy(label_titles[i] + pad, label_names[i], len);
++		label_titles[i][max(10, pad + len)] = '\0';
++
++		menu_options[menu_options_count++] = (struct menu_option) {
++			label_titles[i], GREEN, NULL, label_names[i],
++		};
++	}
++	for (i = 0; i < (int)ARRAY_SIZE(fixed_options); i++)
++		menu_options[menu_options_count++] = fixed_options[i];
++}
++
+ #define fbcon_printf_ln(color, y, incr, x...) \
+ 	do { \
+ 		fbcon_printf(color, y, x); \
+@@ -169,6 +208,8 @@ void display_fastboot_menu(void)
+ 	if (!fb)
+ 		return;
+ 
++	build_menu_options();
++
+ 	/*
+ 	 * Make sure the specified line lenght fits on the screen.
+ 	 */
+@@ -203,7 +244,7 @@ void display_fastboot_menu(void)
+ 
+ 	/* Skip lines for the menu */
+ 	y_menu = y;
+-	y += incr * (ARRAY_SIZE(menu_options) + 1);
++	y += incr * (menu_options_count + 1);
+ 
+ 	if (lk2nd_dev.single_key) {
+ 		fbcon_puts_ln(SILVER, y, incr, true, "Short press to navigate.");
+@@ -246,8 +287,8 @@ void display_fastboot_menu(void)
+ 	incr = FONT_HEIGHT * scale_factor;
+ 	while (true) {
+ 		y = y_menu;
+-		fbcon_clear_msg(y / FONT_HEIGHT, (y / FONT_HEIGHT + ARRAY_SIZE(menu_options) * scale_factor));
+-		for (i = 0; i < ARRAY_SIZE(menu_options); ++i) {
++		fbcon_clear_msg(y / FONT_HEIGHT, (y / FONT_HEIGHT + menu_options_count * scale_factor));
++		for (i = 0; i < menu_options_count; ++i) {
+ 			fbcon_printf_ln(
+ 				i == sel ? menu_options[i].color : SILVER,
+ 				y, incr, true, "%c %s %c",
+@@ -267,17 +308,29 @@ void display_fastboot_menu(void)
+ 				y, incr, true, ">> %s <<",
+ 				menu_options[sel].name
+ 			);
++#if WITH_LK2ND_BOOT
++			if (menu_options[sel].label) {
++				/* Like Continue: no USB transfers while booting */
++				fastboot_stop();
++				lk2nd_boot_extlinux_label(menu_options[sel].label);
++
++				/* Without fastboot, the default label is the safe choice */
++				dprintf(CRITICAL, "Failed to boot '%s', rebooting\n",
++					menu_options[sel].label);
++				reboot_device(0);
++			}
++#endif
+ 			menu_options[sel].action();
+ 			break;
+ 		case KEY_VOLUMEUP:
+ 			if (sel == 0)
+-				sel = ARRAY_SIZE(menu_options) - 1;
++				sel = menu_options_count - 1;
+ 			else
+ 				sel--;
+ 			break;
+ 		case KEY_VOLUMEDOWN:
+ 			sel++;
+-			if (sel >= ARRAY_SIZE(menu_options))
++			if (sel >= menu_options_count)
+ 				sel = 0;
+ 			break;
+ 		}
+diff --git a/lk2nd/include/lk2nd/boot.h b/lk2nd/include/lk2nd/boot.h
+index ef3e935ff..f84b51c99 100644
+--- a/lk2nd/include/lk2nd/boot.h
++++ b/lk2nd/include/lk2nd/boot.h
+@@ -2,7 +2,11 @@
+ #ifndef LK2ND_BOOT_H
+ #define LK2ND_BOOT_H
+ 
++#define LK2ND_LABEL_NAME_LEN	32
++
+ void lk2nd_boot(void);
++void lk2nd_boot_extlinux_label(const char *name);
++int lk2nd_boot_list_labels(char (*names)[LK2ND_LABEL_NAME_LEN], int max);
+ 
+ #endif /* LK2ND_BOOT_H */
+ 

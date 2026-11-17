@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 17 Nov 2026 23:29:25 +0530
+Subject: [PATCH 5/6] project: lk2nd-msm8996: Allow 70 MiB for the kernel and
+ ramdisk
+
+The Galaxy Tab S3 kernels are 34.5 MiB with BSS and the postmarketOS
+initramfs is 13 MiB, which doesn't fit the 50 MiB default together with
+the 2 MiB for the device tree. Mainline device trees reserve nothing
+below 0x84700000 on this tablet, and lk2nd maps 88 MiB from the start of
+DDR.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Signed-off-by: psigod <psigod@example.com>
+---
+ project/lk2nd-msm8996.mk | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/project/lk2nd-msm8996.mk b/project/lk2nd-msm8996.mk
+index db22b6a66..1034b461b 100644
+--- a/project/lk2nd-msm8996.mk
++++ b/project/lk2nd-msm8996.mk
+@@ -1,3 +1,10 @@
+ # SPDX-License-Identifier: BSD-3-Clause
+ TARGET := msm8996
++
++# Kernels with most drivers built in are larger than the default 50 MiB allows
++# with an initramfs next to them. Mainline device trees reserve nothing below
++# 0x84700000 (Samsung debug buffers on the Galaxy Tab S3), and lk2nd maps 88 MiB
++# from the start of DDR.
++LK2ND_BOOT_MEM_SIZE := 0x04600000
++
+ include lk2nd/project/lk2nd.mk

@@ -1,0 +1,53 @@
+#!/bin/sh
+# Choose the operating system lk2nd boots: the default label of extlinux.conf
+# on the boot partition. Works in Nura (/boot) and in Android (mounts the
+# partition labelled pmOS_boot itself; needs root and busybox).
+#
+#   gts3-boot                  list the labels, * marks the default
+#   gts3-boot <label>          boot <label> from now on
+#   gts3-boot <label> reboot   ... and reboot into it now
+set -eu
+
+conf=/boot/extlinux/extlinux.conf
+mnt=
+cleanup() { [ -z "$mnt" ] || { umount "$mnt"; rmdir "$mnt"; }; }
+trap cleanup EXIT
+
+if [ ! -f "$conf" ]; then
+	dev=$(findfs LABEL=pmOS_boot 2>/dev/null || blkid -L pmOS_boot 2>/dev/null || true)
+	[ -n "$dev" ] || { echo "no partition labelled pmOS_boot" >&2; exit 1; }
+	mnt=$(mktemp -d)
+	mount -t ext2 "$dev" "$mnt"
+	conf=$mnt/extlinux/extlinux.conf
+fi
+
+labels=$(sed -n 's/^[[:space:]]*label[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$conf")
+default=$(sed -n 's/^[[:space:]]*default[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$conf" | tail -n 1)
+
+if [ $# -eq 0 ]; then
+	for l in $labels; do
+		[ "$l" = "$default" ] && echo "* $l" || echo "  $l"
+	done
+	exit 0
+fi
+
+echo "$labels" | grep -qx "$1" || { echo "no label '$1' in $conf" >&2; exit 1; }
+if [ "$1" != "$default" ]; then
+	# Write a copy and rename it, so a crash leaves the old or the new file.
+	sed "s/^\([[:space:]]*default[[:space:]]\{1,\}\).*/\1$1/" "$conf" > "$conf.new"
+	grep -q "^[[:space:]]*default[[:space:]]" "$conf.new" || echo "default $1" >> "$conf.new"
+	sync "$conf.new" 2>/dev/null || sync
+	mv "$conf.new" "$conf"
+	sync
+fi
+echo "lk2nd boots $1"
+
+if [ "${2:-}" = reboot ]; then
+	cleanup
+	mnt=
+	if command -v setprop >/dev/null 2>&1 && [ -n "$(getprop sys.boot_completed 2>/dev/null)" ]; then
+		setprop sys.powerctl reboot
+	else
+		reboot
+	fi
+fi
