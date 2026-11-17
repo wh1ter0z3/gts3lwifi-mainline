@@ -1,0 +1,12 @@
+%YAML 1.1
+---
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# libcamera's settings: the software ISP debayers on all four CPU cores (the
+# default is 2). With preview and JPEG from one 13 MP camera stream, the rear
+# camera's preview went from 4.4 to 8.0 fps.
+version: 1
+configuration:
+  software_isp:
+    threads: 4
