@@ -23,6 +23,7 @@
 +config CHARGER_SM5705
 +	tristate "Silicon Mitus SM5705 charger driver"
 +	depends on I2C
++	depends on IIO
 +	select REGMAP_I2C
 +	help
 +	  Say Y here to enable the charger of the Silicon Mitus SM5705
@@ -33,6 +34,7 @@
 +config FUEL_GAUGE_SM5705
 +	tristate "Silicon Mitus SM5705 fuel gauge driver"
 +	depends on I2C
++	depends on IIO
 +	help
 +	  Say Y here to enable the fuel gauge of the Silicon Mitus SM5705
 +	  charger and fuel gauge IC, found in some Samsung devices. It reports
