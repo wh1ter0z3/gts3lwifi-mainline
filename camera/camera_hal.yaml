@@ -1,0 +1,15 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# libcamera's Android HAL: where each camera faces and how far its picture
+# is turned. Both sensors read out upright with the tablet in landscape
+# (docs/camera.md in gts3lwifi-mainline), hence rotation 0.
+cameras:
+  # Sony IMX258, 13 MP, with the DW9807 focus lens
+  "/base/soc@0/cci@a0c000/i2c-bus@0/camera@1a":
+    location: back
+    rotation: 0
+  # Samsung S5K5E3, 5 MP, fixed focus
+  "/base/soc@0/cci@a0c000/i2c-bus@1/camera@10":
+    location: front
+    rotation: 0
