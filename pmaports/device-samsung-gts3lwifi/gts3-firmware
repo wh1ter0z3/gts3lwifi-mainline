@@ -17,8 +17,10 @@
 #    qcom/msm8996/samsung/gts3/tz/; cmnlib first, then the app
 # Only missing or changed files are written. Remote processors that could
 # not start for lack of firmware are started afterwards, except the modem
-# DSP, which rmtfs starts once it serves the modem's file system; Wi-Fi
-# picks up its board data on the next boot.
+# DSP, which rmtfs starts once it serves the modem's file system, and Venus
+# is bound again (it loads its firmware when it binds, which on a first
+# boot happens before this runs); Wi-Fi picks up its board data on the next
+# boot.
 set -eu
 
 DEST=/lib/firmware/updates
@@ -105,3 +107,9 @@ for r in /sys/class/remoteproc/remoteproc*; do
 		echo start > "$r/state" || echo "gts3-firmware: could not start $(cat "$r/name")" >&2
 	fi
 done
+
+v=/sys/bus/platform/devices/c00000.video-codec
+if [ -e "$v" ] && [ ! -e "$v/driver" ] && [ -e /sys/bus/platform/drivers/qcom-venus/bind ]; then
+	echo c00000.video-codec > /sys/bus/platform/drivers/qcom-venus/bind ||
+		echo "gts3-firmware: could not bind Venus" >&2
+fi

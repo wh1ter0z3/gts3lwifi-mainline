@@ -1,0 +1,32 @@
+# gts3: Ocellus, Jayden's camera app for this tablet (docs/camera.md):
+# photos, video encoded by Venus, autofocus on the rear camera.
+pkgname=ocellus
+pkgver=0_git20261107
+pkgrel=0
+_commit=155baa0518eb2d3cf11fb3195e27684a99ca4622
+pkgdesc="Camera app for Linux phones and tablets, built on libcamera and GStreamer"
+url="https://github.com/jaydens-tasty-slop/ocellus"
+arch="noarch"
+license="CC0-1.0"
+depends="
+	gst-plugins-bad
+	gst-plugins-base
+	gst-plugins-good
+	gtk+3.0
+	libcamera-gstreamer
+	pulseaudio-utils
+	py3-gobject3
+	python3
+	v4l-utils
+	"
+source="$pkgname-$_commit.tar.gz::https://github.com/jaydens-tasty-slop/ocellus/archive/$_commit.tar.gz"
+builddir="$srcdir/$pkgname-$_commit"
+options="!check" # its check needs desktop-file-validate; the script is plain Python
+
+package() {
+	make DESTDIR="$pkgdir" PREFIX=/usr install
+}
+
+sha512sums="
+578698a0661325b06e04f6f6662df82e2556f24eb058793094ab047b49e4c1aabe65f5fb7d8241cd28d9c88b60c7cb76ec1bc8e0a6c22d53b36c95c9dd64820c  $pkgname-$_commit.tar.gz
+"
