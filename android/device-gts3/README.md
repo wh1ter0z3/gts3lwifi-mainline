@@ -53,9 +53,10 @@ Ubuntu 22.04, the AOSP build packages, plus `meson`, `mako` and `ply` for Mesa:
 
 ```bash
 repo init -u https://android.googlesource.com/platform/manifest -b android-15.0.0_r36 --depth=1
-mkdir -p .repo/local_manifests && cp <this tree>/manifests/gts3.xml .repo/local_manifests/
+git clone https://github.com/wh1ter0z3/gts3lwifi-mainline ../gts3lwifi-mainline
+mkdir -p .repo/local_manifests && cp ../gts3lwifi-mainline/android/device-gts3/manifests/gts3.xml .repo/local_manifests/
 repo sync -c -j8 --no-tags
-mkdir -p device/samsung && cp -a <this tree> device/samsung/gts3
+mkdir -p device/samsung && cp -a ../gts3lwifi-mainline/android/device-gts3 device/samsung/gts3
 device/samsung/gts3/patches/apply.sh
 source build/envsetup.sh
 lunch aosp_gts3-bp1a-userdebug

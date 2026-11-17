@@ -42,7 +42,8 @@ The OrangeFox sync tools, then this tree at `device/samsung/gts3l-recovery`:
 git clone https://gitlab.com/OrangeFox/sync.git
 cd sync && ./orangefox_sync.sh --branch 12.1 --path /path/to/fox_12.1
 cd /path/to/fox_12.1
-git clone <this repo> device/samsung/gts3l-recovery
+git clone https://github.com/wh1ter0z3/gts3lwifi-mainline /tmp/gts3lwifi-mainline
+cp -a /tmp/gts3lwifi-mainline/android/orangefox device/samsung/gts3l-recovery
 export ALLOW_MISSING_DEPENDENCIES=true LC_ALL=C FOX_BUILD_DEVICE=gts3lwifi
 source build/envsetup.sh
 lunch twrp_gts3lwifi-eng          # twrp_gts3llte-eng for the SM-T825
