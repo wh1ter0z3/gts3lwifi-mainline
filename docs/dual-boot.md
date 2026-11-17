@@ -84,7 +84,17 @@ make BOOTLOADER_OUT=out TOOLCHAIN_PREFIX=arm-none-eabi- \
 	LK2ND_PARTITION_SIZE="4*1024*1024" lk2nd-msm8996
 ```
 
-## Tested on the SM-T820 (2026-11-17, v2 started from v1 with `fastboot boot`)
+## Tested on the SM-T820 (2026-11-17)
+
+v2 is flashed over v1 on our SM-T820: the first 2375696 bytes of the boot
+partition, read back with matching sha256 4b4f3941…. S-Boot starts it, and
+without a computer:
+
+- a plain reboot boots Nura;
+- `gts3-boot android reboot` in Nura boots Android to `sys.boot_completed=1`;
+- `gts3-boot nura reboot` in Android boots Nura.
+
+Before flashing, with v2 started from v1 by `fastboot boot`:
 
 - `default nura`: Nura boots from internal storage. /proc/cmdline is the
   label's own.
@@ -101,9 +111,17 @@ make BOOTLOADER_OUT=out TOOLCHAIN_PREFIX=arm-none-eabi- \
 
 Not tested yet:
 
-- v2 started by S-Boot itself (that needs v2 flashed);
 - the menu on a screen;
 - the cont-splash patches on a panel.
+
+For a headless tablet, a label with no kernel is a way into fastboot for RAM
+boot tests: `gts3-boot fastboot reboot`, then `fastboot boot <img>` or
+`fastboot oem boot-label nura`. Our SM-T820 has one:
+
+```
+label fastboot
+	linux /gts3/no-kernel
+```
 
 ## Layout for users (planned)
 
