@@ -1,14 +1,14 @@
 #!/bin/sh
-# Installs OneUI (a GSI's system.img) on a Galaxy Tab S3, SM-T820 or SM-T825,
+# Installs Android (any GSI's system.img) on a Galaxy Tab S3, SM-T820 or SM-T825,
 # that runs lk2nd: builds the userdata partition's image on this PC (the
 # system image, our vendor image and board files, an empty /data) and
 # flashes it, with the boot image for the model lk2nd reports. The tablet's
 # own firmware stays on its partitions; nothing from Samsung is in this
 # package, the system image comes from the GSI you downloaded.
 #
-# usage: install-oneui.sh <GSI zip or system.img>
+# usage: install-gsi.sh <GSI zip, .img.xz or system.img>
 #   with the tablet in lk2nd's fastboot mode, connected over USB, and the
-#   release's oneui-gts3-...-twrp.zip next to this script (or the package
+#   release's gts3-...-twrp.zip next to this script (or the package
 #   unpacked here)
 # Needs: fastboot, mke2fs (e2fsprogs 1.43 or newer), unzip, about 15 GB free
 # where it works (WORK=<dir>, default: next to this script). img2simg
@@ -37,8 +37,8 @@ set -- $v
 if [ -f "$HERE/vendor.img" ]; then
 	PKG=$HERE
 else
-	Z=$(ls "$HERE"/oneui-gts3-*-twrp.zip 2>/dev/null | tail -n 1)
-	[ -n "$Z" ] || die "put the release's oneui-gts3-...-twrp.zip next to this script"
+	Z=$(ls "$HERE"/*gts3-*-twrp.zip 2>/dev/null | tail -n 1)
+	[ -n "$Z" ] || die "put the release's gts3-...-twrp.zip next to this script"
 	echo "Unpacking ${Z##*/}..."
 	mkdir -p "$WORK" && rm -rf "${WORK:?}/pkg"
 	unzip -q "$Z" -d "$WORK/pkg" -x 'META-INF/*' || die "can't unpack $Z"
@@ -122,7 +122,7 @@ fi
 echo
 echo "Ready to flash the $MODEL:"
 echo "  boot (after lk2nd): $BOOT"
-echo "  userdata: OneUI, $(du -m "$IMG" | cut -f1) MiB of data"
+echo "  userdata: Android, $(du -m "$IMG" | cut -f1) MiB of data"
 echo "This ERASES the userdata partition (Android data, postmarketOS)."
 printf 'Type yes to flash: '
 read -r ok
@@ -130,5 +130,5 @@ read -r ok
 fastboot flash boot "$BOOT"
 fastboot flash userdata "$IMG"
 fastboot reboot
-echo "Done. The first start takes about 8 minutes (the Samsung logo, then a"
-echo "black screen for a while, then OneUI's lock screen: swipe up)."
+echo "Done. The first start takes a few minutes (the Samsung logo, then a"
+echo "black screen for a while, then the system's setup or lock screen)."

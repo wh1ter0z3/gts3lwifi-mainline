@@ -1,5 +1,5 @@
 #!/bin/sh
-# Assembles the OneUI test package for the Tab S3 (standalone gsi-init, no
+# Assembles the Android test package for the Tab S3 (standalone gsi-init, no
 # pmOS on the tablet): boot images for both models, the vendor image and board
 # files of a tested image directory, lk2nd, the installer (release/); and the
 # TWRP installer zip of the same files (<out dir>-twrp.zip); and the
@@ -25,8 +25,8 @@ for d in odm system-add vendor-bind; do [ ! -d "$PL/$d" ] || cp -R "$PL/$d" "$OU
 [ ! -f "$PL/system-hide" ] || cp "$PL/system-hide" "$OUT/"
 find "$OUT" -name '*.pre-*' -exec rm -f {} +
 for m in gts3lwifi gts3llte; do cp "$LK/lk2nd-$m.img" "$LK/lk2nd-$m-odin.tar" "$OUT/"; done
-cp "$HERE/release/install-oneui.sh" "$HERE/release/README.txt" "$OUT/"
-chmod 0755 "$OUT/install-oneui.sh"
+cp "$HERE/release/install-gsi.sh" "$HERE/release/README.txt" "$OUT/"
+chmod 0755 "$OUT/install-gsi.sh"
 
 # Nothing from Samsung or Qualcomm may be in it (the vendor image's free
 # blocks included): no firmware image version strings anywhere
@@ -40,10 +40,10 @@ echo "package in $OUT ($(du -sh "$OUT" | cut -f1))"
 # The same for TWRP / OrangeFox, without a PC (release/twrp, unzip64/)
 sh "$HERE/tools/mktwrpzip.sh" "$OUT" "$HERE/unzip64/gsi-unzip" "${BUSYBOX:-$HERE/ramdisk-bin-busybox}" "$OUT-twrp.zip"
 # The release's files, each on its own: the -twrp.zip is the package (TWRP
-# flashes it, install-oneui.sh unpacks it), the images for whoever wants one
+# flashes it, install-gsi.sh unpacks it), the images for whoever wants one
 A=$OUT-assets
 rm -rf "${A:?}" && mkdir -p "$A"
-cp "$OUT-twrp.zip" "$HERE/release/install-oneui.sh" "$HERE/release/README.txt" \
+cp "$OUT-twrp.zip" "$HERE/release/install-gsi.sh" "$HERE/release/README.txt" \
 	"$OUT"/boot-*.img "$OUT/vendor.img" "$OUT"/lk2nd-*.img "$OUT"/lk2nd-*-odin.tar "$A/"
 (cd "$A" && sha256sum $(ls | LC_ALL=C sort) > SHA256SUMS)
 echo "release files in $A"

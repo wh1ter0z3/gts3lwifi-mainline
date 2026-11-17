@@ -1,8 +1,8 @@
 #!/sbin/sh
-# OneUI (a GSI) on the Galaxy Tab S3, SM-T820 or SM-T825: installer for
+# Android (any GSI) on the Galaxy Tab S3, SM-T820 or SM-T825: installer for
 # TWRP or OrangeFox, old and new (tested in awesometic's TWRP 3.7.0), the
-# same as install-oneui.sh does from a PC. Put this zip and the GSI (a .zip
-# with the system image inside, or the .img / .img.gz) in one folder on the
+# same as install-gsi.sh does from a PC. Put this zip and the GSI (a .zip
+# with the system image inside, or the .img / .img.gz / .img.xz) in one folder on the
 # microSD card or a USB drive, then Install this zip.
 # It ERASES the userdata partition (internal storage, all Android data, a
 # postmarketOS install), writes lk2nd to the boot partition and our boot
@@ -58,7 +58,7 @@ for c in $(which -a mke2fs 2>/dev/null) /sbin/mke2fs /system/bin/mke2fs /system/
 	[ -x "$c" ] && { MKE2FS=$c; break; }
 done
 
-ui "OneUI for the Galaxy Tab S3 (test build)"
+ui "Android (a GSI) for the Galaxy Tab S3 (test build)"
 # The model: Samsung's bootloader tells it on the command line (any
 # recovery), else the recovery's device property
 M=${MODEL:-}
@@ -103,8 +103,11 @@ if [ -z "$SRC" ]; then
 	for f in "$DIR"/*; do
 		[ -f "$f" ] && [ "$f" != "$ZIP" ] || continue
 		case "$f" in
-		*.img|*.img.gz)
+		*.img)
 			[ "$(size_mib "$f")" -ge "$GSI_MIN_MB" ] || continue ;;
+		# compressed: about a third of the image or less
+		*.img.gz|*.img.xz)
+			[ "$(size_mib "$f")" -ge $((GSI_MIN_MB / 4)) ] || continue ;;
 		*.zip)
 			l=$($U -l "$f" 2>/dev/null | sort -n | tail -n 1 |
 				awk '{ printf "%d\n", $1 / 1048576 }')
@@ -169,6 +172,7 @@ case "$SRC" in
 *.zip) $U "$SRC" "$A/system.img" "$MEMBER" 2> "$W/unzip.log" ||
 		die "unpacking failed: $(tail -n 1 "$W/unzip.log")" ;;
 *.img.gz) gunzip -c "$SRC" > "$A/system.img" || die "unpacking failed" ;;
+*.img.xz) xzcat "$SRC" > "$A/system.img" || die "unpacking failed" ;;
 *) cp "$SRC" "$A/system.img" || die "copying failed" ;;
 esac
 if [ "$(od -An -tx4 -N4 "$A/system.img" | tr -d ' ')" = ed26ff3a ]; then
@@ -207,6 +211,6 @@ dd if="$W/pkg/lk2nd-$M.img" of="$BOOT_DEV" bs=$MiB 2>"$W/dd.log" &&
 	die "writing the boot partition failed: $(tail -n 1 "$W/dd.log")"
 sync
 rm -rf "$W"
-ui "Done. Reboot to System: the first start takes about 8 minutes (Samsung"
-ui "logo, a black screen for a while, then OneUI's lock screen)."
+ui "Done. Reboot to System: the first start takes a few minutes (Samsung"
+ui "logo, a black screen for a while, then the system's setup or lock screen)."
 exit 0
