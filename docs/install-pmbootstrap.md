@@ -89,16 +89,22 @@ like. Say yes to the SSH server if you want to log in from the PC.
 
 First build our packages: `pmbootstrap install` doesn't build them by itself, and the
 device package needs our builds (gnss-share 99990.8.2 and up, for example), which the
-postmarketOS repositories don't have:
+postmarketOS repositories don't have. Build them for the tablet, `--arch aarch64`:
+without it, the packages that build for any architecture (gnss-share, kwin, libcamera,
+iio-sensor-proxy, ocellus) are built for the PC, and `pmbootstrap install` then takes
+postmarketOS's own builds and fails (`breaks: device-samsung-gts3lwifi-gnss`, issue #19):
 
 ```sh
-pmbootstrap build linux-postmarketos-qcom-msm8996 device-samsung-gts3lwifi kwin libcamera iio-sensor-proxy gnss-share
+pmbootstrap build --arch aarch64 linux-postmarketos-qcom-msm8996 device-samsung-gts3lwifi kwin libcamera iio-sensor-proxy gnss-share ocellus
 ```
+
+`kwin` is for Plasma only: leave it out for another user interface (GNOME works too), and
+`ocellus` (the camera app, docs/camera.md) if you don't want it in the image.
 
 Then the image. Plasma:
 
 ```sh
-pmbootstrap install --add device-samsung-gts3lwifi-waydroid
+pmbootstrap install --add device-samsung-gts3lwifi-waydroid,ocellus
 ```
 
 Console (`networkmanager-tui` gives `nmtui` for setting up Wi-Fi):
@@ -199,7 +205,7 @@ or from lk2nd's fastboot with `pmbootstrap flasher flash_kernel`.
 
 To switch kernels, copy the kernel package of the other branch as in step 2 (the
 `rm`/`cp`/`mv`/`rm` lines for `linux-postmarketos-qcom-msm8996`), then
-`pmbootstrap build --force linux-postmarketos-qcom-msm8996`,
+`pmbootstrap build --force --arch aarch64 linux-postmarketos-qcom-msm8996`,
 `pmbootstrap sideload linux-postmarketos-qcom-msm8996`, and the `dd` above.
 
 ## Back to Android
