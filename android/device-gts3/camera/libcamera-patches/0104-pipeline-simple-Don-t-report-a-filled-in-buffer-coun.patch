@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 17 Nov 2026 16:32:56 +0000
+Subject: [PATCH] pipeline: simple: Don't report a filled in buffer count as an
+ adjustment
+
+validate() sets an unspecified (0) buffer count to the default and
+reports the configuration as Adjusted. Callers that leave the count to
+the pipeline handler then get Adjusted for a configuration they can use
+as it is: the Android camera HAL rejects every Adjusted configuration,
+so no stream could be configured on the simple pipeline. As for an
+unspecified color space, filling in the default isn't an adjustment;
+lowering a requested count still is.
+---
+ src/libcamera/pipeline/simple/simple.cpp | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/libcamera/pipeline/simple/simple.cpp b/src/libcamera/pipeline/simple/simple.cpp
+index 5c03eade..2d434dfc 100644
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -1427,13 +1427,15 @@ CameraConfiguration::Status SimpleCameraConfiguration::validate()
+ 			cfg.frameSize = format.planes[0].size;
+ 		}
+ 
++		/*
++		 * As for the color space, filling in an unspecified buffer count
++		 * isn't an adjustment, only lowering a requested one is.
++		 */
+ 		const unsigned int bufferCount = cfg.bufferCount;
+-		if (!bufferCount)
++		if (!bufferCount) {
+ 			cfg.bufferCount = kNumBuffersDefault;
+-		else if (bufferCount > kNumBuffersMax)
++		} else if (bufferCount > kNumBuffersMax) {
+ 			cfg.bufferCount = kNumBuffersMax;
+-
+-		if (cfg.bufferCount != bufferCount) {
+ 			LOG(SimplePipeline, Debug)
+ 				<< "Adjusting bufferCount from " << bufferCount
+ 				<< " to " << cfg.bufferCount;
+-- 
+2.34.1
+

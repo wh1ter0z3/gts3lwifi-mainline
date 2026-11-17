@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 17 Nov 2026 14:35:27 +0000
+Subject: [PATCH] subprojects: libyaml: Build from a local source tree
+
+The AOSP build runs meson without network, so the libyaml wrap can't be
+downloaded. With libyaml 0.2.5's source in subprojects/yaml-0.2.5 (a
+repo project of its own), this meson.build builds it there, as a static
+library with the version defines its CMake build sets.
+---
+ subprojects/yaml-0.2.5/meson.build | 36 ++++++++++++++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+ create mode 100644 subprojects/yaml-0.2.5/meson.build
+
+diff --git a/subprojects/yaml-0.2.5/meson.build b/subprojects/yaml-0.2.5/meson.build
+new file mode 100644
+index 00000000..653e3eed
+--- /dev/null
++++ b/subprojects/yaml-0.2.5/meson.build
+@@ -0,0 +1,36 @@
++# SPDX-License-Identifier: CC0-1.0
++#
++# libyaml 0.2.5 (upstream source in this directory, MIT), for builds that
++# can't download the wrap (AOSP's build sandbox): a static library with the
++# version defines its CMake build sets.
++
++project('yaml', 'c', version : '0.2.5', license : 'MIT')
++
++yaml_defs = [
++    '-DYAML_VERSION_MAJOR=0',
++    '-DYAML_VERSION_MINOR=2',
++    '-DYAML_VERSION_PATCH=5',
++    '-DYAML_VERSION_STRING="0.2.5"',
++    '-DYAML_DECLARE_STATIC',
++]
++
++yaml_inc = include_directories('include')
++
++yaml_lib = static_library('yaml',
++                          files([
++                              'src/api.c',
++                              'src/dumper.c',
++                              'src/emitter.c',
++                              'src/loader.c',
++                              'src/parser.c',
++                              'src/reader.c',
++                              'src/scanner.c',
++                              'src/writer.c',
++                          ]),
++                          c_args : yaml_defs + ['-Wno-unused-value'],
++                          include_directories : yaml_inc,
++                          pic : true)
++
++yaml_dep = declare_dependency(link_with : yaml_lib,
++                              include_directories : yaml_inc,
++                              compile_args : ['-DYAML_DECLARE_STATIC'])
+-- 
+2.34.1
+

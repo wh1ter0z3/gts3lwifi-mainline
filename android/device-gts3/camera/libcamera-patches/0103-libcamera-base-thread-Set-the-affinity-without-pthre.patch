@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 17 Nov 2026 14:40:31 +0000
+Subject: [PATCH] libcamera: base: thread: Set the affinity without
+ pthread_setaffinity_np() on bionic
+
+Android's C library has no pthread_setaffinity_np(). Set the affinity by
+thread ID with sched_setaffinity() there: from the new thread itself once
+it runs, and by its ID when it is changed for a running thread.
+---
+ src/libcamera/base/thread.cpp | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/libcamera/base/thread.cpp b/src/libcamera/base/thread.cpp
+index b204355a..bf4b82b0 100644
+--- a/src/libcamera/base/thread.cpp
++++ b/src/libcamera/base/thread.cpp
+@@ -11,6 +11,7 @@
+ #include <list>
+ #include <optional>
+ #include <pthread.h>
++#include <sched.h>
+ #include <sys/syscall.h>
+ #include <sys/types.h>
+ #include <unistd.h>
+@@ -263,7 +264,9 @@ void Thread::start()
+ 
+ 	thread_ = std::thread(&Thread::startThread, this);
+ 
++#if !defined(__BIONIC__)
+ 	setThreadAffinityInternal();
++#endif
+ }
+ 
+ void Thread::startThread()
+@@ -291,6 +294,14 @@ void Thread::startThread()
+ 	data_->tid_ = syscall(SYS_gettid);
+ 	currentThreadData = data_.get();
+ 
++#if defined(__BIONIC__)
++	/* No pthread_setaffinity_np(): the new thread sets its own affinity */
++	{
++		MutexLocker locker(data_->mutex_);
++		setThreadAffinityInternal();
++	}
++#endif
++
+ 	if (!name_.empty())
+ 		pthread_setname_np(pthread_self(), name_.substr(0, 15).c_str());
+ 
+@@ -462,7 +473,12 @@ void Thread::setThreadAffinityInternal()
+ 		return;
+ 
+ 	const cpu_set_t &cpuset = data_->cpuset_.value();
++#if defined(__BIONIC__)
++	/* Bionic has no pthread_setaffinity_np(): by thread ID */
++	sched_setaffinity(data_->tid_, sizeof(cpuset), &cpuset);
++#else
+ 	pthread_setaffinity_np(thread_.native_handle(), sizeof(cpuset), &cpuset);
++#endif
+ }
+ 
+ /**
+-- 
+2.34.1
+

@@ -1,0 +1,11 @@
+# Copyright (C) 2026 The gts3lwifi-mainline project
+# SPDX-License-Identifier: Apache-2.0
+#
+# libcamera in the camera provider: CAMSS video, media and sub-device nodes,
+# dma-buf heaps for the software ISP, sysfs to find the devices, and its IPA
+# module's isolated process (when the module isn't signed)
+
+allow hal_camera_default video_device:dir r_dir_perms;
+allow hal_camera_default video_device:chr_file rw_file_perms;
+allow hal_camera_default dmabuf_system_heap_device:chr_file r_file_perms;
+r_dir_file(hal_camera_default, sysfs)

@@ -51,7 +51,7 @@ index 0000000..d99361e
 +    onrestart restart surfaceflinger
 +    task_profiles ServiceCapacityLow
 diff --git a/cros_gralloc/cros_gralloc_helpers.cc b/cros_gralloc/cros_gralloc_helpers.cc
-index 67a53a0..f4683c0 100644
+index 945552c..b8ba237 100644
 --- a/cros_gralloc/cros_gralloc_helpers.cc
 +++ b/cros_gralloc/cros_gralloc_helpers.cc
 @@ -32,7 +32,19 @@ uint32_t cros_gralloc_convert_format(int format)
@@ -75,6 +75,25 @@ index 67a53a0..f4683c0 100644
  	case HAL_PIXEL_FORMAT_RGB_888:
  		return DRM_FORMAT_BGR888;
  	/*
+diff --git a/cros_gralloc/gralloc0/gralloc0.cc b/cros_gralloc/gralloc0/gralloc0.cc
+index b6f493d..f3ef50b 100644
+--- a/cros_gralloc/gralloc0/gralloc0.cc
++++ b/cros_gralloc/gralloc0/gralloc0.cc
+@@ -81,7 +81,13 @@ static int gralloc0_alloc(alloc_device_t *dev, int w, int h, int format, int usa
+ 	descriptor.droid_usage = usage;
+ 	descriptor.drm_format = cros_gralloc_convert_format(format);
+ 	descriptor.use_flags = cros_gralloc_convert_usage(usage);
+-	descriptor.enable_metadata_fd = false;
++	/*
++	 * gts3: the metadata region too, as for the allocator service's
++	 * buffers: allocate() initializes the metadata in it and fails
++	 * without it, so every gralloc0 allocation failed (libcamera's
++	 * Android HAL allocates through gralloc0).
++	 */
++	descriptor.enable_metadata_fd = true;
+ 
+ 	if (!mod->driver->is_supported(&descriptor)) {
+ 		ALOGE("Unsupported combination -- HAL format: %u, HAL usage: %u, "
 diff --git a/cros_gralloc/mapper_stablec/Android.bp b/cros_gralloc/mapper_stablec/Android.bp
 index 401c177..25ba205 100644
 --- a/cros_gralloc/mapper_stablec/Android.bp

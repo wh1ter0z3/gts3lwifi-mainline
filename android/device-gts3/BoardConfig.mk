@@ -81,3 +81,7 @@ BOARD_MESA3D_MESON_ARGS := -Dfreedreno-kmds=msm
 BOARD_WPA_SUPPLICANT_DRIVER := NL80211
 BOARD_HOSTAPD_DRIVER := NL80211
 WPA_SUPPLICANT_VERSION := VER_0_8_X
+
+# --- Camera: libcamera through aospext (camera/libcamera.mk) ---
+BOARD_LIBCAMERA_SRC_DIR := vendor/camera/libcamera
+BOARD_LIBCAMERA_PATCHES_DIRS := $(DEVICE_PATH)/camera/libcamera-patches

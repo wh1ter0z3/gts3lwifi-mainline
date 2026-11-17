@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jayden Milne <linux@jayd.ml>
+Date: Fri, 30 Oct 2026 23:15:29 -0600
+Subject: [PATCH] libcamera: software_isp: Pad the output frame size to whole
+ line groups
+
+Hardware consumers of the software ISP output buffers may read them in
+groups of lines, past the last line of the frame. The Venus video
+encoder of the Qualcomm MSM8996 reads RGBA input in groups of 32 lines,
+and its kernel driver rejects dma-bufs smaller than that, so a 3840x2160
+frame, whose height is not a multiple of 32, can't be imported for
+encoding.
+
+Size the output buffers for the height rounded up to a multiple of 32
+lines, as V4L2 drivers do with sizeimage. The stride and the lines that
+are written don't change.
+
+Signed-off-by: Jayden Milne <linux@jayd.ml>
+Assisted-by: Claude:claude-opus-5-5
+
+[psigod: ported to libcamera 0.8.0, which computes strides and frame
+ sizes with PixelFormatInfo]
+---
+ src/libcamera/software_isp/debayer.cpp     | 9 +++++++++
+ src/libcamera/software_isp/debayer.h       | 2 ++
+ src/libcamera/software_isp/debayer_cpu.cpp | 8 ++++++--
+ src/libcamera/software_isp/debayer_egl.cpp | 8 ++++++--
+ 4 files changed, 23 insertions(+), 4 deletions(-)
+
+diff --git a/src/libcamera/software_isp/debayer.cpp b/src/libcamera/software_isp/debayer.cpp
+index a038a998..89e09fd8 100644
+--- a/src/libcamera/software_isp/debayer.cpp
++++ b/src/libcamera/software_isp/debayer.cpp
+@@ -281,6 +281,15 @@ Debayer::~Debayer()
+  * reversed.
+  */
+ 
++/**
++ * \var Debayer::kOutputHeightAlign
++ * \brief Line alignment of the output frame size
++ *
++ * Hardware consumers of the output buffers, such as video encoders, may read
++ * the frame in groups of lines and past its last line. The output frame size
++ * covers the frame height rounded up to a multiple of this number of lines.
++ */
++
+ /**
+  * \var Debayer::bench_
+  * \brief Benchmarking utility instance for performance measurements
+diff --git a/src/libcamera/software_isp/debayer.h b/src/libcamera/software_isp/debayer.h
+index f0ebdf59..1f272dcc 100644
+--- a/src/libcamera/software_isp/debayer.h
++++ b/src/libcamera/software_isp/debayer.h
+@@ -87,6 +87,8 @@ private:
+ 	virtual Size patternSize(PixelFormat inputFormat) = 0;
+ 
+ protected:
++	static constexpr unsigned int kOutputHeightAlign = 32;
++
+ 	void dmaSyncBegin(std::vector<DmaSyncer> &dmaSyncers, FrameBuffer *input, FrameBuffer *output);
+ 	static bool isStandardBayerOrder(BayerFormat::Order order);
+ };
+diff --git a/src/libcamera/software_isp/debayer_cpu.cpp b/src/libcamera/software_isp/debayer_cpu.cpp
+index 91867baa..9d1026cb 100644
+--- a/src/libcamera/software_isp/debayer_cpu.cpp
++++ b/src/libcamera/software_isp/debayer_cpu.cpp
+@@ -763,9 +763,13 @@ std::vector<PixelFormat> DebayerCpu::formats(PixelFormat inputFormat)
+ std::tuple<unsigned int, unsigned int>
+ DebayerCpu::strideAndFrameSize(const PixelFormat &outputFormat, const Size &size)
+ {
+-	/* round up to multiple of 8 for 64 bits alignment */
++	/*
++	 * round up to multiple of 8 for 64 bits alignment, and the frame size
++	 * to whole groups of kOutputHeightAlign lines
++	 */
+ 	const PixelFormatInfo &info = PixelFormatInfo::info(outputFormat);
+-	return std::make_tuple(info.stride(size.width, 0, 8), info.frameSize(size, 8));
++	const Size padded(size.width, utils::alignUp(size.height, kOutputHeightAlign));
++	return std::make_tuple(info.stride(size.width, 0, 8), info.frameSize(padded, 8));
+ }
+ 
+ void DebayerCpuThread::setupInputMemcpy(const uint8_t *linePointers[])
+diff --git a/src/libcamera/software_isp/debayer_egl.cpp b/src/libcamera/software_isp/debayer_egl.cpp
+index df0d9c99..92317ef1 100644
+--- a/src/libcamera/software_isp/debayer_egl.cpp
++++ b/src/libcamera/software_isp/debayer_egl.cpp
+@@ -388,9 +388,13 @@ std::vector<PixelFormat> DebayerEGL::formats(PixelFormat inputFormat)
+ std::tuple<unsigned int, unsigned int>
+ DebayerEGL::strideAndFrameSize(const PixelFormat &outputFormat, const Size &size)
+ {
+-	/* Align stride to 256 bytes as a generic GPU memory access alignment */
++	/*
++	 * Align stride to 256 bytes as a generic GPU memory access alignment,
++	 * and the frame size to whole groups of kOutputHeightAlign lines.
++	 */
+ 	const PixelFormatInfo &info = PixelFormatInfo::info(outputFormat);
+-	return std::make_tuple(info.stride(size.width, 0, 256), info.frameSize(size, 256));
++	const Size padded(size.width, libcamera::utils::alignUp(size.height, kOutputHeightAlign));
++	return std::make_tuple(info.stride(size.width, 0, 256), info.frameSize(padded, 256));
+ }
+ 
+ uint32_t DebayerEGL::preferredInputStride(const PixelFormat &inputFormat, const Size &size)
+-- 
+2.34.1
+

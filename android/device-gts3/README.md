@@ -35,6 +35,7 @@ this kind; see NOTICE for what comes from it.
 | Battery | our health HAL (`hal/health`), with Samsung's ISehHealth for OneUI |
 | Lights | our lights HAL (`hal/lights`): backlight, touch key LED |
 | Sensors | AOSP's AIDL multihal with our IIO sub-HAL (`hal/sensors`): accelerometer, gyroscope, magnetometer, light, from the SLPI |
+| Camera | libcamera 0.8.0 (Nura's patch series plus `camera/libcamera-patches/01xx`) with its Android HAL3 module under STMicroelectronics' AIDL provider: IMX258 rear (autofocus), S5K5E3 front; preview and JPEG together from one software-ISP stream (rear ~8 fps preview with a 13 MP JPEG stream, front ~14 fps) |
 | GNSS | our AIDL HAL (`hal/gnss`) on the modem DSP's QMI LOC service; Linaro's rmtfs and tqftpserv run the modem. NMEA and engine tested indoors; a fix at a window still to test |
 | USB | AOSP port HAL; adb/MTP/PTP gadget on configfs |
 | Security | software KeyMint and Gatekeeper |
@@ -42,7 +43,7 @@ this kind; see NOTICE for what comes from it.
 | OneUI | stand-ins for Samsung HALs its system_server waits for (`hal/samsung`) |
 
 To do, each tested on the tablet before it goes in: the hall sensor (cover),
-headphone/headset routing, Bluetooth audio, camera (libcamera), Vulkan (turnip on a5xx),
+headphone/headset routing, Bluetooth audio, camera speed (a GPU software ISP) and rotation check, Vulkan (turnip on a5xx),
 deep sleep, SELinux enforcing (vendor policy for all of the above), kernel
 modules and firmware links from this build instead of
 `gsi/tools/mkvendor-standalone.sh`.
