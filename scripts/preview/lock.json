@@ -76,9 +76,10 @@
     "lk2nd/preview-base.patch"
    ],
    "donor_sha256": "711de03562e395e0f5777f56624656481867ffb492494aff2273ea8f0a9684a2",
-   "image_sha256": "008ae3e979f06d09f275906f12830e2967de27875c2e6710833644f225444fe5",
-   "version": "22.0-next-b9600bfa-20261028",
-   "build_sha256": "0cbe2a0d49f1d3cb7333e2787e687bfa42f4222af5f9b544e58da30f2eaa7b2f"
+   "image_sha256": "f925f8071b7d2c21e4a3ac917106c2c81d801eb39c6752554c83af5320c906c9",
+   "version": "22.0-next-15a34423-20260327-dirty",
+   "build_sha256": "0cbe2a0d49f1d3cb7333e2787e687bfa42f4222af5f9b544e58da30f2eaa7b2f",
+   "note": "released as lk2nd-v1 (2026-09-22) and on our SM-T820 (read back 2026-11-17); this release ships it unchanged"
   },
   "t825": {
    "dtb": "msm8996-samsung-gts3llte",
