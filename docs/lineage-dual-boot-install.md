@@ -33,9 +33,9 @@ The microSD card isn't touched: both systems share it as their storage.
 
 ## What you need
 
-- The dual boot release: `gts3-dualboot-test1.zip`, `nura-root.img.xz` and
+- The dual boot release: `gts3-dualboot-test2.zip`, `nura-root.img.xz` and
   its `.sha256`, plus the lk2nd files for your model, from
-  [the release page](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test1).
+  [the release page](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test2).
 - Jayden's LineageOS 24 zip for your model, from
   [his releases](https://github.com/jaydens-tasty-slop/tabs3-lineageos/releases).
 - The add-on: `gts3-lineage-data.zip`. It is not in a release yet, so build

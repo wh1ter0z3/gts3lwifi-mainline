@@ -14,7 +14,7 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 Nura (postmarketOS with Plasma) and an Android side by side on internal
 storage, plus OrangeFox on our kernel. lk2nd picks one at every start, and
 they switch without a PC. [How it works](docs/dual-boot.md),
-[release notes](docs/release-notes-dualboot-test1.md).
+[release notes](docs/release-notes-dualboot-test2.md).
 
 Both Androids keep Nura, so the choice is only which Android:
 

@@ -41,7 +41,7 @@ start. Don't wipe them.
 ## What you need
 
 - These files from the release, in one folder:
-  - `gts3-dualboot-test1.zip`: the installer, with lk2nd v2 for both models,
+  - `gts3-dualboot-test2.zip`: the installer, with lk2nd v2 for both models,
     our vendor and kernel, the recovery, Nura's boot files, and the PC
     installer in `pc/`;
   - `nura-root.img.xz` and `nura-root.img.xz.sha256`: Nura's system (1.5 GB).
@@ -62,7 +62,7 @@ slot.
    folder on the **microSD card** or a USB drive. Not on internal storage:
    that's what gets erased.
 2. Start the recovery: power off, then hold **Power + Volume Up + Home**.
-3. Install, pick `gts3-dualboot-test1.zip`, swipe. It checks the files first.
+3. Install, pick `gts3-dualboot-test2.zip`, swipe. It checks the files first.
    If one is damaged it stops before changing anything. Then it takes 10 to
    15 minutes.
 4. It ends with "Done". Reboot, System.
@@ -97,8 +97,8 @@ On Arch: `pacman -S android-tools e2fsprogs util-linux cpio unzip xz python`.
 3. In the folder with the files:
 
    ```
-   unzip gts3-dualboot-test1.zip 'pc/*'
-   sh pc/install-dualboot.sh --zip gts3-dualboot-test1.zip --root nura-root.img.xz \
+   unzip gts3-dualboot-test2.zip 'pc/*'
+   sh pc/install-dualboot.sh --zip gts3-dualboot-test2.zip --root nura-root.img.xz \
        --gsi system-td-arm64-vanilla.img.xz
    ```
 
