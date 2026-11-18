@@ -196,6 +196,19 @@ if [ "$PARTS" = 1 ]; then
 		fail "no file system on android_data $D (the installer makes it)"
 	mkdir -p "$SM$GSI_DIR"
 	log "partitions: system $SYSIMG, vendor $VENIMG, data $D"
+	# The clock: the RTC can't be set, so the boot partition (shared with
+	# Nura) has the offset from the RTC to the real time (/gts3/clock, see
+	# gts3-clock in the device package); the clock keeper below stores it
+	# again when Android's time gets set
+	CLOCKDEV=$(sub_dev gts3_boot) || CLOCKDEV=
+	if [ -n "$CLOCKDEV" ] && mkdir -p /gts3boot && mount -t ext2 -o ro "$CLOCKDEV" /gts3boot; then
+		off=$(sed -n 's/^offset=\(-\{0,1\}[0-9]\{1,\}\)$/\1/p' /gts3boot/gts3/clock 2>/dev/null | head -n 1)
+		umount /gts3boot
+		if [ -n "$off" ] && [ $(($(cat /sys/class/rtc/rtc0/since_epoch) + off)) -ge 1790000000 ]; then
+			date -u -s "@$(($(cat /sys/class/rtc/rtc0/since_epoch) + off))" > /dev/null &&
+				log "clock: $(date -u '+%F %T') UTC from the RTC and the shared offset"
+		fi
+	fi
 elif [ $STANDALONE = 1 ]; then
 	P=$(part_dev userdata) || fail "no userdata partition"
 	# the store: userdata itself, else a partition in a disk image on it
@@ -808,6 +821,36 @@ EOT
 fi
 
 echo -1000 > $N/proc/$!/oom_score_adj
+
+# Clock keeper (partitions layout): once Android's time is set (network or
+# by hand: more than 2 s away from where it started), store the new offset
+# from the RTC on the shared boot partition for the next boot of either system
+if [ -n "${CLOCKDEV:-}" ]; then
+	cat > /tmp/clockkeeper.sh <<'EOT'
+#!/vendor/bin/busybox sh
+B=/vendor/bin/busybox
+R=/sys/class/rtc/rtc0/since_epoch
+M=/mnt/vendor/gts3clock
+base=$(( $($B date -u +%s) - $($B cat $R) ))
+while :; do
+	$B sleep 60
+	now=$($B date -u +%s)
+	off=$((now - $($B cat $R)))
+	d=$((off - base))
+	[ $d -gt 2 ] || [ $d -lt -2 ] || continue
+	[ $now -ge 1790000000 ] || continue
+	$B mkdir -p $M
+	$B mount -t ext2 "$1" $M || continue
+	$B mkdir -p $M/gts3 && echo "offset=$off" > $M/gts3/clock.new && $B sync &&
+		$B mv $M/gts3/clock.new $M/gts3/clock && base=$off
+	$B sync
+	$B umount $M
+done
+EOT
+	mkdir -p $N/dev/gsi && cp /tmp/clockkeeper.sh $N/dev/gsi/clockkeeper.sh
+	chroot $N $B setsid $B sh /dev/gsi/clockkeeper.sh "/dev/block/${CLOCKDEV#/dev/}" &
+	echo -1000 > $N/proc/$!/oom_score_adj
+fi
 
 if [ "$DEADMAN" -gt 0 ]; then
 	chroot $N $B setsid $B sh -c "$B sleep $((DEADMAN * 60)); [ -f $SMA$GSI_DIR/keep ] || $B reboot -f" &
