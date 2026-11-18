@@ -288,6 +288,8 @@ This is the only way a ROM can sit next to Nura: it needs a whole boot
 partition and a whole /data, and lk2nd can only boot it through S-Boot.
 (On our SM-T820, lk2nd starting a 3.18 kernel itself resets the tablet.)
 
+User guide: [lineage-dual-boot-install.md](lineage-dual-boot-install.md).
+
 ### LineageOS's /data: the add-on
 
 [scripts/dualboot/lineage](../scripts/dualboot/lineage) makes

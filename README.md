@@ -15,7 +15,9 @@ Nura (postmarketOS) and Android (any GSI on our open vendor) side by side on
 internal storage, with OrangeFox on our kernel; lk2nd's menu picks one, and
 they switch without a PC. Test build, tested on an SM-T820 without a screen:
 [install](docs/dual-boot-install.md), [how it works](docs/dual-boot.md),
-[release notes](docs/release-notes-dualboot-test1.md).
+[release notes](docs/release-notes-dualboot-test1.md). Jayden's LineageOS 24
+can take Android's place, from its own zip:
+[install](docs/lineage-dual-boot-install.md).
 
 ## Models
 
