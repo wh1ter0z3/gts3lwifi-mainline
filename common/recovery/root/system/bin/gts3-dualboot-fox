@@ -10,18 +10,21 @@
 # never Nura, lk2nd's menu or the layout. Nura's root and the Android images
 # are listed for backups.
 #
-# Offsets are worked out in awk: mksh computes in 32 bits.
+# Offsets are worked out in awk: mksh computes in 32 bits. The recovery's
+# sgdisk (Android's build) takes long options only.
+# no heredocs: Android's mksh writes them to $TMPDIR, /data/local/tmp
+export TMPDIR=/tmp
 UD=/dev/block/bootdevice/by-name/userdata
 FLAGS=/system/etc/twrp.flags
 G=/dev/block/gts3
 
 exec > /tmp/gts3-dualboot.log 2>&1
 [ -b $UD ] || { echo "no userdata partition"; exit 0; }
-sgdisk -p $UD > /tmp/gts3-dualboot.gpt 2>&1 || { echo "no GPT in userdata"; exit 0; }
+sgdisk --print $UD > /tmp/gts3-dualboot.gpt 2>&1 || { echo "no GPT in userdata"; exit 0; }
 grep -q " gts3_boot$" /tmp/gts3-dualboot.gpt || { echo "userdata isn't the dual boot layout"; exit 0; }
 
 mkdir -p $G
-# sgdisk -p: number, first sector, last sector, size, unit, code, name
+# sgdisk --print: number, first sector, last sector, size, unit, code, name
 awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ { print $1, $2, $3, $NF }' /tmp/gts3-dualboot.gpt |
 while read -r n first last name; do
 	off=$(awk -v f="$first" 'BEGIN { printf "%.0f", f * 512 }')
@@ -35,13 +38,13 @@ done
 [ -e $G/android_data ] || { echo "no android_data: /data left as it is"; exit 0; }
 # /data: android_data, without the crypto footer reserve userdata had
 sed -i 's|^/data[[:space:]].*|/data           ext4    /dev/block/gts3/android_data     flags=display="Data (Android)"|' $FLAGS
-cat >> $FLAGS <<EOF
-
-# Dual boot layout in userdata (added at start by gts3-dualboot-fox)
-/nura           ext4    /dev/block/gts3/nura            flags=display="Nura (postmarketOS)";backup=1
-/gts3boot       emmc    /dev/block/gts3/gts3_boot       flags=display="Dual boot: menu, kernels";backup=1
-/android_system emmc    /dev/block/gts3/android_system  flags=display="Android system image";backup=1;flashimg=1
-/android_vendor emmc    /dev/block/gts3/android_vendor  flags=display="Android vendor image";backup=1;flashimg=1
-EOF
+{
+	echo
+	echo "# Dual boot layout in userdata (added at start by gts3-dualboot-fox)"
+	echo '/nura           ext4    /dev/block/gts3/nura            flags=display="Nura (postmarketOS)";backup=1'
+	echo '/gts3boot       emmc    /dev/block/gts3/gts3_boot       flags=display="Dual boot: menu, kernels";backup=1'
+	echo '/android_system emmc    /dev/block/gts3/android_system  flags=display="Android system image";backup=1;flashimg=1'
+	echo '/android_vendor emmc    /dev/block/gts3/android_vendor  flags=display="Android vendor image";backup=1;flashimg=1'
+} >> $FLAGS
 setprop ro.gts3.dualboot 1
 echo "twrp.flags: /data is android_data"
