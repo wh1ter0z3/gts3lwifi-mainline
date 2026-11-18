@@ -3,8 +3,8 @@
 # Nura (postmarketOS) and, if its files are there, our Android (any GSI on
 # our vendor), side by side on internal storage, with lk2nd v2 to choose.
 #
-# Put this zip, nura-root.simg and (for Android) the GSI (system.img, .img.xz,
-# or a zip with system.img) in one folder on the microSD card or a USB drive,
+# Put this zip, nura-root.simg and (for Android) the GSI (named *system* or
+# *gsi*: .img, .img.xz, or a zip with system.img) in one folder on the microSD card or a USB drive,
 # then Install this zip. It ERASES the userdata partition (internal storage:
 # all Android data, a postmarketOS install), makes the layout in it, writes
 # both systems and flashes lk2nd v2 to the start of the boot partition.
@@ -90,7 +90,11 @@ LK2ND=lk2nd-$MODEL.img
 [ -s "$LK2ND" ] || die "no $LK2ND in the zip: no lk2nd v2 for this model yet"
 ROOT=$DIR/nura-root.simg
 [ -f "$ROOT" ] || die "put nura-root.simg next to this zip"
-GSI=${GSI:-$(ls "$DIR"/*.img "$DIR"/*.img.xz "$DIR"/*system*.zip 2> /dev/null | grep -v nura-root | head -n 1)}
+# the GSI: a system image by its name (other images may be in the folder)
+if [ -z "${GSI:-}" ]; then
+	GSI=$(ls "$DIR"/*system*.img "$DIR"/*system*.img.xz "$DIR"/*gsi*.img "$DIR"/*gsi*.img.xz \
+		"$DIR"/*system*.zip "$DIR"/*gsi*.zip 2> /dev/null | grep -v -e nura-root -e "$(basename "$ZIP")" | head -n 1)
+fi
 [ -n "$GSI" ] && ui "Android: $(basename "$GSI")" || ui "No GSI next to the zip: Nura only"
 ui "Checking the zip..."
 zsum nura-boot.tar || die "nura-boot.tar in the zip is damaged, download it again"
@@ -151,11 +155,29 @@ attach() {	# <loop device> <offset> <size>, in bytes
 		$LOSETUP -o "$2" -S "$3" "$1" "$DATA_DEV"
 	fi
 }
+# a free loop device. losetup -f may add one to the kernel and then fail to
+# open it: in a recovery on our mainline kernel, ueventd makes no nodes after
+# its coldboot. So the nodes are made here, then it is asked again.
+loopnodes() {
+	for s in /sys/block/loop*; do
+		[ -r "$s/dev" ] || continue
+		d=/dev/block/${s##*/}
+		[ -b "$d" ] || { mm=$(cat "$s/dev") && mknod "$d" b "${mm%:*}" "${mm#*:}"; }
+	done
+}
+newloop() {
+	for t in 1 2 3 4; do
+		loopnodes
+		d=$($LOSETUP -f 2> /dev/null) && [ -b "$d" ] && { echo "$d"; return 0; }
+		sleep 0.3
+	done
+	return 1
+}
 : > "$W/loops"
 for n in 1 2 3 4 5; do
 	f=$(first $n) l=$(last $n)
 	name=$(awk -v n="$n" '$1 == n { print $NF }' "$W/gpt")
-	dev=$($LOSETUP -f) || die "no free loop device"
+	dev=$(newloop) || die "no free loop device"
 	attach "$dev" $((f * 512)) $(((l - f + 1) * 512)) || die "losetup $name"
 	echo "$dev" >> "$W/loops"
 	ln -sf "$dev" "$G/$name"

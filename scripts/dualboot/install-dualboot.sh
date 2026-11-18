@@ -156,6 +156,12 @@ if [ -n "$PAYLOAD" ]; then
 	P=$(cd "$PAYLOAD" && pwd)
 	tar -C "$B" --numeric-owner --owner=0 --group=0 -cf "$P/nura-boot.tar" .
 	e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
+	# the recoveries' e2fsprogs (1.45) don't know orphan_file (1.47's mke2fs
+	# default) and refuse to check or resize the file system with it
+	if dumpe2fs -h "$N/root.img" 2> /dev/null | grep -q "features:.*orphan_file"; then
+		tune2fs -O ^orphan_file "$N/root.img" > /dev/null || die "can't drop orphan_file from Nura's root"
+		e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
+	fi
 	debugfs -w -R "mkdir /etc/mkinitfs/hooks" "$N/root.img" > /dev/null 2>&1 || true
 	debugfs -w -R "write $HOOK /etc/mkinitfs/hooks/20-gts3-dualboot.sh" "$N/root.img" > /dev/null 2>&1
 	for f in "uid 0" "gid 0" "mode 0100644"; do
