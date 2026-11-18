@@ -115,15 +115,16 @@ for l in $LOOPS; do $LOSETUP -d "$l" || die "can't free $l"; done
 
 ui "Making the layout in userdata..."
 ERASED=1
-$SGDISK -Z "$DATA_DEV" > /dev/null 2>&1
-$SGDISK -o \
-	-n 1:2048:+512M -t 1:EF00 -c 1:gts3_boot \
-	-n 2:0:+"$SYSTEM" -t 2:8300 -c 2:android_system \
-	-n 3:0:+"$VENDOR" -t 3:8300 -c 3:android_vendor \
-	-n 4:0:+"$DATA" -t 4:8300 -c 4:android_data \
-	-n 5:0:0 -t 5:8300 -c 5:nura \
+# long options only: the recoveries' sgdisk (Android's build) has no short ones
+$SGDISK --zap-all "$DATA_DEV" > /dev/null 2>&1
+$SGDISK --clear \
+	--new=1:2048:+512M --typecode=1:EF00 --change-name=1:gts3_boot \
+	--new=2:0:+"$SYSTEM" --typecode=2:8300 --change-name=2:android_system \
+	--new=3:0:+"$VENDOR" --typecode=3:8300 --change-name=3:android_vendor \
+	--new=4:0:+"$DATA" --typecode=4:8300 --change-name=4:android_data \
+	--new=5:0:0 --typecode=5:8300 --change-name=5:nura \
 	"$DATA_DEV" > "$W/sgdisk.log" 2>&1 || die "sgdisk: $(tail -n 1 "$W/sgdisk.log")"
-$SGDISK -p "$DATA_DEV" > "$W/gpt" 2>&1 || die "no GPT after sgdisk"
+$SGDISK --print "$DATA_DEV" > "$W/gpt" 2>&1 || die "no GPT after sgdisk"
 
 # start and last sector of partition $1
 first() { awk -v n="$1" '$1 == n { print $2 }' "$W/gpt"; }
