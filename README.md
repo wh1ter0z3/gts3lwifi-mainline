@@ -9,6 +9,14 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
   (see [docs/kernel-7.3.md](docs/kernel-7.3.md)), packaged as postmarketOS `linux-postmarketos-qcom-msm8996`
   with our patches (`pmaports/`)
 
+## Dual boot (test)
+
+Nura (postmarketOS) and Android (any GSI on our open vendor) side by side on
+internal storage, with OrangeFox on our kernel; lk2nd's menu picks one, and
+they switch without a PC. Test build, tested on an SM-T820 without a screen:
+[install](docs/dual-boot-install.md), [how it works](docs/dual-boot.md),
+[release notes](docs/release-notes-dualboot-test1.md).
+
 ## Models
 
 One kernel and one device package boot both models: the package carries both

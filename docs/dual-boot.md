@@ -290,18 +290,42 @@ Both make the same install, on an erased userdata partition:
 - Nura from its release image, keeping the boot and root UUIDs, with the
   initramfs hook built in;
 - optionally our Android (GSI + vendor);
+- OrangeFox on our kernel, as the `orangefox` entry (not `recovery`: lk2nd's
+  menu already has a *Recovery* item, the recovery partition);
 - lk2nd v2.
 
+A release is one zip and Nura's root, `nura-root.img.xz` (raw ext4, xz'd:
+release files must stay under 2 GiB, and a sparse image can't be read from a
+pipe). Both installers take the same two files. User guide:
+[dual-boot-install.md](dual-boot-install.md).
+
+The Android files in the zip (`android/`) serve both models:
+- `dtb/` has a device tree per model: the kernel's own, plus the APSS
+  watchdog;
+- `recovery/` has the recovery's ramdisk, and a device tree per model with
+  `/firmware/android` added;
+- `cmdline` is for a tablet with a screen: none of the bare-board debug
+  options (`gsi.vkms`, `gsi.deadman`, `video=DSI-1:d`).
+
 **PC:** [scripts/dualboot/install-dualboot.sh](../scripts/dualboot/install-dualboot.sh)
-builds the userdata image here and flashes it with lk2nd's fastboot.
-`--image` only builds it. Tested that way on 2026-11-18 (the layout, files,
-UUIDs and hybrid MBR were right); not flashed to a tablet yet.
+`--zip <zip> --root nura-root.img.xz [--gsi <GSI>]` (the zip carries it in
+`pc/`). It builds the userdata image here and flashes it with lk2nd's
+fastboot. `--image` only builds it. `--nura <postmarketOS userdata image>
+--android DIR` builds from a pmOS image instead. Not flashed to a tablet
+yet. Tested with `--image` on 2026-11-18, with the dualboot-test1 files,
+as an SM-T825, and everything was right:
+- the layout and the hybrid MBR;
+- the T825's device trees in all three entries;
+- the files byte for byte;
+- the UUIDs;
+- Nura's root.
 
 **OrangeFox / TWRP:** [scripts/dualboot/twrp/update-binary](../scripts/dualboot/twrp/update-binary).
 `install-dualboot.sh --payload DIR` writes its inputs, and
 [mkdualbootzip.sh](../scripts/dualboot/twrp/mkdualbootzip.sh) packs the zip.
-nura-root.simg (with its .sha256) goes next to the zip, and so does the GSI
-if wanted (named `*system*` or `*gsi*`). In the zip:
+nura-root.img.xz (with its .sha256) goes next to the zip, and so does the GSI
+if wanted (named `*system*` or `*gsi*`). On our kernel the zip reads the
+model from the device tree, so one recovery serves both. In the zip:
 - the layout is made with the recovery's sgdisk (long options only, since
   Android's build has no short ones);
 - the partitions are written through loop devices, with their nodes made
@@ -338,3 +362,30 @@ command line makes lk2nd append S-Boot's command line. It needs:
 It runs on our bare SM-T820, where the 3.18 OrangeFox resets after a few
 minutes, with adb, the GUI on vkms, the dual boot mode and the exFAT card.
 USB is adb only: mainline has no MTP gadget function.
+
+The dualboot-test1 zip ran inside it too (2026-11-18), with the release
+files and the 9 GB image on the microSD card: 587 s. It found the model
+from the device tree, and wrote:
+- the three entries with the SM-T820's device trees;
+- Nura's root, from the xz;
+- the vendor, system image and lk2nd byte for byte.
+
+### Making a release
+
+1. Android's files in one folder:
+   - `Image.gz`, `initramfs` (gsi-init with `gsi.parts`), `vendor.img`;
+   - `cmdline`, without the bare-board options;
+   - `dtb/` and `recovery/`, with their device trees from
+     [mkandroiddtbs.sh](../scripts/dualboot/mkandroiddtbs.sh)
+     `<kernel's dts/qcom> <folder>`;
+   - `recovery/ramdisk` (OrangeFox, `GTS3_KERNEL=mainline`) and
+     `recovery/cmdline`.
+2. `install-dualboot.sh --nura <Nura's userdata.simg.zst> --android <folder>
+   --payload <payload>`: Nura's boot files and root (xz, about 20 minutes
+   with `XZ_THREADS=2`), its UUIDs and size.
+3. lk2nd v2 for each model: `pack-lk2nd-from-v1.py` on that model's lk2nd-v1
+   image, as `lk2nd-<gts3lwifi|gts3llte>.img` in one folder.
+4. `twrp/mkdualbootzip.sh <payload> <lk2nd folder> <busybox> <gsi-unzip>
+   <zip>`.
+5. The release: the zip, `nura-root.img.xz` with its `.sha256`, the lk2nd
+   images (and Odin tars of them, `boot.img` inside), and SHA256SUMS.
