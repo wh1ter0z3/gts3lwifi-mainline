@@ -5,14 +5,22 @@
 # (docs/dual-boot.md), flashes it and lk2nd v2 over lk2nd's fastboot. The
 # tablet's own firmware stays on its partitions.
 #
-# usage: install-dualboot.sh --nura <Nura userdata image> [options]
-#   --nura FILE      Nura's userdata image (.simg/.img, may be .zst/.xz):
-#                    the release's pmos-...-userdata.simg.zst
+# usage: install-dualboot.sh --zip <release zip> --root <nura-root.img.xz> [options]
+#    or: install-dualboot.sh --nura <Nura userdata image> [options]
+#   --zip FILE       the dual boot release's zip (the OrangeFox installer):
+#                    Nura's boot files, our Android files, the recovery, lk2nd
+#   --root FILE      with --zip: the release's nura-root.img.xz
+#   --nura FILE      instead of --zip: Nura's userdata image (.simg/.img, may
+#                    be .zst/.xz), e.g. pmos-...-userdata.simg.zst
 #   --gsi FILE       Android: the GSI (system.img, .img.xz/.gz/.zst, or a zip
 #                    with system.img inside); with --android, else no Android
-#   --android DIR    Android: our files: vendor.img, Image.gz, gts3.dtb,
-#                    initramfs (gsi-init with gsi.parts), cmdline
-#   --lk2nd FILE     lk2nd v2 image for this model (flashed after userdata)
+#   --android DIR    our Android files: Image.gz, initramfs (gsi-init with
+#                    gsi.parts), cmdline, vendor.img, dtb/<model's dtb> (or
+#                    gts3.dtb); recovery/ (OrangeFox on that kernel: ramdisk,
+#                    cmdline, <model's dtb>) adds an "orangefox" entry, also
+#                    without --gsi
+#   --lk2nd FILE     lk2nd v2 image for this model (flashed after userdata;
+#                    with --zip: the zip's, unless given)
 #   --system SIZE --vendor SIZE --data SIZE   Android's partitions
 #                    (default 4G, 1G, 4G); Nura gets the rest
 #   --shared SIZE    also a shared exFAT partition (default: none, the
@@ -22,11 +30,11 @@
 #   --model T820|T825  with --image: the model (else asked from lk2nd)
 #   --payload DIR    don't install: write the files twrp/update-binary (the
 #                    OrangeFox installer) needs into DIR: nura-boot.tar,
-#                    nura-root.simg, nura.env, and android/ from --android
+#                    nura-root.img.xz, nura.env, and android/ from --android
 # ERASES the userdata partition: Android data, a postmarketOS install on it.
 # Needs: fastboot, e2fsprogs (mke2fs, e2fsck, resize2fs, debugfs), sfdisk,
 # simg2img and img2simg (android-sdk-libsparse-utils / android-tools),
-# python3, cpio, zstd/xz for compressed images. WORK=<dir> (default: ./work)
+# python3, cpio, zstd/xz for compressed images, xz for --payload. WORK=<dir> (default: ./work)
 # needs room for the Nura image unpacked and the userdata image's data.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -37,24 +45,31 @@ die() { echo "error: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found ($2)"; }
 say() { echo "== $*"; }
 
-NURA= GSI= ANDROID= LK2ND= IMAGE= SIZE= MODEL= PAYLOAD=
+NURA= GSI= ANDROID= LK2ND= IMAGE= SIZE= MODEL= PAYLOAD= ZIPIN= ROOTIN=
 SYSTEM=4G VENDOR=1G DATA=4G SHARED=
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--nura) NURA=$2 ;; --gsi) GSI=$2 ;; --android) ANDROID=$2 ;; --lk2nd) LK2ND=$2 ;;
+	--zip) ZIPIN=$2 ;; --root) ROOTIN=$2 ;;
 	--system) SYSTEM=$2 ;; --vendor) VENDOR=$2 ;; --data) DATA=$2 ;; --shared) SHARED=$2 ;;
 	--image) IMAGE=$2 ;; --size) SIZE=$2 ;; --model) MODEL=$2 ;; --payload) PAYLOAD=$2 ;;
-	*) sed -n '2,29p' "$0" >&2; exit 1 ;;
+	*) sed -n '2,/^set -eu/p' "$0" | sed '$d' >&2; exit 1 ;;
 	esac
 	shift 2
 done
-[ -f "$NURA" ] || die "--nura: no such file '$NURA'"
-[ -z "$GSI" ] || [ -n "$ANDROID" ] || die "--gsi needs --android (our vendor and boot files)"
-[ -z "$ANDROID" ] || [ -n "$GSI" ] || [ -n "$PAYLOAD" ] || die "--android needs --gsi"
+if [ -n "$ZIPIN" ]; then
+	[ -f "$ZIPIN" ] || die "--zip: no such file '$ZIPIN'"
+	[ -f "$ROOTIN" ] || die "--zip needs --root nura-root.img.xz"
+	[ -z "$NURA$ANDROID$PAYLOAD" ] || die "--zip brings Nura and our Android: no --nura, --android or --payload"
+else
+	[ -f "$NURA" ] || die "--nura: no such file '$NURA'"
+fi
+[ -z "$GSI" ] || [ -n "$ANDROID$ZIPIN" ] || die "--gsi needs --android (our vendor and boot files)"
 if [ -n "$ANDROID" ]; then
-	for f in vendor.img Image.gz gts3.dtb initramfs cmdline; do
+	for f in Image.gz initramfs cmdline; do
 		[ -s "$ANDROID/$f" ] || die "--android: no $f in $ANDROID"
 	done
+	[ -z "$GSI" ] || [ -s "$ANDROID/vendor.img" ] || die "--android: no vendor.img in $ANDROID"
 fi
 for t in mke2fs e2fsck resize2fs debugfs sfdisk blkid simg2img python3 cpio; do need $t "see the usage"; done
 LAYOUT=$HERE/gts3-layout
@@ -62,7 +77,7 @@ LAYOUT=$HERE/gts3-layout
 [ -f "$LAYOUT" ] || die "gts3-layout not next to this script"
 HOOK=$HERE/20-gts3-dualboot.sh
 [ -f "$HOOK" ] || HOOK=$HERE/../../pmaports/device-samsung-gts3lwifi/20-gts3-dualboot.sh
-[ -f "$HOOK" ] || die "20-gts3-dualboot.sh not found"
+[ -f "$HOOK" ] || [ -n "$ZIPIN" ] || die "20-gts3-dualboot.sh not found"
 
 # The tablet: model and userdata size, from lk2nd (a payload is for both)
 [ -z "$PAYLOAD" ] || { MODEL=${MODEL:-T820}; SIZE=${SIZE:-26226966016}; IMAGE=${IMAGE:-none}; }
@@ -112,9 +127,57 @@ part() { sfdisk -d "$1" | sed -n "s/^[^ ]*[^0-9]$2 : *start= *\([0-9]*\), *size=
 part_out() { set -- "$1" "$3" $(part "$1" "$2"); dd if="$1" of="$2" bs=512 skip="$3" count="$4" conv=sparse status=none; }
 part_in() { set -- "$1" "$3" $(part "$1" "$2"); dd if="$2" of="$1" bs=512 seek="$3" conv=sparse,notrunc status=none; }
 
+N=$W/nura
+if [ -n "$ZIPIN" ]; then
+	need unzip unzip
+	need xz xz-utils
+	say "the zip: $(basename "$ZIPIN")"
+	rm -rf "$W/zip"
+	unzip -q -o "$ZIPIN" -x 'META-INF/*' 'tools/*' -d "$W/zip" || die "can't unpack $ZIPIN"
+	(cd "$W/zip" && grep -v ' tools/' SHA256SUMS | sha256sum -c --quiet) || die "the zip's files are damaged, download it again"
+	. "$W/zip/nura.env"
+	tar -C "$W/bootfs" -xf "$W/zip/nura-boot.tar" || die "Nura's boot files"
+	[ -d "$W/zip/android" ] && ANDROID=$W/zip/android
+	[ -n "$GSI" ] && [ -z "$ANDROID" ] && die "this zip has no Android files"
+	[ -n "$LK2ND" ] || LK2ND=$W/zip/lk2nd-$(case $MODEL in T820) echo gts3lwifi ;; T825) echo gts3llte ;; esac).img
+	[ -s "$LK2ND" ] || die "the zip has no lk2nd for SM-$MODEL"
+	if [ -f "$ROOTIN.sha256" ]; then
+		say "checking $(basename "$ROOTIN")"
+		[ "$(sha256sum "$ROOTIN" | cut -d' ' -f1)" = "$(cut -d' ' -f1 "$ROOTIN.sha256")" ] || die "$(basename "$ROOTIN") is damaged, download it again"
+	fi
+	say "Nura: unpacking $(basename "$ROOTIN")"
+	xz -dc "$ROOTIN" | dd of="$N/root.img" bs=1M conv=sparse status=none || die "unpacking $ROOTIN"
+	B=$W/bootfs
+fi
+# our Android's device tree and the recovery's for this model
+if [ -n "$ANDROID" ] && [ -z "$PAYLOAD" ]; then
+	ADTB=$ANDROID/dtb/$DTB
+	[ -s "$ADTB" ] || ADTB=$ANDROID/gts3.dtb
+	[ -s "$ADTB" ] || die "--android: no dtb/$DTB in $ANDROID"
+	RDTB=
+	if [ -s "$ANDROID/recovery/ramdisk" ]; then
+		RDTB=$ANDROID/recovery/$DTB
+		[ -s "$RDTB" ] && [ -s "$ANDROID/recovery/cmdline" ] || die "--android: no recovery/$DTB or recovery/cmdline"
+	fi
+fi
+# The hook that finds Nura's root in the layout (device package r15 has
+# it): in its initramfs now, as a second cpio archive, and for mkinitfs.
+# For mkinitfs only if the image's device package is older than r15: a copy
+# in /etc would shadow the package's own when it changes.
+add_hook() {
+	debugfs -R "stat /usr/share/mkinitfs/hooks/20-gts3-dualboot.sh" "$N/root.img" 2> /dev/null |
+		grep -q "Size:" && return 0
+	debugfs -w -R "mkdir /etc/mkinitfs/hooks" "$N/root.img" > /dev/null 2>&1 || true
+	debugfs -w -R "write $HOOK /etc/mkinitfs/hooks/20-gts3-dualboot.sh" "$N/root.img" > /dev/null 2>&1
+	for f in "uid 0" "gid 0" "mode 0100644"; do
+		debugfs -w -R "sif /etc/mkinitfs/hooks/20-gts3-dualboot.sh $f" "$N/root.img" > /dev/null 2>&1
+	done
+	debugfs -R "stat /etc/mkinitfs/hooks/20-gts3-dualboot.sh" "$N/root.img" 2> /dev/null | grep -q "Size:" ||
+		die "can't add the hook to Nura's root"
+}
+if [ -z "$ZIPIN" ]; then
 say "Nura: unpacking $(basename "$NURA")"
 unpack "$NURA" "$W/nura/disk.img"
-N=$W/nura
 sfdisk -d "$N/disk.img" > "$N/table" 2> /dev/null || die "no partition table in the Nura image"
 part_out "$N/disk.img" 1 "$N/boot.img"
 part_out "$N/disk.img" 2 "$N/root.img"
@@ -141,11 +204,11 @@ PY
 echo "$NURA_CMDLINE" | grep -q "pmos_root_uuid=$ROOT_UUID" || die "Nura's boot.img is for another root"
 # lk2nd boots extlinux.conf; the boot.img stays for a manual fastboot boot
 
-# The hook that finds Nura's root in the layout (device package r15 has
-# it): in its initramfs now, as a second cpio archive, and for mkinitfs
+# ... and in its initramfs now, as a second cpio archive
 mkdir -p "$W/hook/hooks"
 cp "$HOOK" "$W/hook/hooks/20-gts3-dualboot.sh"
 (cd "$W/hook" && printf 'hooks\nhooks/20-gts3-dualboot.sh\n' | cpio -o -H newc -R 0:0 --quiet | gzip -9n) >> "$B/initramfs"
+fi
 
 # The OrangeFox installer's files: Nura's boot files (hook in the
 # initramfs), its root (checked, hook for mkinitfs; grown on the tablet),
@@ -162,34 +225,45 @@ if [ -n "$PAYLOAD" ]; then
 		tune2fs -O ^orphan_file "$N/root.img" > /dev/null || die "can't drop orphan_file from Nura's root"
 		e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
 	fi
-	debugfs -w -R "mkdir /etc/mkinitfs/hooks" "$N/root.img" > /dev/null 2>&1 || true
-	debugfs -w -R "write $HOOK /etc/mkinitfs/hooks/20-gts3-dualboot.sh" "$N/root.img" > /dev/null 2>&1
-	for f in "uid 0" "gid 0" "mode 0100644"; do
-		debugfs -w -R "sif /etc/mkinitfs/hooks/20-gts3-dualboot.sh $f" "$N/root.img" > /dev/null 2>&1
-	done
-	need img2simg "android-sdk-libsparse-utils"
-	img2simg "$N/root.img" "$P/nura-root.simg"
+	add_hook
+	# raw and xz'd, for busybox's unxz in the recovery (a sparse image can't
+	# be read from a pipe, and release files must stay under 2 GiB)
+	need xz xz-utils
+	say "xz of Nura's root (some minutes)"
+	xz -c -6 -T"${XZ_THREADS:-2}" "$N/root.img" > "$P/nura-root.img.xz.part" || die "xz of Nura's root"
+	mv "$P/nura-root.img.xz.part" "$P/nura-root.img.xz"
+	(cd "$P" && sha256sum nura-root.img.xz > nura-root.img.xz.sha256)
 	{
 		echo "# Nura (postmarketOS) image this payload is from: $(basename "$NURA")"
 		echo "BOOT_UUID=$BOOT_UUID"
 		echo "ROOT_UUID=$ROOT_UUID"
 		echo "NURA_CMDLINE='$NURA_CMDLINE'"
+		echo "ROOT_BYTES=$(stat -c %s "$N/root.img")"
 	} > "$P/nura.env"
 	if [ -n "$ANDROID" ]; then
-		mkdir -p "$P/android"
-		for f in vendor.img Image.gz gts3.dtb initramfs cmdline; do cp -L "$ANDROID/$f" "$P/android/"; done
+		rm -rf "$P/android"
+		cp -rL "$ANDROID" "$P/android"
 	fi
 	rm -f "$N/root.img" "$N/boot.img"
 	ls -l "$P" "$P/android" 2> /dev/null
 	exit 0
 fi
 
-# Android's boot files
+# Android's boot files, and the recovery's (OrangeFox on Android's kernel)
 if [ -n "$ANDROID" ]; then
 	mkdir -p "$B/gts3/android"
-	cp "$ANDROID/Image.gz" "$ANDROID/gts3.dtb" "$B/gts3/android/"
-	cp "$ANDROID/initramfs" "$B/gts3/android/initramfs"
-	ANDROID_CMDLINE="$(cat "$ANDROID/cmdline") gsi.parts=1"
+	cp "$ANDROID/Image.gz" "$B/gts3/android/"
+	if [ -n "$GSI" ]; then
+		cp "$ADTB" "$B/gts3/android/gts3.dtb"
+		cp "$ANDROID/initramfs" "$B/gts3/android/initramfs"
+		ANDROID_CMDLINE="$(cat "$ANDROID/cmdline") gsi.parts=1"
+	fi
+	if [ -n "$RDTB" ]; then
+		mkdir -p "$B/gts3/recovery"
+		cp "$ANDROID/recovery/ramdisk" "$B/gts3/recovery/ramdisk"
+		cp "$RDTB" "$B/gts3/recovery/gts3.dtb"
+		RECOVERY_CMDLINE=$(cat "$ANDROID/recovery/cmdline")
+	fi
 fi
 
 mkdir -p "$B/extlinux"
@@ -203,7 +277,7 @@ mkdir -p "$B/extlinux"
 	echo "	initrd /initramfs"
 	echo "	fdt /$DTB"
 	echo "	append $NURA_CMDLINE"
-	if [ -n "$ANDROID" ]; then
+	if [ -n "$GSI" ]; then
 		echo
 		echo "label android"
 		echo "	linux /gts3/android/Image.gz"
@@ -211,10 +285,18 @@ mkdir -p "$B/extlinux"
 		echo "	fdt /gts3/android/gts3.dtb"
 		echo "	append $ANDROID_CMDLINE"
 	fi
+	if [ -n "${RECOVERY_CMDLINE:-}" ]; then
+		echo
+		echo "label orangefox"
+		echo "	linux /gts3/android/Image.gz"
+		echo "	initrd /gts3/recovery/ramdisk"
+		echo "	fdt /gts3/recovery/gts3.dtb"
+		echo "	append $RECOVERY_CMDLINE"
+	fi
 } > "$B/extlinux/extlinux.conf"
 
 # Android's system image
-if [ -n "$ANDROID" ]; then
+if [ -n "$GSI" ]; then
 	say "Android: the system image from $(basename "$GSI")"
 	case "$GSI" in
 	*.zip)
@@ -252,18 +334,11 @@ say "Nura's root"
 set -- $(part "$IMG" 5)
 e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
 resize2fs "$N/root.img" $(($2 / 8))  > /dev/null 2>&1 || die "Nura's root doesn't fit"
-# the hook for mkinitfs, so a new initramfs (kernel update) has it too
-debugfs -w -R "mkdir /etc/mkinitfs/hooks" "$N/root.img" > /dev/null 2>&1 || true
-debugfs -w -R "write $HOOK /etc/mkinitfs/hooks/20-gts3-dualboot.sh" "$N/root.img" > /dev/null 2>&1
-for f in "uid 0" "gid 0" "mode 0100644"; do
-	debugfs -w -R "sif /etc/mkinitfs/hooks/20-gts3-dualboot.sh $f" "$N/root.img" > /dev/null 2>&1
-done
-debugfs -R "stat /etc/mkinitfs/hooks/20-gts3-dualboot.sh" "$N/root.img" 2> /dev/null | grep -q "Size:" ||
-	die "can't add the hook to Nura's root"
+add_hook
 part_in "$IMG" 5 "$N/root.img"
 rm -f "$N/root.img" "$N/boot.img"
 
-if [ -n "$ANDROID" ]; then
+if [ -n "$GSI" ]; then
 	say "Android: system, vendor"
 	set -- $(part "$IMG" 2)
 	[ "$(stat -c %s "$W/system.img")" -le $(($2 * 512)) ] || die "the system image is larger than android_system ($SYSTEM)"

@@ -1,9 +1,10 @@
 #!/bin/sh
 # Makes the OrangeFox / TWRP dual boot installer zip (twrp/update-binary):
 # the payload of `install-dualboot.sh --payload` except Nura's root (users
-# put nura-root.simg next to the zip), lk2nd v2 for each model there is one
+# put nura-root.img.xz next to the zip), lk2nd v2 for each model there is one
 # of, a static aarch64 busybox (Alpine's busybox-static) and, for GSI zips
-# over 4 GB, gsi-unzip (gsi branch, gsi/unzip64).
+# over 4 GB, gsi-unzip (gsi branch, gsi/unzip64). pc/ holds the PC
+# installer, which takes the same zip (install-dualboot.sh --zip).
 # usage: mkdualbootzip.sh <payload dir> <lk2nd dir> <busybox> <gsi-unzip|-> <out.zip>
 #   lk2nd dir: lk2nd-gts3lwifi.img and/or lk2nd-gts3llte.img (v2)
 set -eu
@@ -11,18 +12,25 @@ set -eu
 PAY=$1 LK=$2 BB=$3 UNZ=$4 OUT=$5
 HERE=$(cd "$(dirname "$0")" && pwd)
 [ -f "$PAY/nura-boot.tar" ] && [ -f "$PAY/nura.env" ] || { echo "no payload in $PAY" >&2; exit 1; }
-python3 - "$PAY" "$LK" "$BB" "$UNZ" "$HERE/update-binary" "$OUT" <<'PY'
+python3 - "$PAY" "$LK" "$BB" "$UNZ" "$HERE/update-binary" "$OUT" "$HERE/.." <<'PY'
 import hashlib, os, sys, zipfile
-pay, lk, bb, unz, ub, out = sys.argv[1:]
+pay, lk, bb, unz, ub, out, dualboot = sys.argv[1:]
 files = [(os.path.join(pay, f), f) for f in ("nura-boot.tar", "nura.env")]
-if os.path.isdir(os.path.join(pay, "android")):
-    files += [(os.path.join(pay, "android", f), "android/" + f)
-              for f in ("vendor.img", "Image.gz", "gts3.dtb", "initramfs", "cmdline")]
+# android/: our Android (vendor.img, Image.gz, initramfs, cmdline, dtb/) and
+# the recovery on its kernel (recovery/)
+for top, dirs, names in sorted(os.walk(os.path.join(pay, "android"))):
+    dirs.sort()
+    for f in sorted(names):
+        src = os.path.join(top, f)
+        files.append((src, os.path.relpath(src, pay)))
 for m in ("gts3lwifi", "gts3llte"):
     p = os.path.join(lk, f"lk2nd-{m}.img")
     if os.path.isfile(p):
         files.append((p, f"lk2nd-{m}.img"))
 tools = [(bb, "tools/busybox")] + ([(unz, "tools/gsi-unzip")] if unz != "-" else [])
+hook = os.path.join(dualboot, "..", "..", "pmaports", "device-samsung-gts3lwifi", "20-gts3-dualboot.sh")
+tools += [(os.path.join(dualboot, f), "pc/" + f) for f in ("install-dualboot.sh", "gts3-layout")]
+tools += [(hook, "pc/20-gts3-dualboot.sh")]
 sums = []
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, allowZip64=False) as z:
     def add(src, name, mode):

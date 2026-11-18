@@ -3,16 +3,18 @@
 # Nura (postmarketOS) and, if its files are there, our Android (any GSI on
 # our vendor), side by side on internal storage, with lk2nd v2 to choose.
 #
-# Put this zip, nura-root.simg and (for Android) the GSI (named *system* or
-# *gsi*: .img, .img.xz, or a zip with system.img) in one folder on the microSD card or a USB drive,
-# then Install this zip. It ERASES the userdata partition (internal storage:
+# Put this zip, nura-root.img.xz and (for Android) the GSI (named *system*
+# or *gsi*: .img, .img.xz, or a zip with system.img) in one folder on the
+# microSD card or a USB drive, then Install this zip. It ERASES the userdata partition (internal storage:
 # all Android data, a postmarketOS install), makes the layout in it, writes
 # both systems and flashes lk2nd v2 to the start of the boot partition.
 # Without a GSI it installs Nura only (Android's partitions stay empty).
+# Both ways it adds OrangeFox on our kernel as lk2nd's "orangefox" entry, if
+# the zip has it (android/recovery).
 #
 # Runs under the zip's busybox (recoveries differ in their tools, and their
 # mksh computes in 32 bits). From the recovery: sgdisk, mke2fs, e2fsck,
-# resize2fs, simg2img, getprop, and toybox's losetup (offsets and sizes).
+# resize2fs, simg2img, and toybox's losetup (offsets and sizes).
 # Arguments (update-binary protocol): <api> <outfd> <zip>
 # Test overrides: MODEL, DATA_DEV, BOOT_DEV, GSI, SYSTEM, VENDOR, DATA, WORK
 OUTFD=$2
@@ -68,11 +70,20 @@ SIMG2IMG=$(tool simg2img) || die "this recovery has no simg2img"
 LOSETUP=$(tool losetup) || die "this recovery has no losetup"
 
 ui "Galaxy Tab S3 dual boot: Nura and Android"
-MODEL=${MODEL:-$(getprop ro.product.device)}
+# the model: from the device tree on our kernel (one recovery for both),
+# else from the recovery's build (Samsung's kernel)
+if [ -z "${MODEL:-}" ]; then
+	c=$(tr '\0' ' ' < /proc/device-tree/compatible 2> /dev/null)
+	case "$c" in
+	*samsung,gts3lwifi*) MODEL=gts3lwifi ;;
+	*samsung,gts3llte*) MODEL=gts3llte ;;
+	*) MODEL=$(getprop ro.product.device) ;;
+	esac
+fi
 case "$MODEL" in
 gts3lwifi) DTB=apq8096-samsung-gts3lwifi.dtb ;;
 gts3llte) DTB=msm8996-samsung-gts3llte.dtb ;;
-*) die "not a Galaxy Tab S3 (ro.product.device: '$MODEL')" ;;
+*) die "not a Galaxy Tab S3 (model: '$MODEL')" ;;
 esac
 mkdir -p "$W" "$G" "$W/mnt"
 cd "$W" || die "no $W"
@@ -88,20 +99,31 @@ zsum() {	# the sha256 of $1 in the zip is the listed one
 . ./nura.env || die "no nura.env in the zip"
 LK2ND=lk2nd-$MODEL.img
 [ -s "$LK2ND" ] || die "no $LK2ND in the zip: no lk2nd v2 for this model yet"
-ROOT=$DIR/nura-root.simg
-[ -f "$ROOT" ] || die "put nura-root.simg next to this zip"
+# Nura's root: raw and xz'd (releases), or a sparse image
+ROOT=$DIR/nura-root.img.xz
+[ -f "$ROOT" ] || ROOT=$DIR/nura-root.simg
+[ -f "$ROOT" ] || die "put nura-root.img.xz next to this zip"
+# our Android's files for this model, and the recovery's
+ADTB=
+if [ -s android/Image.gz ]; then
+	ADTB=android/dtb/$DTB
+	[ -s "$ADTB" ] || ADTB=android/gts3.dtb
+fi
+RDTB=
+[ -s android/recovery/ramdisk ] && [ -s "android/recovery/$DTB" ] && RDTB=android/recovery/$DTB
 # the GSI: a system image by its name (other images may be in the folder)
 if [ -z "${GSI:-}" ]; then
 	GSI=$(ls "$DIR"/*system*.img "$DIR"/*system*.img.xz "$DIR"/*gsi*.img "$DIR"/*gsi*.img.xz \
 		"$DIR"/*system*.zip "$DIR"/*gsi*.zip 2> /dev/null | grep -v -e nura-root -e "$(basename "$ZIP")" | head -n 1)
 fi
+[ -z "$GSI" ] || [ -s "$ADTB" ] || die "this zip has no Android files for $MODEL"
 [ -n "$GSI" ] && ui "Android: $(basename "$GSI")" || ui "No GSI next to the zip: Nura only"
 ui "Checking the zip..."
 zsum nura-boot.tar || die "nura-boot.tar in the zip is damaged, download it again"
 [ -z "$GSI" ] || zsum android/vendor.img || die "the vendor image in the zip is damaged, download it again"
 if [ -f "$ROOT.sha256" ]; then
-	ui "Checking nura-root.simg..."
-	[ "$(sha256sum "$ROOT" | cut -d' ' -f1)" = "$(cut -d' ' -f1 "$ROOT.sha256")" ] || die "nura-root.simg is damaged, download it again"
+	ui "Checking $(basename "$ROOT")..."
+	[ "$(sha256sum "$ROOT" | cut -d' ' -f1)" = "$(cut -d' ' -f1 "$ROOT.sha256")" ] || die "$(basename "$ROOT") is damaged, download it again"
 fi
 
 # userdata free: the recovery may have it mounted, or (dual boot mode) loop
@@ -187,9 +209,17 @@ ui "Boot partition: lk2nd's menu, kernels..."
 $MKE2FS -q -F -t ext2 -b 1024 -L pmOS_boot -U "$BOOT_UUID" "$G/gts3_boot" > /dev/null 2>&1 || die "mke2fs boot"
 mount -t ext2 "$G/gts3_boot" "$W/mnt" 2> /dev/null || mount -t ext4 "$G/gts3_boot" "$W/mnt" || die "mount boot"
 unzip -p "$ZIP" nura-boot.tar | tar -x -C "$W/mnt" || die "Nura's boot files"
-if [ -n "$GSI" ]; then
+if [ -n "$GSI" ] || [ -n "$RDTB" ]; then
 	mkdir -p "$W/mnt/gts3/android"
-	cp android/Image.gz android/gts3.dtb android/initramfs "$W/mnt/gts3/android/" || die "Android's boot files"
+	cp android/Image.gz "$W/mnt/gts3/android/" || die "Android's kernel"
+fi
+if [ -n "$GSI" ]; then
+	cp "$ADTB" "$W/mnt/gts3/android/gts3.dtb" && cp android/initramfs "$W/mnt/gts3/android/" || die "Android's boot files"
+fi
+if [ -n "$RDTB" ]; then
+	mkdir -p "$W/mnt/gts3/recovery"
+	cp android/recovery/ramdisk "$W/mnt/gts3/recovery/" && cp "$RDTB" "$W/mnt/gts3/recovery/gts3.dtb" ||
+		die "the recovery's files"
 fi
 mkdir -p "$W/mnt/extlinux"
 {
@@ -210,12 +240,27 @@ mkdir -p "$W/mnt/extlinux"
 		echo "	fdt /gts3/android/gts3.dtb"
 		echo "	append $(cat android/cmdline) gsi.parts=1"
 	fi
+	if [ -n "$RDTB" ]; then
+		echo
+		echo "label orangefox"
+		echo "	linux /gts3/android/Image.gz"
+		echo "	initrd /gts3/recovery/ramdisk"
+		echo "	fdt /gts3/recovery/gts3.dtb"
+		echo "	append $(cat android/recovery/cmdline)"
+	fi
 } > "$W/mnt/extlinux/extlinux.conf"
 sync
 umount "$W/mnt" || die "umount boot"
 
 ui "Nura: its root (a few minutes)..."
-$SIMG2IMG "$ROOT" "$G/nura" || die "simg2img nura-root.simg"
+case "$ROOT" in
+*.xz)
+	if [ -n "${ROOT_BYTES:-}" ]; then
+		[ "$ROOT_BYTES" -le $((($(last 5) - $(first 5) + 1) * 512)) ] || die "Nura's root is larger than its partition"
+	fi
+	xz -dc "$ROOT" > "$G/nura" || die "unpacking $(basename "$ROOT")" ;;
+*) $SIMG2IMG "$ROOT" "$G/nura" || die "simg2img $(basename "$ROOT")" ;;
+esac
 $E2FSCK -fy "$G/nura" > /dev/null 2>&1
 [ $? -le 1 ] || die "e2fsck of Nura's root"
 $RESIZE2FS "$G/nura" > /dev/null 2>&1 || die "resize2fs of Nura's root"
@@ -247,5 +292,6 @@ cleanup
 
 ui "lk2nd v2..."
 dd if="$LK2ND" of="$BOOT_DEV" bs=4096 conv=notrunc,fsync 2> /dev/null || die "writing lk2nd"
-ui "Done. Reboot: lk2nd starts Nura (gts3-boot switches)."
+ui "Done. Reboot: lk2nd starts Nura (gts3-boot switches;"
+ui "Volume Down at power-on: lk2nd's menu, with orangefox)."
 exit 0
