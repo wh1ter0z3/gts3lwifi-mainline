@@ -30,7 +30,8 @@ Switching is a change of the `default` line:
 
 - From either system: `gts3-boot` lists the labels, and
   `gts3-boot android reboot` (or `nura`) switches and restarts
-  ([scripts/dualboot/gts3-boot](../scripts/dualboot/gts3-boot)). In Android it
+  ([gts3-boot](../pmaports/device-samsung-gts3lwifi/gts3-boot), /usr/bin in
+  Nura from device package r15). In Android it
   mounts the partition labelled `pmOS_boot` itself (root, busybox `findfs`).
 - On the tablet: hold Volume Down while lk2nd starts. Its menu now lists
   the labels first.
@@ -139,15 +140,37 @@ disk.
 | 5 | nura | ext4 `pmOS_root` | 7G |
 | 6 | shared | exFAT `Shared`, for both | the rest |
 
-Sizes are set with `BOOT= SYSTEM= VENDOR= DATA= NURA=`. The script also
+Sizes are set with `BOOT= SYSTEM= VENDOR= DATA= NURA=`. `SHARED=no` leaves
+the shared partition out and gives nura the rest: the microSD card is then
+the storage both systems share (our SM-T820). The script also
 writes the hybrid MBR entry for lk2nd in plain shell (no Python, so it also
 runs in a recovery). It matches hybrid-mbr.py byte for byte.
 
-Shared ends exactly at the last usable sector. With a nested GPT, pmOS's
+The last partition ends exactly at the last usable sector. With a nested GPT, pmOS's
 initramfs runs `parted resizepart 2 100%` at boot whenever there is free
 space at the end. Partition 2 is android_system here, and parted refuses
 ("Can't have overlapping partitions", tested), but without a free tail it
 never tries.
+
+### Nura in the layout: the initramfs hook
+
+pmOS's initramfs finds a GPT nested in userdata ("subpartitions") only if it
+has **exactly two** partitions, and only while the root hasn't been found
+(`mount_subpartitions()`: `part_count -eq 2`). The layout has five or six,
+so Nura wouldn't find its root.
+
+The device package (r15) installs a mkinitfs hook,
+[20-gts3-dualboot.sh](../pmaports/device-samsung-gts3lwifi/20-gts3-dualboot.sh),
+in `/usr/share/mkinitfs/hooks/`. It runs before `mount_subpartitions()` and
+attaches userdata with partition scanning (`losetup -Pf`) when:
+- the boot partition (`pmos_boot_uuid=`) isn't there;
+- userdata's GPT has a `gts3_boot` partition.
+
+pmOS then finds the root and boot partitions by UUID as usual. A plain pmOS
+install (two partitions) is left to `mount_subpartitions()`, which also grows
+its root at the first boot.
+
+### Android in the layout
 
 Android uses the layout through gsi-init's `gsi.parts=1` (gsi branch
 dc08080). It finds the three partitions by name and attaches android_data to
@@ -156,6 +179,39 @@ stays as it is. `gsi.disk=mmcblk1` points it at a microSD card, for tests
 (the Android DTB has the SD slot). lk2nd can't read the microSD ("SD card
 MMC is unavailable"), so it always boots from the boot partition inside
 userdata.
+
+## Migrating an installed Nura (our SM-T820, 2026-11-18)
+
+Nura's root can't be shrunk while it runs, so the microSD card held a
+staging copy. The whole move worked without touching anything until step 3:
+
+1. rsync of the root, a tar of the boot partition, and the Android image
+   files, onto the microSD (one ext4).
+2. Booted Nura from that copy: an extlinux entry with its UUID as
+   `pmos_root_uuid=`. It needs the hook, since the boot partition is still
+   on userdata.
+3. From the copy: gts3-layout on userdata (`SHARED=no BOOT=512M SYSTEM=4G
+   VENDOR=1G DATA=4G`, nura 14.9G). Boot and root were made again with their
+   old UUIDs (`mke2fs -U`), so Nura's fstab and the extlinux entries stay as
+   they are.
+4. The boot files went back from the tar, and the root back with rsync.
+5. dd of the Android system and vendor images into their partitions.
+   userdata.img went into android_data and was grown with resize2fs, so
+   Android kept its data.
+6. Nura booted from the layout (root on the nura partition, hook in the
+   initramfs).
+7. Android booted from its partitions: `boot_completed` after 1 minute.
+8. `gts3-boot` switched both ways.
+
+The script is specific to that tablet (its UUIDs and paths), so it isn't in
+the repository. Every test boot was a one-off: the default label was a
+no-kernel `fastboot` entry, and the test was booted with `fastboot oem
+boot-label`. A failure then left the tablet in fastboot instead of in a loop.
+
+Also found on the way: an initramfs that mkinitfs made from that tablet's
+months-old packages (kernel 6.19.5) hung before USB came up with the 7.3.1
+test kernel. That tablet boots the old initramfs with the hook appended as a
+second cpio archive. A current install builds the hook in.
 
 ## LineageOS (or any other ROM) from OrangeFox
 
