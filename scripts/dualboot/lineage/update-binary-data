@@ -1,0 +1,105 @@
+#!/sbin/sh
+# LineageOS in the Galaxy Tab S3 dual boot layout (docs/dual-boot.md,
+# LineageOS mode): its /data becomes the layout's android_data partition.
+# Install it in OrangeFox right after LineageOS. A LineageOS update keeps it
+# (addon.d); a LineageOS installed anew needs it again.
+#
+# What it changes in LineageOS's system partition:
+# - etc/init/gts3-data.rc: a dm-linear device, gts3_data, over android_data
+#   inside userdata, made at "on post-fs": after LineageOS links
+#   /dev/block/bootdevice (its vendor "on fs") and before it mounts /data
+#   (late-fs);
+# - vendor/etc/fstab.qcom: /data on /dev/block/mapper/gts3_data instead of
+#   the whole userdata partition (which holds the layout);
+# - addon.d/60-gts3-data.sh, which keeps both through updates.
+# It doesn't touch android_data itself: Format Data in our OrangeFox makes
+# it empty for a new LineageOS.
+#
+# Runs under the zip's busybox. From the recovery: sgdisk (long options only).
+# Arguments (update-binary protocol): <api> <outfd> <zip>
+# Test overrides: DATA_DEV, SYSTEM_DEV
+OUTFD=$2
+ZIP=$3
+case "$0" in /*) SELF=$0 ;; *) SELF=$PWD/$0 ;; esac
+case "$ZIP" in /*) ;; *) ZIP=$PWD/$ZIP ;; esac
+if [ -z "${GTS3_BB:-}" ]; then
+	B=/tmp/gts3-bb
+	rm -rf "$B" && mkdir -p "$B" && cd "$B" &&
+		unzip -o "$ZIP" tools/busybox > /dev/null 2>&1 &&
+		chmod 0755 tools/busybox && "$B/tools/busybox" --install -s "$B" || {
+		echo "ui_print ERROR: can't unpack tools/busybox from $ZIP" >&"$OUTFD"
+		exit 1
+	}
+	export GTS3_BB=$B PATH="$B:$PATH"
+	exec "$B/tools/busybox" sh "$SELF" "$1" "$2" "$ZIP"
+fi
+DATA_DEV=${DATA_DEV:-/dev/block/bootdevice/by-name/userdata}
+SYSTEM_DEV=${SYSTEM_DEV:-/dev/block/bootdevice/by-name/system}
+W=/tmp/gts3-lineage
+M=$W/system
+
+ui() { echo "ui_print $*" >&"$OUTFD"; echo "ui_print" >&"$OUTFD"; }
+die() {
+	ui "ERROR: $*"
+	umount "$M" 2> /dev/null
+	exit 1
+}
+# the recovery's tools (not the zip's busybox)
+tool() {
+	for c in $(which -a "$1" 2> /dev/null) /system/bin/$1 /sbin/$1; do
+		case "$c" in "$GTS3_BB"/*) continue ;; esac
+		[ -x "$c" ] && { echo "$c"; return 0; }
+	done
+	return 1
+}
+SGDISK=$(tool sgdisk) || die "this recovery has no sgdisk"
+
+ui "Galaxy Tab S3 dual boot: LineageOS's /data on android_data"
+mkdir -p "$W" "$M"
+
+# android_data in userdata's nested GPT: start and length, in 512-byte sectors
+$SGDISK --print "$DATA_DEV" > "$W/gpt" 2>&1 || die "userdata has no partition table: install the dual boot first"
+set -- $(awk '$1 ~ /^[0-9]+$/ && $NF == "android_data" { print $2, $3 }' "$W/gpt")
+[ $# -eq 2 ] || die "userdata has no android_data partition: install the dual boot first"
+OFF=$1
+LEN=$(($2 - $1 + 1))
+ui "android_data: sectors $OFF, $LEN long"
+
+# LineageOS's system partition (system-as-root: its files under system/)
+grep -q " $M " /proc/mounts && umount "$M"
+mount -t ext4 -o rw "$SYSTEM_DEV" "$M" || die "can't mount the system partition: install LineageOS first"
+S=$M/system
+[ -d "$S" ] || S=$M
+FSTAB=$S/vendor/etc/fstab.qcom
+[ -f "$FSTAB" ] || die "no vendor/etc/fstab.qcom: is LineageOS installed?"
+grep -q "^ro.lineage.version=" "$S/build.prop" "$S/product/etc/build.prop" 2> /dev/null ||
+	die "the system partition isn't LineageOS"
+
+# the device for /data: LineageOS's name for userdata, which its vendor
+# init links at "on fs"; /data is mounted at late-fs
+UD=/dev/block/bootdevice/by-name/userdata
+mkdir -p "$S/etc/init"
+{
+	echo "# Galaxy Tab S3 dual boot (gts3-lineage-data.zip): /data is the"
+	echo "# android_data partition inside userdata, which holds the layout."
+	echo "on post-fs"
+	echo "    wait $UD"
+	echo "    exec - root root -- /system/bin/dmctl create gts3_data linear 0 $LEN $UD $OFF"
+} > "$S/etc/init/gts3-data.rc"
+chmod 0644 "$S/etc/init/gts3-data.rc"
+chcon u:object_r:system_file:s0 "$S/etc/init/gts3-data.rc" 2> /dev/null
+
+sed -i 's|^/dev/block/bootdevice/by-name/userdata\([[:space:]][[:space:]]*/data[[:space:]]\)|/dev/block/mapper/gts3_data\1|' "$FSTAB"
+grep -q "^/dev/block/mapper/gts3_data[[:space:]]" "$FSTAB" || die "the fstab has no /data line to change"
+grep -q "^/dev/block/bootdevice/by-name/userdata[[:space:]][[:space:]]*/data[[:space:]]" "$FSTAB" &&
+	die "a /data line in the fstab is left on userdata"
+
+mkdir -p "$S/addon.d"
+unzip -p "$ZIP" addon.d/60-gts3-data.sh > "$S/addon.d/60-gts3-data.sh" || die "addon.d script"
+chmod 0755 "$S/addon.d/60-gts3-data.sh"
+chcon u:object_r:system_file:s0 "$S/addon.d/60-gts3-data.sh" 2> /dev/null
+
+sync
+umount "$M" || die "umount system"
+ui "Done. Format Data here first if this is a new LineageOS."
+exit 0

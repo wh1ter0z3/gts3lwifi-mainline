@@ -85,8 +85,12 @@ if mount_part modem; then
 fi
 
 if mount_part system; then
+	# Samsung's own system, and a ROM on that partition (LineageOS keeps
+	# it in its vendor directory; dual boot's LineageOS mode)
 	for f in "$tmp/system/etc/firmware/bdwlan30.bin" \
-		 "$tmp/system/system/etc/firmware/bdwlan30.bin"; do
+		 "$tmp/system/system/etc/firmware/bdwlan30.bin" \
+		 "$tmp/system/vendor/firmware/bdwlan30.bin" \
+		 "$tmp/system/system/vendor/firmware/bdwlan30.bin"; do
 		copy "$f" "$DEST/ath10k/QCA6174/hw3.0/board.bin"
 	done
 fi

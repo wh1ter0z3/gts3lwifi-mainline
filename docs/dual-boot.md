@@ -260,28 +260,88 @@ months-old packages (kernel 6.19.5) hung before USB came up with the 7.3.1
 test kernel. That tablet boots the old initramfs with the hook appended as a
 second cpio archive. A current install builds the hook in.
 
-## LineageOS (or any other ROM) from OrangeFox
+## LineageOS next to Nura ("LineageOS mode")
 
-Flashing a ROM zip the normal way **ends the dual boot and erases Nura**:
+Jayden's LineageOS 24 installs as it always did, and Nura stays. What
+changes is where lk2nd lives and where LineageOS keeps its /data.
 
-- The ROM writes its boot image over the whole boot partition. lk2nd lives in
-  its first 4 MiB, so it's gone, and S-Boot starts the ROM directly.
-- The ROM uses the userdata partition as its /data. Our layout lives there,
-  so the ROM can't mount it, and the "Format Data" it needs erases Nura,
-  Android and Shared.
-- Our Android and Nura read the Wi-Fi board file (bdwlan30.bin) from
-  Samsung's system partition. A ROM replaces that partition.
+| Partition | Dual boot (our Android) | LineageOS mode |
+|---|---|---|
+| boot | lk2nd v2 + `extlinux.conf` | LineageOS's own boot image |
+| recovery | the tablet's old recovery | **lk2nd v2** |
+| system | Samsung's (firmware only) | LineageOS |
+| userdata | the layout | the layout, android_data = LineageOS's /data |
 
-Next to Nura, a ROM can only go in through our installer. It would:
+- A plain start boots the boot partition, so **LineageOS**.
+- The recovery path (`reboot recovery`, or Power + Volume Up + Home) starts
+  the recovery partition, so **lk2nd**, with its menu and its labels: Nura
+  and our OrangeFox. From Nura, `gts3-boot` can't switch here (both systems
+  are started by their own partition), so Nura's own `reboot` goes back to
+  LineageOS.
+- S-Boot keeps the tablet on the recovery side over resets until a reset
+  asks for a normal start (reason 0x14), which is what a plain reboot in
+  Nura or LineageOS does ([reboot](reboot.md)).
+- LineageOS installs and updates write boot and system, so they keep
+  working. They never touch the layout.
 
-- keep lk2nd and put the ROM's kernel in an extlinux entry (or behind lk2nd);
-- point the ROM's /data at a partition of the layout;
-- copy the firmware it needs out of the system partition first.
+This is the only way a ROM can sit next to Nura: it needs a whole boot
+partition and a whole /data, and lk2nd can only boot it through S-Boot.
+(On our SM-T820, lk2nd starting a 3.18 kernel itself resets the tablet.)
 
-The ROM's updates would need the same treatment (an addon.d script). That's
-the "repack every update" cost from the group's poll. Our own Android
-doesn't have it: its kernel is in `/gts3/android`, and a GSI or vendor
-update doesn't touch it.
+### LineageOS's /data: the add-on
+
+[scripts/dualboot/lineage](../scripts/dualboot/lineage) makes
+`gts3-lineage-data.zip`, installed in our OrangeFox right after LineageOS.
+In LineageOS's system partition it:
+
+- adds `etc/init/gts3-data.rc`: at `on post-fs` (after LineageOS's vendor
+  init links `/dev/block/bootdevice`, before /data is mounted at `late-fs`)
+  it runs `dmctl create gts3_data linear ...`, a device over the
+  android_data partition inside userdata;
+- points /data at `/dev/block/mapper/gts3_data` in
+  `vendor/etc/fstab.qcom`;
+- adds `addon.d/60-gts3-data.sh`, so a LineageOS update brings both back.
+
+Nothing is repacked: the ROM zip stays Jayden's, signature and all.
+
+**Tested on our SM-T820 (2026-11-18)**, with its screen off the board:
+- LineageOS 24 installed from our OrangeFox, then the add-on, then Format
+  Data;
+- LineageOS started from the boot partition with /data on android_data
+  (3.7 G free, unencrypted);
+- `reboot recovery` in LineageOS reached lk2nd in the recovery partition
+  and our OrangeFox;
+- the LineageOS zip installed again on top: the add-on's files came back
+  through addon.d;
+- everything restored from the backups afterwards.
+
+Open: LineageOS never reported `sys.boot_completed` in five minutes on a
+board with no panel (SurfaceFlinger and ActivityManager were running, and
+its kernel didn't reset). Whether the UI comes up needs a tablet with a
+screen.
+
+## Flashing a ROM without the add-on
+
+A ROM zip installed on a dual boot tablet, with nothing else, **leaves Nura
+unbootable and its data unreachable**:
+
+- the ROM's boot image goes over lk2nd (the first 4 MiB of the boot
+  partition) and over `extlinux.conf`, so S-Boot starts the ROM and nothing
+  else;
+- the ROM's /data is the whole userdata partition, which holds the layout,
+  so the ROM can't mount it, and the "Format Data" it asks for erases Nura,
+  our Android and everything in the layout.
+
+So LineageOS mode is the way: lk2nd in the recovery partition, and the
+add-on for /data. Any other ROM needs the same two things. Its /data fstab
+and its init live in its own system partition, so the add-on is specific to
+the ROM.
+
+Both systems read the Wi-Fi board file (bdwlan30.bin) from the system
+partition: Samsung's one, or LineageOS's own copy in
+`/system/vendor/firmware`. Nura's `gts3-firmware` looks in Samsung's place,
+so with LineageOS on the system partition the board file has to be copied
+over by hand for now.
 
 ## Installers
 

@@ -1,0 +1,29 @@
+#!/sbin/sh
+# TEST ONLY, for a tablet without a screen: LineageOS with adb on from the
+# first start, without authorization and with adb root. Never in a release:
+# anyone with a USB cable gets a root shell.
+# - build.prop: ro.debuggable=1, persist.sys.usb.config=adb
+# - system_ext/etc/build.prop: ro.adb.secure=0
+# Arguments (update-binary protocol): <api> <outfd> <zip>
+OUTFD=$2
+SYSTEM_DEV=${SYSTEM_DEV:-/dev/block/bootdevice/by-name/system}
+M=/tmp/gts3-adbdebug
+ui() { echo "ui_print $*" >&"$OUTFD"; echo "ui_print" >&"$OUTFD"; }
+die() { ui "ERROR: $*"; umount "$M" 2> /dev/null; exit 1; }
+
+ui "TEST ONLY: LineageOS with adb on, no authorization"
+mkdir -p "$M"
+mount -t ext4 -o rw "$SYSTEM_DEV" "$M" || die "can't mount the system partition"
+S=$M/system
+[ -d "$S" ] || S=$M
+[ -f "$S/build.prop" ] || die "no build.prop"
+sed -i 's/^ro\.debuggable=0$/ro.debuggable=1/' "$S/build.prop"
+grep -q "^persist\.sys\.usb\.config=" "$S/build.prop" || echo "persist.sys.usb.config=adb" >> "$S/build.prop"
+for f in "$S/system_ext/etc/build.prop" "$S/build.prop"; do
+	[ -f "$f" ] && sed -i 's/^ro\.adb\.secure=1$/ro.adb.secure=0/' "$f"
+done
+grep -h -e "^ro\.debuggable=" -e "^ro\.adb\.secure=" -e "^persist\.sys\.usb\.config=" \
+	"$S/build.prop" "$S/system_ext/etc/build.prop" 2> /dev/null | while read -r l; do ui "  $l"; done
+sync
+umount "$M" || die "umount system"
+exit 0
