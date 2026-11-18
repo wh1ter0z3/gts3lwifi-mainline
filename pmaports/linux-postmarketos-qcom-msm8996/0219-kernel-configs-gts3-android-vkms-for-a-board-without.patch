@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 6 Nov 2026 22:10:00 +0000
+Subject: [PATCH] kernel/configs: gts3-android: vkms for a board without a
+ panel
+
+A Tab S3 whose display is off the board (a developer's, or one being
+repaired) has no connected panel, so neither the recovery's GUI nor
+Android's SurfaceFlinger finds a display. Both already ask for the
+virtual KMS driver when gts3.vkms=1 is on the command line; the module
+has to exist for that. It is never loaded otherwise.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ kernel/configs/gts3-android.config | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/kernel/configs/gts3-android.config b/kernel/configs/gts3-android.config
+index a8f2b07..8d18122 100644
+--- a/kernel/configs/gts3-android.config
++++ b/kernel/configs/gts3-android.config
+@@ -126,3 +126,7 @@ CONFIG_DMABUF_HEAPS=y
+ CONFIG_DMABUF_HEAPS_SYSTEM=y
+ CONFIG_DMABUF_HEAPS_CMA=y
+ CONFIG_INPUT_EGIS_ET5XX_CTRL=m
++
++# A virtual display, for a board whose panel is not connected: the recovery
++# and gsi-init turn it on with gts3.vkms=1 and draw on card1
++CONFIG_DRM_VKMS=m
