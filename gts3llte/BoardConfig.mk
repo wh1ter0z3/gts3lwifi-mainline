@@ -9,4 +9,8 @@ include device/samsung/gts3l-recovery/common/BoardConfigCommon.mk
 
 # awesometic's kernel for this model (Linux 3.18.140, his public source:
 # github.com/awesometic/android_kernel_samsung_msm8996)
+ifeq ($(GTS3_KERNEL),mainline)
+include device/samsung/gts3l-recovery/common/BoardConfigMainline.mk
+else
 TARGET_PREBUILT_KERNEL := device/samsung/gts3l-recovery/gts3llte/prebuilt/Image.gz-dtb
+endif
