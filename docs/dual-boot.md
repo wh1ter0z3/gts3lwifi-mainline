@@ -180,6 +180,53 @@ stays as it is. `gsi.disk=mmcblk1` points it at a microSD card, for tests
 MMC is unavailable"), so it always boots from the boot partition inside
 userdata.
 
+## One clock for both systems
+
+The PMIC's RTC keeps counting while the tablet is off, but nothing sets it:
+- on our SM-T820 it read 1970-01-08 (days since its last reset);
+- rtc-pm8xxx refuses to write it without `allow-set-time`;
+- **with** `allow-set-time` the write hung the tablet until the watchdog reset
+  it, so never set that property. Samsung's own Android doesn't write it
+  either.
+
+So before 2026-11-18:
+- Android ran in 1970;
+- Nura came up at the time it was last shut down (systemd's saved clock);
+- they disagreed and fell behind with every reboot.
+
+Now one offset, real time minus RTC, is kept in `/gts3/clock` on the shared
+boot partition:
+- **Nura:** [gts3-clock](../pmaports/device-samsung-gts3lwifi/gts3-clock)
+  (device package r15):
+  - `gts3-clock.service` sets the time from it early at boot and stores it at
+    shutdown;
+  - `gts3-clock-sync.path` stores it once NTP has set the time.
+  It only stores a time that was loaded or synced at this boot, never
+  systemd's fallback.
+- **Android:** gsi-init (`gsi.parts=1`) sets the time from it before
+  Android's init. A clock keeper stores it again when Android's time is set
+  (more than 2 s off from where it started: network time, or by hand). It
+  never stores a time before 2026-09.
+
+Tested on the SM-T820:
+
+| Test | Clock afterwards |
+|---|---|
+| Nura rebooted | within 1 s of the PC |
+| Nura → Android | within 1 s |
+| Android set an hour ahead, → Nura | Nura +3599 s |
+| Nura set right again, → Android | within 1 s |
+
+The timezone is each system's own setting (Nura: `timedatectl`; Android:
+Settings, or `persist.sys.timezone`). The stored time is UTC.
+
+## The microSD card: shared storage
+
+On our SM-T820 the card is one exFAT partition labelled `Shared`.
+- Nura mounts it (kernel exfat; `exfatprogs` to format).
+- Android's vold takes it as portable storage.
+The layout on internal storage then has no shared partition (`SHARED=no`).
+
 ## Migrating an installed Nura (our SM-T820, 2026-11-18)
 
 Nura's root can't be shrunk while it runs, so the microSD card held a

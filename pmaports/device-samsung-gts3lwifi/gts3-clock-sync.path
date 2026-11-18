@@ -1,0 +1,9 @@
+[Unit]
+Description=Store the clock offset once NTP has set the time (dual boot)
+ConditionPathExists=/boot/extlinux/extlinux.conf
+
+[Path]
+PathExists=/run/systemd/timesync/synchronized
+
+[Install]
+WantedBy=multi-user.target

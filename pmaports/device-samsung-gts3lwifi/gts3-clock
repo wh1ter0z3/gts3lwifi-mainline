@@ -1,0 +1,67 @@
+#!/bin/sh
+# One clock for both systems of the Galaxy Tab S3 dual boot.
+#
+# The PMIC's RTC keeps counting while the tablet is off, but Linux can't set
+# it (rtc-pm8xxx without allow-set-time; with it, the write hangs the
+# tablet), so it reads days since its last reset. The offset from the RTC to
+# the real time (UTC) is kept in /gts3/clock on the boot partition, which
+# Nura and Android share: whichever runs adds it to the RTC at boot and
+# writes it again once its time is right (NTP, or set by hand).
+#
+#   gts3-clock load [dir]   set the system time to RTC + offset
+#   gts3-clock save [dir]   store the offset of the current time if it is
+#                           trusted (loaded at this boot, see below)
+#   gts3-clock sync [dir]   the same for a time just set by NTP or by hand:
+#                           trusted from now on
+# dir: the boot partition's mountpoint (default /boot). A time that is
+# neither loaded nor synced (systemd's fallback at boot) is never stored.
+set -eu
+
+DIR=${2:-/boot}
+F=$DIR/gts3/clock
+RTC=/sys/class/rtc/rtc0/since_epoch
+MIN=1790000000	# 2026-09: no time before this is right
+TRUST=/run/gts3-clock.trusted
+
+[ -r "$RTC" ] || { echo "gts3-clock: no RTC" >&2; exit 1; }
+rtc=$(cat "$RTC")
+
+stored() { sed -n 's/^offset=\(-\{0,1\}[0-9]\{1,\}\)$/\1/p' "$F" 2>/dev/null | head -n 1; }
+
+case "${1:-}" in
+load)
+	off=$(stored)
+	[ -n "$off" ] || { echo "gts3-clock: no offset in $F" >&2; exit 0; }
+	now=$((rtc + off))
+	[ "$now" -ge "$MIN" ] || { echo "gts3-clock: offset gives $now, ignored" >&2; exit 0; }
+	date -u -s "@$now" > /dev/null
+	: > "$TRUST"
+	echo "gts3-clock: time set from the RTC: $(date -u)"
+	;;
+save|sync)
+	if [ "$1" = sync ]; then
+		: > "$TRUST"
+	elif [ ! -e "$TRUST" ]; then
+		echo "gts3-clock: time not loaded or synced at this boot, not saved" >&2
+		exit 0
+	fi
+	now=$(date -u +%s)
+	[ "$now" -ge "$MIN" ] || { echo "gts3-clock: time $now isn't plausible, not saved" >&2; exit 0; }
+	off=$((now - rtc))
+	old=$(stored)
+	# a few seconds either way are reading jitter, not a new time
+	if [ -n "$old" ] && [ $((off - old)) -le 2 ] && [ $((old - off)) -le 2 ]; then
+		exit 0
+	fi
+	mkdir -p "$DIR/gts3"
+	printf 'offset=%s\n' "$off" > "$F.new"
+	sync "$F.new" 2> /dev/null || sync
+	mv "$F.new" "$F"
+	sync
+	echo "gts3-clock: offset $off saved"
+	;;
+*)
+	sed -n '2,19p' "$0" >&2
+	exit 1
+	;;
+esac

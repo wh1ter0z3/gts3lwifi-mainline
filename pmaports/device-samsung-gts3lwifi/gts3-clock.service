@@ -1,0 +1,19 @@
+[Unit]
+Description=Clock from the RTC and the offset shared with Android (dual boot)
+Documentation=https://github.com/wh1ter0z3/gts3lwifi-mainline/blob/main/docs/dual-boot.md
+DefaultDependencies=no
+RequiresMountsFor=/boot
+After=local-fs.target
+Before=time-set.target systemd-timesyncd.service sysinit.target shutdown.target
+Wants=time-set.target
+Conflicts=shutdown.target
+ConditionPathExists=/boot/extlinux/extlinux.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/gts3-clock load
+ExecStop=/usr/sbin/gts3-clock save
+
+[Install]
+WantedBy=sysinit.target
