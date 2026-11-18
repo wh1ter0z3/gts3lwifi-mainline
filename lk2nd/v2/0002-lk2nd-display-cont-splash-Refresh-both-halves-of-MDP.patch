@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 30 Oct 2026 12:19:12 +0530
+Subject: [PATCH 2/6] lk2nd: display: cont-splash: Refresh both halves of MDP5
+ split displays
+
+A panel on two DSI links (split display, e.g. the Galaxy Tab S3) has
+its second half on control path 1 and ping-pong 1. With autorefresh
+only on ping-pong 0, only the first half keeps updating.
+
+On MDP 1.5 and later, if control path 1 is in command mode, enable
+autorefresh on ping-pong 1 as well, and start control path 1 by itself
+when the split-display link is off.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ lk2nd/display/cont-splash/refresh.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/lk2nd/display/cont-splash/refresh.c b/lk2nd/display/cont-splash/refresh.c
+index 356f93033..98e708c22 100644
+--- a/lk2nd/display/cont-splash/refresh.c
++++ b/lk2nd/display/cont-splash/refresh.c
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ /* Copyright (c) 2020-2022, Stephan Gerhold <stephan@gerhold.net> */
+ 
++#include <arch/defines.h>
+ #include <bits.h>
+ #include <clock.h>
+ #include <debug.h>
+@@ -123,6 +124,9 @@ bool mdp_setup_refresh(struct fbcon_config *fb)
+ #define MDP_PP_RD_PTR_IRQ		0x020
+ #define MDP_PP_AUTOREFRESH_CONFIG	0x030
+ 
++#define MDP5_CTL_TOP_CMD_MODE		BIT(17)
++#define MDP5_SPLIT_DPL_EN		REG_MDP(0x12F4)
++
+ /*
+  * Some bootloaders (e.g. Samsung S-Boot on the Galaxy Tab S3) never set up
+  * the ping-pong tear check and kick every frame by hand. Then the vsync
+@@ -162,6 +166,7 @@ static void mdp5_enable_auto_refresh(struct fbcon_config *fb)
+ {
+ 	uint32_t mdss_mdp_rev = readl(MDP_HW_REV);
+ 	uint32_t pp0_base;
++	bool ctl1_cmd = false;
+ 
+ 	if (mdss_mdp_rev >= MDSS_MDP_HW_REV_105)
+ 		pp0_base = REG_MDP(0x71000);
+@@ -178,7 +183,22 @@ static void mdp5_enable_auto_refresh(struct fbcon_config *fb)
+ 		clk_get_set_enable("mdss_vsync_clk", 19200000, true);
+ 
+ 	mdp5_pp_enable_auto_refresh(pp0_base, fb->height);
++
++	/*
++	 * Split displays (one panel on two DSI links) drive the second half
++	 * through control path 1 and ping-pong 1, so refresh that half too.
++	 * Only handled from MDP 1.5 on, where the ping-pongs are 0x800 apart.
++	 */
++	if (mdss_mdp_rev >= MDSS_MDP_HW_REV_105)
++		ctl1_cmd = readl(MDP_CTL_1_BASE + CTL_TOP) & MDP5_CTL_TOP_CMD_MODE;
++	if (ctl1_cmd)
++		mdp5_pp_enable_auto_refresh(pp0_base + 0x800, fb->height);
++	dsb();
++
+ 	writel(1, MDP_CTL_0_BASE + CTL_START);
++	/* Without the split-display link, control path 1 needs its own kick */
++	if (ctl1_cmd && !(readl(MDP5_SPLIT_DPL_EN) & BIT(0)))
++		writel(1, MDP_CTL_1_BASE + CTL_START);
+ }
+ #endif
+ 

@@ -3,7 +3,7 @@ maintainer="psigod <psigod@example.com>"
 pkgname=device-samsung-gts3lwifi
 pkgdesc="Samsung Galaxy Tab S3 (SM-T820, SM-T825)"
 pkgver=1
-pkgrel=14
+pkgrel=15
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -57,6 +57,12 @@ source="
 	gts3-first-login
 	gts3-first-login.desktop
 	gts3-preview-kwinrc
+	20-gts3-dualboot.sh
+	gts3-boot
+	gts3-clock
+	gts3-clock.service
+	gts3-clock-sync.path
+	gts3-clock-sync.service
 	"
 
 build() {
@@ -65,6 +71,27 @@ build() {
 
 package() {
 	devicepkg_package $startdir $pkgname
+
+	# Dual boot with Android (docs/dual-boot.md): the initramfs hook that
+	# finds the root in the layout's GPT on userdata, and the OS switch
+	install -Dm644 "$srcdir"/20-gts3-dualboot.sh \
+		"$pkgdir"/usr/share/mkinitfs/hooks/20-gts3-dualboot.sh
+	install -Dm755 "$srcdir"/gts3-boot "$pkgdir"/usr/bin/gts3-boot
+	# One clock for both systems: the RTC can't be set, so the offset to the
+	# real time is kept on the shared boot partition (see gts3-clock)
+	install -Dm755 "$srcdir"/gts3-clock "$pkgdir"/usr/sbin/gts3-clock
+	install -Dm644 "$srcdir"/gts3-clock.service \
+		"$pkgdir"/usr/lib/systemd/system/gts3-clock.service
+	install -Dm644 "$srcdir"/gts3-clock-sync.path \
+		"$pkgdir"/usr/lib/systemd/system/gts3-clock-sync.path
+	install -Dm644 "$srcdir"/gts3-clock-sync.service \
+		"$pkgdir"/usr/lib/systemd/system/gts3-clock-sync.service
+	mkdir -p "$pkgdir"/usr/lib/systemd/system/sysinit.target.wants \
+		"$pkgdir"/usr/lib/systemd/system/multi-user.target.wants
+	ln -s ../gts3-clock.service \
+		"$pkgdir"/usr/lib/systemd/system/sysinit.target.wants/gts3-clock.service
+	ln -s ../gts3-clock-sync.path \
+		"$pkgdir"/usr/lib/systemd/system/multi-user.target.wants/gts3-clock-sync.path
 
 	# Bluetooth address from the efs partition (see gts3-bdaddr)
 	install -Dm755 "$srcdir"/gts3-bdaddr "$pkgdir"/usr/sbin/gts3-bdaddr
@@ -229,4 +256,10 @@ c70f048c84838a21d5e2f967520cc8f823c86992c8f979a1b27359ce2fbd705a08f1e0df590f74b9
 e129f043392a9e1093aca541421baca2fccb203a840b9f5c234c6d3432b9d370ef57c8b3815863439667ebb5c97217861b7d38f3b1cff3c41fa8861e05bf6534  gts3-first-login
 2ce70e6d9c7a3ac3e57bd1dd19cd18d46ffca0be9a937310dc18baf2b6470579dcbb6c8fb5888e26988cec7b7842a55e257ead2e7bcc74750f33fff9f637201b  gts3-first-login.desktop
 ad005503449114dd8a487e1495d43b66c467ed4f0109535386bd8a7ace0c83ac7d4fa3209961a0f79dc222f8e2ca60cfa059f18fa0273d35e0674f5d5b14b485  gts3-preview-kwinrc
+4baed65a1237bb30ff1971941261250747ccd347798c2c6072059e4735c05305eb84b22b6fcde4c4f2e4c7208499abe2ec27ffbc7585ad178d4da2c8e71a46bc  20-gts3-dualboot.sh
+232e419ad0685c32cc3a9e4961112bcd250aeef85dbbbc0e3424e24fc2572fa7def377b8b0063c5d490fddbfbb999bd8267bff95c69f2082674f8276877d6980  gts3-boot
+cb46230911abd0b00e7b28d4a13710df9fe175c290887a77928a299fb4434e2ae9fb3afc4e979ade7cbcedabbbb36ed0de99ce2c37266d989c9030306e99097b  gts3-clock
+9eb816eed362afea29e66520753d2e665b2f49b21155d4f8b7d0468f0377ae661d6c19afb112615b4aba311a3b7d55e5c0982b6560aaba9e85ae113797c9a919  gts3-clock.service
+1ca88c41dec67fd14c35103d3c6d81b951cfd1947ad8f53039d7434a4e78a47e95cafa6dc0b236d52d00b141b179edb58e868b56ce13160c6bbef6e333bef24c  gts3-clock-sync.path
+757cca4152a533d9da35cf3e4fe061ea2fef5672e189c18781268c75f137c8ef0b4339494b514775abfe152afcb039b281d9e05f1655716d1dff5ffe88a64e78  gts3-clock-sync.service
 "

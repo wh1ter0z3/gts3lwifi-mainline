@@ -1,0 +1,7 @@
+[Unit]
+Description=Store the clock offset once NTP has set the time (dual boot)
+RequiresMountsFor=/boot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/gts3-clock sync
