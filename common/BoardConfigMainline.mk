@@ -17,4 +17,3 @@ BOARD_RECOVERY_KERNEL_MODULES := $(GTS3_MAINLINE_MODULES)
 # vkms (a virtual display, for a board without panel) only with gts3.vkms=1
 BOARD_RECOVERY_KERNEL_MODULES_LOAD := $(filter-out %/vkms.ko,$(GTS3_MAINLINE_MODULES))
 TW_BRIGHTNESS_PATH := "/sys/class/backlight/994000.dsi.0/brightness"
-TW_EXCLUDE_MTP := true
