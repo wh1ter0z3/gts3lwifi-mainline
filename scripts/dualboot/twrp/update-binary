@@ -1,0 +1,212 @@
+#!/sbin/sh
+# Galaxy Tab S3 dual boot installer for OrangeFox / TWRP (docs/dual-boot.md):
+# Nura (postmarketOS) and, if its files are there, our Android (any GSI on
+# our vendor), side by side on internal storage, with lk2nd v2 to choose.
+#
+# Put this zip, nura-root.simg and (for Android) the GSI (system.img, .img.xz,
+# or a zip with system.img) in one folder on the microSD card or a USB drive,
+# then Install this zip. It ERASES the userdata partition (internal storage:
+# all Android data, a postmarketOS install), makes the layout in it, writes
+# both systems and flashes lk2nd v2 to the start of the boot partition.
+# Without a GSI it installs Nura only (Android's partitions stay empty).
+#
+# Runs under the zip's busybox (recoveries differ in their tools, and their
+# mksh computes in 32 bits). From the recovery: sgdisk, mke2fs, e2fsck,
+# resize2fs, simg2img, getprop, and toybox's losetup (offsets and sizes).
+# Arguments (update-binary protocol): <api> <outfd> <zip>
+# Test overrides: MODEL, DATA_DEV, BOOT_DEV, GSI, SYSTEM, VENDOR, DATA, WORK
+OUTFD=$2
+ZIP=$3
+if [ -z "${GTS3_BB:-}" ]; then
+	B=/tmp/gts3-bb
+	rm -rf "$B" && mkdir -p "$B" && cd "$B" &&
+		unzip -o "$ZIP" tools/busybox > /dev/null 2>&1 &&
+		chmod 0755 tools/busybox && "$B/tools/busybox" --install -s "$B" || {
+		echo "ui_print ERROR: can't unpack tools/busybox from $ZIP" >&"$OUTFD"
+		exit 1
+	}
+	# the recovery's e2fsprogs and losetup, not busybox's
+	rm -f "$B/mke2fs" "$B/mkfs.ext2" "$B/tune2fs" "$B/e2fsck" "$B/fsck" "$B/losetup"
+	export GTS3_BB=$B PATH="$B:$PATH"
+	exec "$B/tools/busybox" sh "$0" "$@"
+fi
+DATA_DEV=${DATA_DEV:-/dev/block/bootdevice/by-name/userdata}
+BOOT_DEV=${BOOT_DEV:-/dev/block/bootdevice/by-name/boot}
+SYSTEM=${SYSTEM:-4G} VENDOR=${VENDOR:-1G} DATA=${DATA:-4G}
+W=${WORK:-/tmp/gts3-install}
+G=$W/dev
+DIR=$(dirname "$ZIP")
+
+ui() { echo "ui_print $*" >&"$OUTFD"; echo "ui_print" >&"$OUTFD"; }
+die() {
+	ui "ERROR: $*"
+	[ -n "${ERASED:-}" ] && ui "userdata was changed: run this installer again" ||
+		ui "Nothing on the tablet was changed."
+	cleanup
+	exit 1
+}
+cleanup() {
+	umount "$W/mnt" 2> /dev/null
+	for l in $(cat "$W/loops" 2> /dev/null); do losetup -d "$l" 2> /dev/null; done
+	rm -f "$W/loops"
+}
+# the recovery's tools (not the zip's busybox)
+tool() {
+	for c in $(which -a "$1" 2> /dev/null) /system/bin/$1 /sbin/$1; do
+		case "$c" in "$GTS3_BB"/*) continue ;; esac
+		[ -x "$c" ] && { echo "$c"; return 0; }
+	done
+	return 1
+}
+SGDISK=$(tool sgdisk) || die "this recovery has no sgdisk"
+MKE2FS=$(tool mke2fs) || die "this recovery has no mke2fs"
+E2FSCK=$(tool e2fsck) || die "this recovery has no e2fsck"
+RESIZE2FS=$(tool resize2fs) || die "this recovery has no resize2fs"
+SIMG2IMG=$(tool simg2img) || die "this recovery has no simg2img"
+LOSETUP=$(tool losetup) || die "this recovery has no losetup"
+
+ui "Galaxy Tab S3 dual boot: Nura and Android"
+MODEL=${MODEL:-$(getprop ro.product.device)}
+case "$MODEL" in
+gts3lwifi) DTB=apq8096-samsung-gts3lwifi.dtb ;;
+gts3llte) DTB=msm8996-samsung-gts3llte.dtb ;;
+*) die "not a Galaxy Tab S3 (ro.product.device: '$MODEL')" ;;
+esac
+mkdir -p "$W" "$G" "$W/mnt"
+cd "$W" || die "no $W"
+unzip -o -q "$ZIP" -x 'META-INF/*' || die "can't unpack the zip"
+sha256sum -c -s SHA256SUMS 2> /dev/null || die "the zip's files are damaged, download it again"
+. ./nura.env || die "no nura.env in the zip"
+LK2ND=lk2nd-$MODEL.img
+[ -s "$LK2ND" ] || die "no $LK2ND in the zip: no lk2nd v2 for this model yet"
+ROOT=$DIR/nura-root.simg
+[ -f "$ROOT" ] || die "put nura-root.simg next to this zip"
+GSI=${GSI:-$(ls "$DIR"/*.img "$DIR"/*.img.xz "$DIR"/*system*.zip 2> /dev/null | grep -v nura-root | head -n 1)}
+[ -n "$GSI" ] && ui "Android: $(basename "$GSI")" || ui "No GSI next to the zip: Nura only"
+
+# userdata free: the recovery may have it mounted, or (dual boot mode) loop
+# devices on it with /data on one of them
+UD=$(readlink -f "$DATA_DEV")
+LOOPS=$($LOSETUP -a 2> /dev/null | grep -F "($UD)" | cut -d: -f1)
+for d in "$UD" $LOOPS; do
+	for m in $(awk -v d="$d" '$1 == d { print $2 }' /proc/mounts); do umount "$m" 2> /dev/null || umount -l "$m"; done
+done
+for m in /data /sdcard; do umount "$m" 2> /dev/null; done
+for d in "$UD" $LOOPS; do
+	awk -v d="$d" '$1 == d { found = 1 } END { exit !found }' /proc/mounts && die "$d is still mounted"
+done
+for l in $LOOPS; do $LOSETUP -d "$l" || die "can't free $l"; done
+
+ui "Making the layout in userdata..."
+ERASED=1
+$SGDISK -Z "$DATA_DEV" > /dev/null 2>&1
+$SGDISK -o \
+	-n 1:2048:+512M -t 1:EF00 -c 1:gts3_boot \
+	-n 2:0:+"$SYSTEM" -t 2:8300 -c 2:android_system \
+	-n 3:0:+"$VENDOR" -t 3:8300 -c 3:android_vendor \
+	-n 4:0:+"$DATA" -t 4:8300 -c 4:android_data \
+	-n 5:0:0 -t 5:8300 -c 5:nura \
+	"$DATA_DEV" > "$W/sgdisk.log" 2>&1 || die "sgdisk: $(tail -n 1 "$W/sgdisk.log")"
+$SGDISK -p "$DATA_DEV" > "$W/gpt" 2>&1 || die "no GPT after sgdisk"
+
+# start and last sector of partition $1
+first() { awk -v n="$1" '$1 == n { print $2 }' "$W/gpt"; }
+last() { awk -v n="$1" '$1 == n { print $3 }' "$W/gpt"; }
+
+# Hybrid MBR (lk2nd reads only MBR): entry 0 = gts3_boot, entry 1 = 0xEE
+le32() { printf '\\%03o\\%03o\\%03o\\%03o' $(($1 & 255)) $((($1 >> 8) & 255)) $((($1 >> 16) & 255)) $((($1 >> 24) & 255)); }
+bs=$(first 1); bl=$(($(last 1) - bs + 1))
+chs='\376\377\377'
+{
+	printf "\\000$chs\\203$chs$(le32 "$bs")$(le32 "$bl")\\000$chs\\356$chs$(le32 1)$(le32 $((bs - 1)))"
+	dd if=/dev/zero bs=32 count=1 2> /dev/null
+	printf '\125\252'
+} > "$W/mbr"
+[ "$(stat -c %s "$W/mbr")" = 66 ] || die "hybrid MBR"
+dd if="$W/mbr" of="$DATA_DEV" bs=1 seek=446 conv=notrunc,fsync 2> /dev/null || die "writing the MBR"
+
+# A loop device for each partition, $G/<name>: toybox's losetup (the
+# recovery's) takes -S for the size, util-linux's --sizelimit
+attach() {	# <loop device> <offset> <size>, in bytes
+	if $LOSETUP --help 2>&1 | grep -q -e --sizelimit; then
+		$LOSETUP -o "$2" --sizelimit "$3" "$1" "$DATA_DEV"
+	else
+		$LOSETUP -o "$2" -S "$3" "$1" "$DATA_DEV"
+	fi
+}
+: > "$W/loops"
+for n in 1 2 3 4 5; do
+	f=$(first $n) l=$(last $n)
+	name=$(awk -v n="$n" '$1 == n { print $NF }' "$W/gpt")
+	dev=$($LOSETUP -f) || die "no free loop device"
+	attach "$dev" $((f * 512)) $(((l - f + 1) * 512)) || die "losetup $name"
+	echo "$dev" >> "$W/loops"
+	ln -sf "$dev" "$G/$name"
+done
+
+ui "Boot partition: lk2nd's menu, kernels..."
+$MKE2FS -q -F -t ext2 -b 1024 -L pmOS_boot -U "$BOOT_UUID" "$G/gts3_boot" > /dev/null 2>&1 || die "mke2fs boot"
+mount -t ext2 "$G/gts3_boot" "$W/mnt" 2> /dev/null || mount -t ext4 "$G/gts3_boot" "$W/mnt" || die "mount boot"
+tar -xf nura-boot.tar -C "$W/mnt" || die "Nura's boot files"
+if [ -n "$GSI" ]; then
+	mkdir -p "$W/mnt/gts3/android"
+	cp android/Image.gz android/gts3.dtb android/initramfs "$W/mnt/gts3/android/" || die "Android's boot files"
+fi
+mkdir -p "$W/mnt/extlinux"
+{
+	echo "# Galaxy Tab S3 dual boot. lk2nd boots the default label; switch with"
+	echo "# gts3-boot, or Volume Down at power-on for lk2nd's menu."
+	echo "default nura"
+	echo
+	echo "label nura"
+	echo "	linux /vmlinuz"
+	echo "	initrd /initramfs"
+	echo "	fdt /$DTB"
+	echo "	append $NURA_CMDLINE"
+	if [ -n "$GSI" ]; then
+		echo
+		echo "label android"
+		echo "	linux /gts3/android/Image.gz"
+		echo "	initrd /gts3/android/initramfs"
+		echo "	fdt /gts3/android/gts3.dtb"
+		echo "	append $(cat android/cmdline) gsi.parts=1"
+	fi
+} > "$W/mnt/extlinux/extlinux.conf"
+sync
+umount "$W/mnt" || die "umount boot"
+
+ui "Nura: its root (a few minutes)..."
+$SIMG2IMG "$ROOT" "$G/nura" || die "simg2img nura-root.simg"
+$E2FSCK -fy "$G/nura" > /dev/null 2>&1
+[ $? -le 1 ] || die "e2fsck of Nura's root"
+$RESIZE2FS "$G/nura" > /dev/null 2>&1 || die "resize2fs of Nura's root"
+
+ui "Android: data..."
+$MKE2FS -q -F -t ext4 -L android_data "$G/android_data" > /dev/null 2>&1 || die "mke2fs android_data"
+if [ -n "$GSI" ]; then
+	ui "Android: vendor, system..."
+	dd if=android/vendor.img of="$G/android_vendor" bs=4M conv=fsync 2> /dev/null || die "vendor image"
+	# zip64 (GSI zips over 4 GB): gsi-unzip from the Android release
+	UNZIP=unzip
+	[ -x "$W/tools/gsi-unzip" ] && UNZIP=$W/tools/gsi-unzip
+	case "$GSI" in
+	*.zip)
+		n=$($UNZIP -Z1 "$GSI" 2> /dev/null | grep -E '(^|/)system\.img$' | head -n 1)
+		[ -n "$n" ] || die "no system.img in $(basename "$GSI")"
+		$UNZIP -p "$GSI" "$n" > "$G/android_system" || die "system image" ;;
+	*.xz) xz -dc "$GSI" > "$G/android_system" || die "system image" ;;
+	*)
+		if [ "$(od -An -tx1 -N4 "$GSI" | tr -d ' ')" = 3aff26ed ]; then
+			$SIMG2IMG "$GSI" "$G/android_system" || die "system image"
+		else
+			dd if="$GSI" of="$G/android_system" bs=4M conv=fsync 2> /dev/null || die "system image"
+		fi ;;
+	esac
+fi
+sync
+cleanup
+
+ui "lk2nd v2..."
+dd if="$LK2ND" of="$BOOT_DEV" bs=4096 conv=notrunc,fsync 2> /dev/null || die "writing lk2nd"
+ui "Done. Reboot: lk2nd starts Nura (gts3-boot switches)."
+exit 0

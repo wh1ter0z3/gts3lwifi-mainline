@@ -20,6 +20,9 @@
 #   --image FILE     only build the image (raw, sparse file) here; for tests
 #   --size BYTES     with --image: the userdata size (else asked from lk2nd)
 #   --model T820|T825  with --image: the model (else asked from lk2nd)
+#   --payload DIR    don't install: write the files twrp/update-binary (the
+#                    OrangeFox installer) needs into DIR: nura-boot.tar,
+#                    nura-root.simg, nura.env, and android/ from --android
 # ERASES the userdata partition: Android data, a postmarketOS install on it.
 # Needs: fastboot, e2fsprogs (mke2fs, e2fsck, resize2fs, debugfs), sfdisk,
 # simg2img and img2simg (android-sdk-libsparse-utils / android-tools),
@@ -34,20 +37,20 @@ die() { echo "error: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found ($2)"; }
 say() { echo "== $*"; }
 
-NURA= GSI= ANDROID= LK2ND= IMAGE= SIZE= MODEL=
+NURA= GSI= ANDROID= LK2ND= IMAGE= SIZE= MODEL= PAYLOAD=
 SYSTEM=4G VENDOR=1G DATA=4G SHARED=
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--nura) NURA=$2 ;; --gsi) GSI=$2 ;; --android) ANDROID=$2 ;; --lk2nd) LK2ND=$2 ;;
 	--system) SYSTEM=$2 ;; --vendor) VENDOR=$2 ;; --data) DATA=$2 ;; --shared) SHARED=$2 ;;
-	--image) IMAGE=$2 ;; --size) SIZE=$2 ;; --model) MODEL=$2 ;;
+	--image) IMAGE=$2 ;; --size) SIZE=$2 ;; --model) MODEL=$2 ;; --payload) PAYLOAD=$2 ;;
 	*) sed -n '2,29p' "$0" >&2; exit 1 ;;
 	esac
 	shift 2
 done
 [ -f "$NURA" ] || die "--nura: no such file '$NURA'"
 [ -z "$GSI" ] || [ -n "$ANDROID" ] || die "--gsi needs --android (our vendor and boot files)"
-[ -z "$ANDROID" ] || [ -n "$GSI" ] || die "--android needs --gsi"
+[ -z "$ANDROID" ] || [ -n "$GSI" ] || [ -n "$PAYLOAD" ] || die "--android needs --gsi"
 if [ -n "$ANDROID" ]; then
 	for f in vendor.img Image.gz gts3.dtb initramfs cmdline; do
 		[ -s "$ANDROID/$f" ] || die "--android: no $f in $ANDROID"
@@ -61,7 +64,8 @@ HOOK=$HERE/20-gts3-dualboot.sh
 [ -f "$HOOK" ] || HOOK=$HERE/../../pmaports/device-samsung-gts3lwifi/20-gts3-dualboot.sh
 [ -f "$HOOK" ] || die "20-gts3-dualboot.sh not found"
 
-# The tablet: model and userdata size, from lk2nd
+# The tablet: model and userdata size, from lk2nd (a payload is for both)
+[ -z "$PAYLOAD" ] || { MODEL=${MODEL:-T820}; SIZE=${SIZE:-26226966016}; IMAGE=${IMAGE:-none}; }
 if [ -z "$IMAGE" ] || [ -z "$SIZE" ] || [ -z "$MODEL" ]; then
 	need fastboot "Android platform tools"
 	echo "Waiting for the tablet in lk2nd's fastboot mode..."
@@ -142,6 +146,37 @@ echo "$NURA_CMDLINE" | grep -q "pmos_root_uuid=$ROOT_UUID" || die "Nura's boot.i
 mkdir -p "$W/hook/hooks"
 cp "$HOOK" "$W/hook/hooks/20-gts3-dualboot.sh"
 (cd "$W/hook" && printf 'hooks\nhooks/20-gts3-dualboot.sh\n' | cpio -o -H newc -R 0:0 --quiet | gzip -9n) >> "$B/initramfs"
+
+# The OrangeFox installer's files: Nura's boot files (hook in the
+# initramfs), its root (checked, hook for mkinitfs; grown on the tablet),
+# the UUIDs and command line, our Android files
+if [ -n "$PAYLOAD" ]; then
+	say "payload in $PAYLOAD"
+	mkdir -p "$PAYLOAD"
+	P=$(cd "$PAYLOAD" && pwd)
+	tar -C "$B" --numeric-owner --owner=0 --group=0 -cf "$P/nura-boot.tar" .
+	e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
+	debugfs -w -R "mkdir /etc/mkinitfs/hooks" "$N/root.img" > /dev/null 2>&1 || true
+	debugfs -w -R "write $HOOK /etc/mkinitfs/hooks/20-gts3-dualboot.sh" "$N/root.img" > /dev/null 2>&1
+	for f in "uid 0" "gid 0" "mode 0100644"; do
+		debugfs -w -R "sif /etc/mkinitfs/hooks/20-gts3-dualboot.sh $f" "$N/root.img" > /dev/null 2>&1
+	done
+	need img2simg "android-sdk-libsparse-utils"
+	img2simg "$N/root.img" "$P/nura-root.simg"
+	{
+		echo "# Nura (postmarketOS) image this payload is from: $(basename "$NURA")"
+		echo "BOOT_UUID=$BOOT_UUID"
+		echo "ROOT_UUID=$ROOT_UUID"
+		echo "NURA_CMDLINE='$NURA_CMDLINE'"
+	} > "$P/nura.env"
+	if [ -n "$ANDROID" ]; then
+		mkdir -p "$P/android"
+		for f in vendor.img Image.gz gts3.dtb initramfs cmdline; do cp -L "$ANDROID/$f" "$P/android/"; done
+	fi
+	rm -f "$N/root.img" "$N/boot.img"
+	ls -l "$P" "$P/android" 2> /dev/null
+	exit 0
+fi
 
 # Android's boot files
 if [ -n "$ANDROID" ]; then
