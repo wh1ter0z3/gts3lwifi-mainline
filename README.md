@@ -11,13 +11,26 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 
 ## Dual boot (test)
 
-Nura (postmarketOS) and Android (any GSI on our open vendor) side by side on
-internal storage, with OrangeFox on our kernel; lk2nd's menu picks one, and
-they switch without a PC. Test build, tested on an SM-T820 without a screen:
-[install](docs/dual-boot-install.md), [how it works](docs/dual-boot.md),
-[release notes](docs/release-notes-dualboot-test1.md). Jayden's LineageOS 24
-can take Android's place, from its own zip:
-[install](docs/lineage-dual-boot-install.md).
+Nura (postmarketOS with Plasma) and an Android side by side on internal
+storage, plus OrangeFox on our kernel. lk2nd picks one at every start, and
+they switch without a PC. [How it works](docs/dual-boot.md),
+[release notes](docs/release-notes-dualboot-test1.md).
+
+Both Androids keep Nura, so the choice is only which Android:
+
+| | **Our Android** | **Jayden's LineageOS 24** |
+|---|---|---|
+| Install | [dual-boot-install.md](docs/dual-boot-install.md) | [lineage-dual-boot-install.md](docs/lineage-dual-boot-install.md) |
+| What you install | our release zip plus a GSI you pick ([TrebleDroid's](https://github.com/TrebleDroid/treble_experimentations/releases) is what we test) | [his zip](https://github.com/jaydens-tasty-slop/tabs3-lineageos/releases), unchanged, plus our small add-on |
+| Android version | any arm64 A/B GSI: 15, 16 or 17 | Android 17 |
+| Kernel | our mainline Linux 7.3.1, the same one Nura runs | Samsung's 3.18 |
+| Vendor | ours, built from AOSP 15 source, no Samsung blobs | his |
+| Updates | swap the GSI yourself; the vendor and kernel come from us | his own updater; our add-on survives it |
+| Hardware | GPU, hardware video, audio, Wi-Fi, Bluetooth, sensors, cameras, GPS; **tested on a board without a screen**, so the display is unproven | a finished ROM developed on a working tablet, so its display and hardware are known to work; only the dual boot part is new |
+| Switching | `gts3-boot` from either system, or lk2nd's menu | lk2nd's menu through the recovery path |
+
+Take Jayden's if you want an Android to use every day, ours if you want the
+open vendor, the newest Android, or the same kernel as Nura.
 
 ## Models
 

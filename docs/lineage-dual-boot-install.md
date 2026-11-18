@@ -8,9 +8,11 @@ For the SM-T820 (Wi-Fi) and SM-T825 (LTE). The tablet ends up with:
 - **OrangeFox** on our kernel, in the same menu as Nura.
 
 LineageOS is installed from its own zip, unchanged, so its own updater keeps
-working. How it works: [dual-boot.md](dual-boot.md). For Nura with **our**
-Android instead of LineageOS, see
-[dual-boot-install.md](dual-boot-install.md).
+working. How it works: [dual-boot.md](dual-boot.md).
+
+**Want our own Android instead?** Any GSI on our open vendor and our
+mainline kernel: [dual-boot-install.md](dual-boot-install.md). The README
+compares the two.
 
 **This has not run on a tablet with a screen yet.** On our screenless
 SM-T820 LineageOS started with its /data in the right place, and the recovery

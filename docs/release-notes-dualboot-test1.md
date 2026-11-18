@@ -15,10 +15,17 @@ are covered, but it was tested on an SM-T820 board without a screen only.
 | `gts3-dualboot-test1.zip` | The installer: for TWRP/OrangeFox (Install), and for a PC (`pc/install-dualboot.sh --zip`). It holds lk2nd v2 for both models, our vendor and kernel, the recovery, and Nura's boot files |
 | `nura-root.img.xz`, `.sha256` | Nura's system. It goes next to the zip |
 | `lk2nd-gts3lwifi.img`, `lk2nd-gts3llte.img`, `-odin.tar` | lk2nd v2 alone, for a tablet without lk2nd (Download mode). SM-T820: gts3lwifi, SM-T825: gts3llte |
+| `lk2nd-...-recovery-odin.tar` | the same lk2nd for the **recovery** partition, which is where it goes for LineageOS mode |
+| `OrangeFox-mainline-...-fastboot-boot.img` | our OrangeFox to start from a PC without flashing anything: `fastboot boot <file>` in lk2nd |
 | `SHA256SUMS` | Checksums |
 
 The GSI isn't in the release: we test with TrebleDroid's AOSP 16,
 `system-td-arm64-vanilla.img.xz`.
+
+Jayden's LineageOS 24 can take our Android's place and keep Nura, installed
+from his own zip plus a small add-on:
+[lineage-dual-boot-install.md](lineage-dual-boot-install.md). The README
+compares the two.
 
 ## What's in it
 
