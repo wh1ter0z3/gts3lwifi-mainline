@@ -4,6 +4,11 @@
 # "androidboot" on the command line makes lk2nd add S-Boot's own one.
 
 on early-init
+    # No ashmem in mainline: libcutils uses memfd only for a vendor at Q or
+    # later and with sys.use_memfd (pixelflinger's code cache aborts the GUI
+    # without either). A recovery has no vendor partition to set the first.
+    setprop ro.vndk.version 31
+    setprop sys.use_memfd true
     # a board without panel (gts3.vkms=1): a virtual display for the GUI
     exec u:r:recovery:s0 -- /system/bin/sh -c "grep -q gts3.vkms=1 /proc/cmdline && modprobe -d /lib/modules vkms; true"
 
