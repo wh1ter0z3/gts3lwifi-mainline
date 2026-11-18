@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=8
+pkgrel=9
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -234,12 +234,48 @@ source="
 	0185-clk-qcom-smd-rpm-release-unused-handoff-votes-in-sleep-set.patch
 	0186-drm-msm-mdp5-drop-bandwidth-vote-while-runtime-suspended.patch
 	0187-drm-msm-enable-thp-for-gem-buffers.patch
+	0188-firmware-qcom-scm-QSEE-app-loading-from-firmware-ima.patch
+	0189-firmware-qcom-scm-QSEE-listeners-and-raw-app-sends-G.patch
+	0190-firmware-qcom-scm-QSEE-app-sends-from-the-qseecom-CM.patch
+	0191-firmware-qcom-scm-QSEE-app-shutdown-Samsung-keymaste.patch
+	0192-firmware-qcom-dev-qseecom-with-the-downstream-ABI-Ga.patch
+	0193-input-misc-Egis-ET5xx-fingerprint-sensor-control-for.patch
+	0194-input-misc-egis-et5xx-ctrl-create-the-fingerprint-cl.patch
+	0195-input-misc-egis-et5xx-ctrl-report-the-sensor-type-at.patch
+	0196-arm64-dts-qcom-gts3lwifi-TrustZone-buffer-pool-as-CM.patch
+	0197-arm64-dts-qcom-gts3lwifi-Egis-ET510-fingerprint-sens.patch
+	0198-kernel-configs-gts3-android.config-what-Android-need.patch
+	0199-fs-Keep-PID-1-s-previous-fs_struct-while-its-threads.patch
+	0200-selinux-Add-a-permissive-lock.patch
+	0201-netfilter-Add-the-quota2-match-from-the-Android-Comm.patch
+	0202-mm-Add-the-ashmem-ioctl-shim-for-memfd-from-the-Andr.patch
+	0203-kernel-configs-gts3-android-What-Android-13-to-16-sy.patch
+	0204-drm-Accept-detached-ops-in-the-crtc-fence-s-name-cal.patch
+	0205-kernel-configs-gts3-android-The-cgroup-v1-cpuset-hie.patch
+	0206-media-venus-venc-Take-RGBA-frames-under-the-BGR32-na.patch
+	0207-media-venus-venc-Bitstream-buffers-of-the-driver-s-o.patch
+	0208-media-venus-venc-Sizes-that-fit-Android-s-frames-and.patch
+	0209-media-venus-Free-bounce-bitstream-buffers-only-once-.patch
+	0210-media-venus-venc-Wait-for-a-drain-to-finish-before-a.patch
+	0211-media-venus-vdec-Bitstream-dma-bufs-as-large-as-the-.patch
+	0212-media-venus-vdec-Smallest-placeholder-for-an-unknown.patch
+	0213-media-venus-vdec-Parameter-sets-in-front-of-the-firs.patch
+	0214-media-venus-vdec-Keep-the-session-across-dma-buf-swa.patch
+	0215-media-venus-vdec-Keep-the-visible-rectangle-across-a.patch
+	0216-media-venus-vdec-Visible-size-from-the-H.264-SPS.patch
+	0217-media-venus-Drop-the-delayed-capture-buffers-with-th.patch
+	0218-media-venus-vdec-Take-the-capture-S_FMT-a-resolution.patch
 "
 builddir="$srcdir/linux-$pkgver"
 
 prepare() {
 	default_prepare
 	cp "$srcdir/config-$_flavor.$CARCH" .config
+	# One kernel for postmarketOS, Android and the recovery: what Android
+	# needs on top (binderfs, SELinux, encryption, verity, the TrustZone
+	# stack). Additive, and postmarketOS boots the same kernel.
+	scripts/kconfig/merge_config.sh -m .config kernel/configs/gts3-android.config
+	make ARCH="$_carch" LLVM=1 olddefconfig
 }
 
 build() {
@@ -468,4 +504,35 @@ a1fcedc2b9f01a09bba777ce3e80a179fd2c3ae9ce4c6dcf1732c05e1d7b30153ef65a4e1676d054
 36378deb8d09a40eb5babe44eb897c98887d8c9cf57587fc1926f5bdbf626b83b5f6ec4392b7bb9489382cee281845cd0d9a70c14b9d990f2cd312da1941f48d  0185-clk-qcom-smd-rpm-release-unused-handoff-votes-in-sleep-set.patch
 bf72a7a40b9134fdf446babd8e2ceabd03b6ac7e9f62aec0ac9168dbaadeb49d8d9871710cb19b15c2d73f37bc6401f9db260978b2c92b0d7f949aeb1584dd84  0186-drm-msm-mdp5-drop-bandwidth-vote-while-runtime-suspended.patch
 fd0cbb553ab9bf3ce9ba716d238941930e2a2296092b586b619722e761b13e6f30e31063caa2a6b54c53d11fbc55a8e9bf514879f3cfc6cb0c1b0432be5e7854  0187-drm-msm-enable-thp-for-gem-buffers.patch
+345a8c95b59f36fca081c27b5c66e857796924be70efbfe67d882a9d9c73ae3bea0606abe607922227bd91989680be64a7eb576c87b930738bf57529de19bb4c  0188-firmware-qcom-scm-QSEE-app-loading-from-firmware-ima.patch
+692020345373b4cda891252aeec5f1626baea139e7aacf62ce0fb4c5646b94cc9604fdbe928079ede5642ebba298a27529d402f91f81689b9ff826edf9b9c83d  0189-firmware-qcom-scm-QSEE-listeners-and-raw-app-sends-G.patch
+ffdf85120e1b61eafec7cceeb063c9d165a308580b73240f4e2511a301d655f1c3942511d946e464f393abd48ae1d754f9f7c1c4da4cfdbfae0f563ec4702421  0190-firmware-qcom-scm-QSEE-app-sends-from-the-qseecom-CM.patch
+868dc368d65e4abf5525cb5edd9b831b60e316f12f9fb0e28eb13628ba5c381b5de48570b8ca3b31db00164dfa8a4077a9c9ee753d66d2d4f58dfc8f09a0081e  0191-firmware-qcom-scm-QSEE-app-shutdown-Samsung-keymaste.patch
+f44adbc296b4035abf22a154f980243d903c057a1783e61aab533bb5780776e1cd02b4c7827f108c645b7624e0933392c00fc6a70e5790b7dcdb567079f51cae  0192-firmware-qcom-dev-qseecom-with-the-downstream-ABI-Ga.patch
+858abc2b0f8b2e2d1cd4f5004b2890de64d211753a7bfcce2e9ad7181b1ac18021313589e2b0b743ac3e94d48c3023a9e1821ded83c74b6dc182f9c1fdfd82b8  0193-input-misc-Egis-ET5xx-fingerprint-sensor-control-for.patch
+ea266ab9f97af52a1e6718a227e5f617b40604384eb27831db1f048ebb22cd52bf319d9138d743e4e2486f5173dc6acc340d701ea7754ac3034776a950a58b6b  0194-input-misc-egis-et5xx-ctrl-create-the-fingerprint-cl.patch
+1f92d48beacae49d3667ea6932da6fc878238fa0229fd5763d17263bebd07d9cc6ed23efb3ffef8b2a3d7bb97883f254e9448d3a5a1c1371faaf8290262aba5e  0195-input-misc-egis-et5xx-ctrl-report-the-sensor-type-at.patch
+8ad1c1c760dc575dff6e0cc389863f716a07803d87e5bbeea96616efa4fcecb0d04b645a310e8361cdfdc539299824c647ffebe9d73d98033395e0d889bc79e2  0196-arm64-dts-qcom-gts3lwifi-TrustZone-buffer-pool-as-CM.patch
+1725b72f2ffa4f9fc02cda3ff5edece6dc17979647fcee8ce554a7971b2a1fdf112640e17ab9205b7a9c7524cde78210ad5be800b51ec87725b243dbef9c3d85  0197-arm64-dts-qcom-gts3lwifi-Egis-ET510-fingerprint-sens.patch
+482152e47c6155b04e7ff6a4c1b690e5a249fa7602d3955eceed782c992e733ccb658243b38053b72a89cb213006b302f27d950b50f4707999267503427977c9  0198-kernel-configs-gts3-android.config-what-Android-need.patch
+97ddf941bd7ddd16a8178b29db765f0f2cda35dfa934f6dd9e78926da4e1d32d1d8e36d66042fe96afdd4b5e3987043e3b002d2add2593a6bfb62ed5e3ad34ee  0199-fs-Keep-PID-1-s-previous-fs_struct-while-its-threads.patch
+ff7d94585e635aae499f5bd3059caa60937b0de98284b08c3cae9090f8892840ce0ba554087f3ec1764e4a07ac092b2cd6814219e6951957bb109f69f362e6e7  0200-selinux-Add-a-permissive-lock.patch
+62975231887c6a107a697a0f5d58a9c5be61375d301198f456621c6581fe24e178aad38317b8fdbbb246fb7eba1a09ff2221b4dfef60945001d2545764256885  0201-netfilter-Add-the-quota2-match-from-the-Android-Comm.patch
+4cd646dba0242f87622280ac4a8021c0f5955b5771f5e299586fee68732c2841dd1800ceec92097e3b99ca401c1078c8f4b74d1ebebc13cce4bba755879f02d2  0202-mm-Add-the-ashmem-ioctl-shim-for-memfd-from-the-Andr.patch
+8f1d4b58b64dc7cd7ced7539dfe578e0048c25f39d8dfa9283dd31acccc8ff914c614e91f64dba831f9fb29f6a87aa6b5eeb31731aa4ab05855a57d432ee941a  0203-kernel-configs-gts3-android-What-Android-13-to-16-sy.patch
+81d93185e4a82d453ba6da337d7a6380a7ac27f7814fdc44ca7591532041267679cecf6555f749e5fc60a127108579da6707e77393f7db2f17646dd733d05042  0204-drm-Accept-detached-ops-in-the-crtc-fence-s-name-cal.patch
+a9b91b1a560b7626752e8293d1b124032ae01e156ce1b50c6e1e9f7b84b03ffe8e13fc85563d6a518582fd361ea35b1d5d5a985d6c7b346a2101c9f285b5eefe  0205-kernel-configs-gts3-android-The-cgroup-v1-cpuset-hie.patch
+1785af19b9084f6355e2c620bc704bc2a1abd11de30d357b9aaea568c101dd5a8e77e1df4d6aa870f56e58d03b412f366536508a5931ffce3e80b9cd28b1eb67  0206-media-venus-venc-Take-RGBA-frames-under-the-BGR32-na.patch
+f3730081b4c3fe724d2b6b9f417c39f27ebc4b35fcbb7d52ce539de7f39bef0ed21962a092c39126f4f90b14582f13a25c14f4ccfa80d2da15dc7d965b72571e  0207-media-venus-venc-Bitstream-buffers-of-the-driver-s-o.patch
+55f87381657e866aba52df31aac0539f5be1588dda0821862b0ee154aa2c1f2d8870440ae54cd89e3e9f761e626334167b66cfc34a7f1dcca91304400fa56e9c  0208-media-venus-venc-Sizes-that-fit-Android-s-frames-and.patch
+8e1a3afb525c143dd04e447c7ba99cf93b83324ab744d93fb793db4be79e064644da7800b012acafb85ca9581a21f236f921521133b9ecd190746dbb7bcabe5c  0209-media-venus-Free-bounce-bitstream-buffers-only-once-.patch
+d845dfe10d01dbb1599874aa5bb7b639a241b1f62de51b299b382c02efef072c734ce8feda4112205dd2f7580ff60a022381689da6762f1380b650a2ba18e035  0210-media-venus-venc-Wait-for-a-drain-to-finish-before-a.patch
+8b7f66d366dd3f8979aeff610a507359605dd2ce9f96a7067a5f5c43f5b3d251b6c4482bed458482616f19f51c32bbced36980413f70ef76ad8c87ea9fbbc6ba  0211-media-venus-vdec-Bitstream-dma-bufs-as-large-as-the-.patch
+350f122477916b952fcf4aa2b495bd7e94952c08f0b8c5ff9a22b66143b55f07e5e9201c7e84aafaaa8d23d2a7ccc87ccd0f39adf6dad738abf9d6c48eee5fd9  0212-media-venus-vdec-Smallest-placeholder-for-an-unknown.patch
+59e9b078f0ea6c2d9c09d1ee367f5e27e731fec85c0c99491d480333e2f35bc88c507311d97db0438110e69d883fcfdf74700781a9812477d72b147d544f8dcf  0213-media-venus-vdec-Parameter-sets-in-front-of-the-firs.patch
+f4d7d0f15a16077b6cfa69417a33ac8a18a5268e71c20475744bd7c50754bb5bc058e51822354b1677c75cc7ea3a0eddb9a551f03f8ba8d6807bb80c6549330e  0214-media-venus-vdec-Keep-the-session-across-dma-buf-swa.patch
+e3ad95b5d191ecdacd661056f2527f58361f0f6a013ef0468746b1912cfdda3a5be8a357b615c94359f3cb64685db20934332210128e7e3af4e8cc69241e8ca9  0215-media-venus-vdec-Keep-the-visible-rectangle-across-a.patch
+9148ba49ff27f079d9ef6832ef8d53e14a5f72677b98834509a8ad6463d433191583bd827bb3a025a3311e884fce4d03699a6825787bd1d9d6492d9efea760d8  0216-media-venus-vdec-Visible-size-from-the-H.264-SPS.patch
+95cf6899e022848153ca32dabfa5107861008f274ddc5a262a34a02d7f864b82fcf60573147e5c10eaf78d8bc8580769acc293c975a1b76063c74b6d0fcbb66f  0217-media-venus-Drop-the-delayed-capture-buffers-with-th.patch
+e6d27e1f1c8285e266d85ded02c482db6c942db7d7aa3c3c8b4042fe09ca9f198679c0d092851777635d65d8e1bc9f04f5ba7255f0170954ab56ee050b4d9ae8  0218-media-venus-vdec-Take-the-capture-S_FMT-a-resolution.patch
 "

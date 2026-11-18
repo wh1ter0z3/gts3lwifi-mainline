@@ -1,0 +1,48 @@
+From 4132ba39fe3bc3249170872ffcd65cdb6bd89360 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 10 Nov 2026 21:03:14 +0530
+Subject: [PATCH] drm: Accept detached ops in the crtc fence's name callbacks
+
+Signalling a fence whose ops have neither release nor wait sets
+fence->ops to NULL (dma_fence_signal_timestamp_locked()), and
+drm_crtc_fence_ops have neither. dma_fence_driver_name() and
+dma_fence_timeline_name() read the ops, see the fence unsignalled and call
+the callback; when the fence is signalled in between, fence_to_crtc()
+reads fence->ops again, finds NULL and hits its BUG_ON. Android's
+SurfaceFlinger asks sync_file for fence names (SYNC_IOC_FILE_INFO) all the
+time, so this panicked the kernel within the hour under a OneUI system
+image.
+
+The callbacks are only reached through drm_crtc_fence_ops, and the crtc
+stays valid for the RCU grace period the callers hold: accept NULL, warn
+once about any other ops.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/gpu/drm/drm_crtc.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/drm_crtc.c b/drivers/gpu/drm/drm_crtc.c
+index 63ead8ba6..1753e4492 100644
+--- a/drivers/gpu/drm/drm_crtc.c
++++ b/drivers/gpu/drm/drm_crtc.c
+@@ -158,7 +158,15 @@ static const struct dma_fence_ops drm_crtc_fence_ops;
+ 
+ static struct drm_crtc *fence_to_crtc(struct dma_fence *fence)
+ {
+-	BUG_ON(rcu_access_pointer(fence->ops) != &drm_crtc_fence_ops);
++	const struct dma_fence_ops *ops = rcu_access_pointer(fence->ops);
++
++	/*
++	 * Signalling detaches these ops (no release, no wait): fence->ops can
++	 * become NULL between dma_fence_driver_name() or
++	 * dma_fence_timeline_name() reading it and this callback, and the crtc
++	 * stays valid for the RCU grace period the caller holds.
++	 */
++	WARN_ON_ONCE(ops && ops != &drm_crtc_fence_ops);
+ 	return container_of(fence->extern_lock, struct drm_crtc, fence_lock);
+ }
+ 
+-- 
+2.53.0
+

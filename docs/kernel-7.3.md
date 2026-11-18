@@ -15,7 +15,14 @@ on top of this: add the patch, then regenerate it with the steps below.
 | Files | What | Count |
 |---|---|---|
 | `m001`-`m071` | msm8996-mainline's commits on `v6.19.5`, rebased | 70 |
-| `0001`-`0148` | ours, numbers unchanged, with gaps where a patch dropped | 112 |
+| `0001`-`0187` | ours, numbers unchanged, with gaps where a patch dropped | 133 |
+| `0188`-`0218` | what Android and the recovery need on the same kernel: the TrustZone stack and `/dev/qseecom`, the fingerprint sensor's control device, Android's init and netd (fs_struct, SELinux permissive lock, xt_quota2, the memfd ashmem shim, the DRM fence fix) and the Venus work for Android's codec2 | 31 |
+
+One kernel serves postmarketOS, Android and the recovery: `prepare()`
+merges `kernel/configs/gts3-android.config` (patch `0198`, extended by
+`0203` and `0205`) into the postmarketOS config, which is additive, so
+postmarketOS boots the same kernel. The `android` kernel branch and the
+`gsi` branch's `gsi/kernel/` patches are no longer separate.
 
 To regenerate: `git format-patch` each commit of a branch on `v7.3.1`. The
 order is the order in `APKBUILD.pmaports`. To move to a newer stable, rebase

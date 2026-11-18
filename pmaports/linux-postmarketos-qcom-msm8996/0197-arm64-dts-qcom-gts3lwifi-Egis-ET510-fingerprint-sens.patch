@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 6 Nov 2026 21:20:01 +0000
+Subject: [PATCH] arm64: dts: qcom: gts3lwifi: Egis ET510 fingerprint sensor
+ control
+
+The sensor's SPI bus (BLSP1 QUP6) belongs to Samsung's TrustZone, which
+talks to it from the dualfp app. Linux only switches the sensor's LDO and
+reset lines (PM8994 MPP 2 and 8), runs the QUP's clocks for the secure
+world and delivers the data-ready interrupt (TLMM 131), which is what
+egistec,et5xx-ctrl drives. The LTE model includes this DTS.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 39 +++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+index 6d24fd6..ef1af0b 100644
+--- a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
++++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+@@ -45,6 +45,7 @@
+ #include <dt-bindings/interrupt-controller/irq.h>
+ #include <dt-bindings/leds/common.h>
+ #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
++#include <dt-bindings/pinctrl/qcom,pmic-mpp.h>
+ #include <dt-bindings/sound/qcom,q6afe.h>
+ #include <dt-bindings/sound/qcom,q6asm.h>
+ #include <dt-bindings/sound/qcom,wcd9335.h>
+@@ -266,6 +267,26 @@
+ 		};
+ 	};
+ 
++	/*
++	 * Egis ET510 fingerprint sensor (Home key). Its SPI bus, BLSP1 QUP6
++	 * on TLMM 25-28, belongs to TrustZone, which drives the sensor from
++	 * the dualfp app; Linux switches the sensor's LDO (BTP_LDO_EN) and
++	 * reset (BTP_RST_N), runs the QUP's clocks for the secure world and
++	 * delivers the data-ready interrupt.
++	 */
++	fingerprint {
++		compatible = "egistec,et5xx-ctrl";
++		egistec,chipid = "ET510";
++		reset-gpios = <&pm8994_mpps 2 GPIO_ACTIVE_HIGH>;
++		ldo-enable-gpios = <&pm8994_mpps 8 GPIO_ACTIVE_HIGH>;
++		drdy-gpios = <&tlmm 131 GPIO_ACTIVE_HIGH>;
++		clocks = <&gcc GCC_BLSP1_QUP6_SPI_APPS_CLK>,
++			 <&gcc GCC_BLSP1_AHB_CLK>;
++		clock-names = "core", "iface";
++		pinctrl-0 = <&fp_drdy_default>, <&fp_ctrl_default>;
++		pinctrl-names = "default";
++	};
++
+ 	/*
+ 	 * SM5705 charger and MUIC. Downstream bit-bangs this bus on TLMM 33
+ 	 * (SDA) / 32 (SCL), which are HDMI DDC pins, not a BLSP pair. The
+@@ -1994,6 +2015,16 @@
+ 	};
+ };
+ 
++&pm8994_mpps {
++	/* Fingerprint BTP_RST_N (MPP 2) and BTP_LDO_EN (MPP 8): 1.8 V outputs, off */
++	fp_ctrl_default: fp-ctrl-default-state {
++		pins = "mpp2", "mpp8";
++		function = "digital";
++		output-low;
++		power-source = <PM8994_MPP_S4>;
++	};
++};
++
+ &tlmm {
+ 	/*
+ 	 * Pins owned by Samsung's TrustZone. If Linux reads them, the firmware
+@@ -2243,6 +2274,14 @@
+ 		drive-strength = <8>;
+ 		bias-pull-up;
+ 	};
++
++	/* Fingerprint data-ready, TLMM 131: input, pull-up */
++	fp_drdy_default: fp-drdy-default-state {
++		pins = "gpio131";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
+ };
+ 
+ /* The battery's thermistor, read by the fuel gauge */
