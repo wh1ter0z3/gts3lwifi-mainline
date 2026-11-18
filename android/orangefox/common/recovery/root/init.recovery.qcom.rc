@@ -28,6 +28,9 @@
 on fs
     wait /dev/block/platform/soc/${ro.boot.bootdevice}
     symlink /dev/block/platform/soc/${ro.boot.bootdevice} /dev/block/bootdevice
+    # Dual boot layout in userdata: its partitions, /data = android_data
+    # (before the recovery reads twrp.flags; see gts3-dualboot-fox)
+    exec u:r:recovery:s0 -- /system/bin/sh /system/bin/gts3-dualboot-fox
 
 on boot
     # Update foreground and background cpusets

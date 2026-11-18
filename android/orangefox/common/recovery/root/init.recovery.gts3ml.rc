@@ -1,0 +1,29 @@
+# Galaxy Tab S3, OrangeFox on our mainline kernel (GTS3_KERNEL=mainline):
+# lk2nd boots it from the dual boot layout's boot partition. ro.hardware and
+# the other ro.boot.* come from /firmware/android in its device tree, since an
+# "androidboot" on the command line makes lk2nd add S-Boot's own one.
+
+on early-init
+    # No ashmem in mainline: libcutils uses memfd only for a vendor at Q or
+    # later and with sys.use_memfd (pixelflinger's code cache aborts the GUI
+    # without either). A recovery has no vendor partition to set the first.
+    setprop ro.vndk.version 31
+    setprop sys.use_memfd true
+    # a board without panel (gts3.vkms=1): a virtual display for the GUI
+    exec u:r:recovery:s0 -- /system/bin/sh -c "grep -q gts3.vkms=1 /proc/cmdline && modprobe -d /lib/modules vkms; true"
+
+on fs
+    # mainline names the eMMC controller 7464900.mmc, under soc@0
+    wait /dev/block/platform/soc@0/${ro.boot.bootdevice}
+    symlink /dev/block/platform/soc@0/${ro.boot.bootdevice} /dev/block/bootdevice
+    # Dual boot layout in userdata: its partitions, /data = android_data
+    exec u:r:recovery:s0 -- /system/bin/sh /system/bin/gts3-dualboot-fox
+
+on early-boot
+    # USB: configfs gadget (libcomposite, usb_f_fs from the ramdisk's modules)
+    # on the DWC3 controller; no MTP gadget function in mainline
+    setprop sys.usb.configfs 1
+    setprop sys.usb.controller 6a00000.usb
+
+on property:sys.usb.config=mtp,adb
+    setprop sys.usb.config adb
