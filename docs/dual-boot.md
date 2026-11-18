@@ -300,6 +300,85 @@ UUIDs and hybrid MBR were right); not flashed to a tablet yet.
 **OrangeFox / TWRP:** [scripts/dualboot/twrp/update-binary](../scripts/dualboot/twrp/update-binary).
 `install-dualboot.sh --payload DIR` writes its inputs, and
 [mkdualbootzip.sh](../scripts/dualboot/twrp/mkdualbootzip.sh) packs the zip.
+nura-root.simg (with its .sha256) goes next to the zip, and so does the GSI
+if wanted (named `*system*` or `*gsi*`). In the zip:
+- the layout is made with the recovery's sgdisk (long options only, since
+  Android's build has no short ones);
+- the partitions are written through loop devices, with their nodes made
+  from /sys if ueventd hasn't;
+- the big files stream from the zip (/tmp is RAM in a recovery);
+- it runs under its own busybox.
+
+The payload drops `orphan_file` from Nura's root: the recoveries' e2fsprogs
+(1.45) refuse a file system with it.
+
+**Tested on 2026-11-18 in the mainline OrangeFox on our SM-T820**, with a
+9 GB image file as userdata and a file as the boot partition:
+- Nura plus a stand-in GSI;
+- the layout, the hybrid MBR and both extlinux entries;
+- Nura's UUIDs, its root grown and clean;
+- the vendor image byte for byte, the system image, android_data;
+- lk2nd v2.
+
+**OrangeFox's dual boot mode** (recovery tree, `gts3-dualboot-fox`): when
+userdata holds the layout, its partitions get loop devices and **/data is
+android_data**. Format Data and Android's factory reset then wipe Android's
+data only. Nura and the Android images are listed for backups. Works in
+the mainline OrangeFox on the SM-T820: all five partitions, /data and
+/sdcard on android_data, the exFAT microSD mounted.
+
+**OrangeFox on our mainline kernel** (recovery tree, `GTS3_KERNEL=mainline`):
+an extlinux entry with the Android kernel, its own ramdisk and a device tree
+that carries `ro.boot.*` in /firmware/android. An `androidboot` on the
+command line makes lk2nd append S-Boot's command line. It needs:
+- 28 modules in the ramdisk;
+- memfd instead of ashmem (`ro.vndk.version`, `sys.use_memfd`);
+- vkms on a board without panel (`gts3.vkms=1`).
+
+It runs on our bare SM-T820, where the 3.18 OrangeFox resets after a few
+minutes, with adb, the GUI on vkms, the dual boot mode and the exFAT card.
+USB is adb only: mainline has no MTP gadget function.
+
+## LineageOS (or any other ROM) from OrangeFox
+
+Flashing a ROM zip the normal way **ends the dual boot and erases Nura**:
+
+- The ROM writes its boot image over the whole boot partition. lk2nd lives in
+  its first 4 MiB, so it's gone, and S-Boot starts the ROM directly.
+- The ROM uses the userdata partition as its /data. Our layout lives there,
+  so the ROM can't mount it, and the "Format Data" it needs erases Nura,
+  Android and Shared.
+- Our Android and Nura read the Wi-Fi board file (bdwlan30.bin) from
+  Samsung's system partition. A ROM replaces that partition.
+
+Next to Nura, a ROM can only go in through our installer. It would:
+
+- keep lk2nd and put the ROM's kernel in an extlinux entry (or behind lk2nd);
+- point the ROM's /data at a partition of the layout;
+- copy the firmware it needs out of the system partition first.
+
+The ROM's updates would need the same treatment (an addon.d script). That's
+the "repack every update" cost from the group's poll. Our own Android
+doesn't have it: its kernel is in `/gts3/android`, and a GSI or vendor
+update doesn't touch it.
+
+## Installers
+
+Both make the same install, on an erased userdata partition:
+- the layout;
+- Nura from its release image, keeping the boot and root UUIDs, with the
+  initramfs hook built in;
+- optionally our Android (GSI + vendor);
+- lk2nd v2.
+
+**PC:** [scripts/dualboot/install-dualboot.sh](../scripts/dualboot/install-dualboot.sh)
+builds the userdata image here and flashes it with lk2nd's fastboot.
+`--image` only builds it. Tested that way on 2026-11-18 (the layout, files,
+UUIDs and hybrid MBR were right); not flashed to a tablet yet.
+
+**OrangeFox / TWRP:** [scripts/dualboot/twrp/update-binary](../scripts/dualboot/twrp/update-binary).
+`install-dualboot.sh --payload DIR` writes its inputs, and
+[mkdualbootzip.sh](../scripts/dualboot/twrp/mkdualbootzip.sh) packs the zip.
 nura-root.simg (and its .sha256), and the GSI if wanted, go next to the zip.
 In the zip:
 - the layout is made with the recovery's sgdisk;
