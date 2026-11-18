@@ -67,8 +67,9 @@ rm -rf "$P/device/testing/device-samsung-gts3lwifi" "$P/device/testing/linux-pos
 cp -r "$R/device-samsung-gts3lwifi" "$R/linux-postmarketos-qcom-msm8996" "$P/device/testing/"
 mv "$P/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD.pmaports" "$P/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD"
 rm "$P/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD.diff"
-# our versions of these replace pmaports' own, wherever pmaports keeps them
-for p in kwin libcamera iio-sensor-proxy gnss-share; do
+# our versions of these replace pmaports' own, wherever pmaports keeps them;
+# ocellus (the camera app) isn't in pmaports at all: it goes to temp/
+for p in kwin libcamera iio-sensor-proxy gnss-share ocellus; do
   d=$(dirname "$(find "$P" -path "*/$p/APKBUILD" | head -1)")
   [ "$d" = . ] && d="$P/temp/$p"
   rm -rf "$d" && mkdir -p "$(dirname "$d")" && cp -r "$R/$p" "$d"
