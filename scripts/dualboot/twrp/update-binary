@@ -17,6 +17,8 @@
 # Test overrides: MODEL, DATA_DEV, BOOT_DEV, GSI, SYSTEM, VENDOR, DATA, WORK
 OUTFD=$2
 ZIP=$3
+case "$0" in /*) SELF=$0 ;; *) SELF=$PWD/$0 ;; esac
+case "$ZIP" in /*) ;; *) ZIP=$PWD/$ZIP ;; esac
 if [ -z "${GTS3_BB:-}" ]; then
 	B=/tmp/gts3-bb
 	rm -rf "$B" && mkdir -p "$B" && cd "$B" &&
@@ -28,7 +30,7 @@ if [ -z "${GTS3_BB:-}" ]; then
 	# the recovery's e2fsprogs and losetup, not busybox's
 	rm -f "$B/mke2fs" "$B/mkfs.ext2" "$B/tune2fs" "$B/e2fsck" "$B/fsck" "$B/losetup"
 	export GTS3_BB=$B PATH="$B:$PATH"
-	exec "$B/tools/busybox" sh "$0" "$@"
+	exec "$B/tools/busybox" sh "$SELF" "$1" "$2" "$ZIP"
 fi
 DATA_DEV=${DATA_DEV:-/dev/block/bootdevice/by-name/userdata}
 BOOT_DEV=${BOOT_DEV:-/dev/block/bootdevice/by-name/boot}
@@ -74,8 +76,15 @@ gts3llte) DTB=msm8996-samsung-gts3llte.dtb ;;
 esac
 mkdir -p "$W" "$G" "$W/mnt"
 cd "$W" || die "no $W"
-unzip -o -q "$ZIP" -x 'META-INF/*' || die "can't unpack the zip"
-sha256sum -c -s SHA256SUMS 2> /dev/null || die "the zip's files are damaged, download it again"
+# Small files here; the big ones (Nura's boot files, the vendor image) are
+# checked and later written straight from the zip: /tmp is RAM in a recovery
+BIG="nura-boot.tar android/vendor.img"
+unzip -o -q "$ZIP" -x 'META-INF/*' $BIG || die "can't unpack the zip"
+grep -v -e ' nura-boot\.tar$' -e ' android/vendor\.img$' SHA256SUMS > sums.small
+sha256sum -c -s sums.small 2> /dev/null || die "the zip's files are damaged, download it again"
+zsum() {	# the sha256 of $1 in the zip is the listed one
+	[ "$(unzip -p "$ZIP" "$1" | sha256sum | cut -d' ' -f1)" = "$(awk -v f="$1" '$2 == f { print $1 }' SHA256SUMS)" ]
+}
 . ./nura.env || die "no nura.env in the zip"
 LK2ND=lk2nd-$MODEL.img
 [ -s "$LK2ND" ] || die "no $LK2ND in the zip: no lk2nd v2 for this model yet"
@@ -83,6 +92,13 @@ ROOT=$DIR/nura-root.simg
 [ -f "$ROOT" ] || die "put nura-root.simg next to this zip"
 GSI=${GSI:-$(ls "$DIR"/*.img "$DIR"/*.img.xz "$DIR"/*system*.zip 2> /dev/null | grep -v nura-root | head -n 1)}
 [ -n "$GSI" ] && ui "Android: $(basename "$GSI")" || ui "No GSI next to the zip: Nura only"
+ui "Checking the zip..."
+zsum nura-boot.tar || die "nura-boot.tar in the zip is damaged, download it again"
+[ -z "$GSI" ] || zsum android/vendor.img || die "the vendor image in the zip is damaged, download it again"
+if [ -f "$ROOT.sha256" ]; then
+	ui "Checking nura-root.simg..."
+	[ "$(sha256sum "$ROOT" | cut -d' ' -f1)" = "$(cut -d' ' -f1 "$ROOT.sha256")" ] || die "nura-root.simg is damaged, download it again"
+fi
 
 # userdata free: the recovery may have it mounted, or (dual boot mode) loop
 # devices on it with /data on one of them
@@ -147,7 +163,7 @@ done
 ui "Boot partition: lk2nd's menu, kernels..."
 $MKE2FS -q -F -t ext2 -b 1024 -L pmOS_boot -U "$BOOT_UUID" "$G/gts3_boot" > /dev/null 2>&1 || die "mke2fs boot"
 mount -t ext2 "$G/gts3_boot" "$W/mnt" 2> /dev/null || mount -t ext4 "$G/gts3_boot" "$W/mnt" || die "mount boot"
-tar -xf nura-boot.tar -C "$W/mnt" || die "Nura's boot files"
+unzip -p "$ZIP" nura-boot.tar | tar -x -C "$W/mnt" || die "Nura's boot files"
 if [ -n "$GSI" ]; then
 	mkdir -p "$W/mnt/gts3/android"
 	cp android/Image.gz android/gts3.dtb android/initramfs "$W/mnt/gts3/android/" || die "Android's boot files"
@@ -185,7 +201,7 @@ ui "Android: data..."
 $MKE2FS -q -F -t ext4 -L android_data "$G/android_data" > /dev/null 2>&1 || die "mke2fs android_data"
 if [ -n "$GSI" ]; then
 	ui "Android: vendor, system..."
-	dd if=android/vendor.img of="$G/android_vendor" bs=4M conv=fsync 2> /dev/null || die "vendor image"
+	unzip -p "$ZIP" android/vendor.img | dd of="$G/android_vendor" bs=4M conv=fsync 2> /dev/null || die "vendor image"
 	# zip64 (GSI zips over 4 GB): gsi-unzip from the Android release
 	UNZIP=unzip
 	[ -x "$W/tools/gsi-unzip" ] && UNZIP=$W/tools/gsi-unzip

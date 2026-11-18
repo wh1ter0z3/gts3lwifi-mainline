@@ -283,20 +283,46 @@ the "repack every update" cost from the group's poll. Our own Android
 doesn't have it: its kernel is in `/gts3/android`, and a GSI or vendor
 update doesn't touch it.
 
-## Installer (in progress)
+## Installers
 
-**PC (lk2nd fastboot):**
-- builds the userdata image with gts3-layout on an image file;
-- fills it: the GSI and vendor images, the boot partition's files, Nura's
-  root from the release image;
-- flashes it as a sparse image with `fastboot flash userdata`, as
-  install-gsi.sh does today;
-- then flashes lk2nd v2.
+Both make the same install, on an erased userdata partition:
+- the layout;
+- Nura from its release image, keeping the boot and root UUIDs, with the
+  initramfs hook built in;
+- optionally our Android (GSI + vendor);
+- lk2nd v2.
 
-**OrangeFox:** the same steps on the tablet. Two open points:
-- a GPT writer for the recovery;
-- the recovery's fstab must not format userdata, or Android's factory reset
-  would erase both systems. It must point at android_data instead.
+**PC:** [scripts/dualboot/install-dualboot.sh](../scripts/dualboot/install-dualboot.sh)
+builds the userdata image here and flashes it with lk2nd's fastboot.
+`--image` only builds it. Tested that way on 2026-11-18 (the layout, files,
+UUIDs and hybrid MBR were right); not flashed to a tablet yet.
 
-Before the installer copies anything, it saves the firmware it needs from
-Samsung's system partition.
+**OrangeFox / TWRP:** [scripts/dualboot/twrp/update-binary](../scripts/dualboot/twrp/update-binary).
+`install-dualboot.sh --payload DIR` writes its inputs, and
+[mkdualbootzip.sh](../scripts/dualboot/twrp/mkdualbootzip.sh) packs the zip.
+nura-root.simg (and its .sha256), and the GSI if wanted, go next to the zip.
+In the zip:
+- the layout is made with the recovery's sgdisk;
+- the partitions are written through loop devices;
+- the big files stream from the zip (/tmp is RAM in a recovery);
+- it runs under its own busybox (64-bit arithmetic);
+- it frees userdata first, also from the dual boot mode's loop devices.
+
+Tested on 2026-11-18 under Nura on the SM-T820, with a 9 GB image file as
+userdata and a file as the boot partition: Nura only, 254 s. Everything it
+wrote checked out:
+- the layout, and no free tail;
+- the hybrid MBR;
+- the boot files and extlinux.conf;
+- Nura's UUIDs, its root grown and clean, the hook;
+- lk2nd v2 at offset 0.
+
+Not tested yet: in a recovery, and with a GSI.
+
+**OrangeFox's dual boot mode** (recovery tree, `gts3-dualboot-fox`): when
+userdata holds the layout, its partitions get loop devices and **/data is
+android_data**. Format Data and Android's factory reset then wipe Android's
+data only. Nura and the Android images are listed for backups. Checked on the
+PC against an image of the layout; both models built. Not run in a recovery
+yet: on our bare-board SM-T820 the 3.18 recovery kernel resets after 30 s to
+3 min.
