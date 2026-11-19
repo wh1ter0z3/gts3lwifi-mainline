@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=10
+pkgrel=11
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -266,6 +266,7 @@ source="
 	0217-media-venus-Drop-the-delayed-capture-buffers-with-th.patch
 	0218-media-venus-vdec-Take-the-capture-S_FMT-a-resolution.patch
 	0219-kernel-configs-gts3-android-vkms-for-a-board-without.patch
+	0220-clk-qcom-gcc-msm8996-12.5-MHz-for-the-fingerprint-SPI.patch
 "
 builddir="$srcdir/linux-$pkgver"
 
@@ -537,4 +538,5 @@ e3ad95b5d191ecdacd661056f2527f58361f0f6a013ef0468746b1912cfdda3a5be8a357b615c943
 95cf6899e022848153ca32dabfa5107861008f274ddc5a262a34a02d7f864b82fcf60573147e5c10eaf78d8bc8580769acc293c975a1b76063c74b6d0fcbb66f  0217-media-venus-Drop-the-delayed-capture-buffers-with-th.patch
 e6d27e1f1c8285e266d85ded02c482db6c942db7d7aa3c3c8b4042fe09ca9f198679c0d092851777635d65d8e1bc9f04f5ba7255f0170954ab56ee050b4d9ae8  0218-media-venus-vdec-Take-the-capture-S_FMT-a-resolution.patch
 81d4372ef7a17f501cc1ae3d6b6884c88a32ca656d30f7a8a80c4edb58cea192aab42dda47a83a85a2d0d4ae4fcdf3519f9fc14be726bf995b8e66526ef3d1dd  0219-kernel-configs-gts3-android-vkms-for-a-board-without.patch
+1b2374666d4610fc484deefa10c38f245ddb48b2cb13f7701bc2d29771a2e4055f2291d525af8c0b4c4d05fa56540e2f1ce6ffa0f4567613db8104495401f9ba  0220-clk-qcom-gcc-msm8996-12.5-MHz-for-the-fingerprint-SPI.patch
 "

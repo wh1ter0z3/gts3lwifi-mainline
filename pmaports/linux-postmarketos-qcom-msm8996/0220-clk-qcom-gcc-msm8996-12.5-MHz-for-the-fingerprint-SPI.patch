@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 19 Nov 2026 20:30:00 +0530
+Subject: [PATCH] clk: qcom: gcc-msm8996: 12.5 MHz for the fingerprint SPI
+
+The Egis ET510 fingerprint sensor on BLSP1 QUP6 SPI runs at 12.5 MHz;
+TrustZone drives the bus and reads the sensor to identify it. The shared
+BLSP QUP SPI rate table has no 12.5 MHz entry, so a 12.5 MHz request
+rounds up to the next rate, 15 MHz, overclocking the sensor: the
+trustlet then cannot read it ("can't check sensortype"), the BAuth
+session never opens and every fingerprint command is rejected. Add the
+12.5 MHz rate (GPLL0 600 MHz / 12 * 1/4) that downstream uses here.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ drivers/clk/qcom/gcc-msm8996.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/clk/qcom/gcc-msm8996.c b/drivers/clk/qcom/gcc-msm8996.c
+index 1111111111aa..2222222222bb 100644
+--- a/drivers/clk/qcom/gcc-msm8996.c
++++ b/drivers/clk/qcom/gcc-msm8996.c
+@@ -446,6 +446,7 @@ static const struct freq_tbl ftbl_blsp1_qup1_spi_apps_clk_src[] = {
+ 	F(960000, P_XO, 10, 1, 2),
+ 	F(4800000, P_XO, 4, 0, 0),
+ 	F(9600000, P_XO, 2, 0, 0),
++	F(12500000, P_GPLL0, 12, 1, 4),
+ 	F(15000000, P_GPLL0, 10, 1, 4),
+ 	F(19200000, P_XO, 1, 0, 0),
+ 	F(25000000, P_GPLL0, 12, 1, 2),
+-- 
+2.39.2
