@@ -22,8 +22,8 @@ are covered, but it was tested on an SM-T820 board without a screen only.
 The GSI isn't in the release: we test with TrebleDroid's AOSP 16,
 `system-td-arm64-vanilla.img.xz`.
 
-Jayden's LineageOS 24 can take our Android's place and keep Nura, installed
-from his own zip plus a small add-on:
+LineageOS 24 can take our Android's place and keep Nura, installed
+from its own zip plus a small add-on:
 [lineage-dual-boot-install.md](lineage-dual-boot-install.md). The README
 compares the two.
 

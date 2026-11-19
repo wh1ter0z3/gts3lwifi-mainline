@@ -2,7 +2,7 @@
 
 For the SM-T820 (Wi-Fi) and SM-T825 (LTE). The tablet ends up with:
 
-- **LineageOS 24** (Jayden's build), started by a plain power-on, with its
+- **LineageOS 24**, started by a plain power-on, with its
   /data on its own partition;
 - **Nura** (postmarketOS with Plasma), started through the recovery path;
 - **OrangeFox** on our kernel, in the same menu as Nura.
@@ -36,8 +36,8 @@ The microSD card isn't touched: both systems share it as their storage.
 - The dual boot release: `gts3-dualboot-test2.zip`, `nura-root.img.xz` and
   its `.sha256`, plus the lk2nd files for your model, from
   [the release page](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test2).
-- Jayden's LineageOS 24 zip for your model, from
-  [his releases](https://github.com/jaydens-tasty-slop/tabs3-lineageos/releases).
+- The LineageOS 24 zip for your model, from
+  [the LineageOS 24 releases](https://github.com/jaydens-tasty-slop/tabs3-lineageos/releases).
 - The add-on: `gts3-lineage-data.zip`. It is not in a release yet, so build
   it from the repository:
 
@@ -82,8 +82,8 @@ The tablet now starts Nura.
 Both go in from **our** OrangeFox, the `orangefox` entry: power on holding
 **Volume Down** for lk2nd's menu and pick it.
 
-1. Copy Jayden's zip and `gts3-lineage-data.zip` to the microSD card.
-2. Install Jayden's zip. It writes its boot image over lk2nd in the boot
+1. Copy the LineageOS 24 zip and `gts3-lineage-data.zip` to the microSD card.
+2. Install the LineageOS 24 zip. It writes its boot image over lk2nd in the boot
    partition, which is expected here.
 3. Install `gts3-lineage-data.zip`. It prints which partition it found and
    ends with "Done".

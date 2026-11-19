@@ -262,7 +262,7 @@ second cpio archive. A current install builds the hook in.
 
 ## LineageOS next to Nura ("LineageOS mode")
 
-Jayden's LineageOS 24 installs as it always did, and Nura stays. What
+LineageOS 24 installs as it always did, and Nura stays. What
 changes is where lk2nd lives and where LineageOS keeps its /data.
 
 | Partition | Dual boot (our Android) | LineageOS mode |
@@ -304,7 +304,7 @@ In LineageOS's system partition it:
   `vendor/etc/fstab.qcom`;
 - adds `addon.d/60-gts3-data.sh`, so a LineageOS update brings both back.
 
-Nothing is repacked: the ROM zip stays Jayden's, signature and all.
+Nothing is repacked: the ROM zip stays exactly as published, signature and all.
 
 **Tested on our SM-T820 (2026-11-18)**, with its screen off the board:
 - LineageOS 24 installed from our OrangeFox, then the add-on, then Format

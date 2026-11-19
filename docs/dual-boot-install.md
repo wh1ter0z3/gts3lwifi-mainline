@@ -10,8 +10,8 @@ side by side, and lk2nd picks one at every start:
 You switch between them on the tablet, without a PC. How it works:
 [dual-boot.md](dual-boot.md).
 
-**Want Jayden's LineageOS 24 instead of our Android?** It also keeps Nura,
-from his own zip: [lineage-dual-boot-install.md](lineage-dual-boot-install.md).
+**Want LineageOS 24 instead of our open Android?** It also keeps Nura,
+from its own zip: [lineage-dual-boot-install.md](lineage-dual-boot-install.md).
 The README compares the two.
 
 **This is a test build.** It was made and tested on an SM-T820 board

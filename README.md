@@ -1,6 +1,10 @@
 # Mainline Linux on the Samsung Galaxy Tab S3
 
+[![Latest release](https://img.shields.io/github/v/release/wh1ter0z3/gts3lwifi-mainline?include_prereleases&label=latest%20release&color=brightgreen)](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases)
+
 Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both models, Wi-Fi and LTE.
+
+**Latest:** [dual boot test 2](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test2) — Nura and an Android side by side.
 
 - SoC: Qualcomm APQ8096 (SM-T820) / MSM8996 (SM-T825), Snapdragon 820; PMICs PM8994 + PM8004
 - Storage: eMMC (not UFS)
@@ -18,19 +22,20 @@ they switch without a PC. [How it works](docs/dual-boot.md),
 
 Both Androids keep Nura, so the choice is only which Android:
 
-| | **Our Android** | **Jayden's LineageOS 24** |
+| | **Our open Android** | **LineageOS 24** |
 |---|---|---|
 | Install | [dual-boot-install.md](docs/dual-boot-install.md) | [lineage-dual-boot-install.md](docs/lineage-dual-boot-install.md) |
-| What you install | our release zip plus a GSI you pick ([TrebleDroid's](https://github.com/TrebleDroid/treble_experimentations/releases) is what we test) | [his zip](https://github.com/jaydens-tasty-slop/tabs3-lineageos/releases), unchanged, plus our small add-on |
+| What you install | our release zip plus a GSI you pick ([TrebleDroid's](https://github.com/TrebleDroid/treble_experimentations/releases) is what we test) | the [LineageOS 24 zip](https://github.com/jaydens-tasty-slop/tabs3-lineageos/releases), unchanged, plus our small add-on |
 | Android version | any arm64 A/B GSI: 15, 16 or 17 | Android 17 |
 | Kernel | our mainline Linux 7.3.1, the same one Nura runs | Samsung's 3.18 |
-| Vendor | ours, built from AOSP 15 source, no Samsung blobs | his |
-| Updates | swap the GSI yourself; the vendor and kernel come from us | his own updater; our add-on survives it |
+| Vendor | our open vendor, built from AOSP 15 source, no Samsung blobs | the LineageOS vendor |
+| Updates | swap the GSI yourself; the vendor and kernel come from us | its own updater; our add-on survives it |
 | Hardware | GPU, hardware video, audio, Wi-Fi, Bluetooth, sensors, cameras, GPS; **tested on a board without a screen**, so the display is unproven | a finished ROM developed on a working tablet, so its display and hardware are known to work; only the dual boot part is new |
 | Switching | `gts3-boot` from either system, or lk2nd's menu | lk2nd's menu through the recovery path |
 
-Take Jayden's if you want an Android to use every day, ours if you want the
-open vendor, the newest Android, or the same kernel as Nura.
+Take LineageOS 24 if you want an Android to use every day, our open
+Android if you want the open vendor, the newest Android, or the same kernel
+as Nura.
 
 ## Models
 
