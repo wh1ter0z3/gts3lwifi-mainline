@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 20 Nov 2026 13:35:05 +0000
+Subject: [PATCH] kernel/configs: gts3-android: The MPM for deep sleep
+
+In system power collapse the CPUs' interrupt controller is off, and the
+RPM's MPM is what wakes the system: it watches the wake-up interrupts
+(the PMIC's power key and RTC alarm among them) and the wake-up timer the
+driver programs. The postmarketOS config leaves CONFIG_QCOM_MPM off. Turn
+it on; without an MPM node in the device tree the driver does not probe,
+so nothing changes until the deep-sleep device tree adds one.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ kernel/configs/gts3-android.config | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/kernel/configs/gts3-android.config b/kernel/configs/gts3-android.config
+index 8d18122..0bba281 100644
+--- a/kernel/configs/gts3-android.config
++++ b/kernel/configs/gts3-android.config
+@@ -130,3 +130,8 @@ CONFIG_INPUT_EGIS_ET5XX_CTRL=m
+ # A virtual display, for a board whose panel is not connected: the recovery
+ # and gsi-init turn it on with gts3.vkms=1 and draw on card1
+ CONFIG_DRM_VKMS=m
++
++# Deep sleep: the RPM's MPM routes wake-up interrupts and programs the vMPM
++# wake-up timer for system power collapse; it probes only where the device
++# tree has an MPM node
++CONFIG_QCOM_MPM=y

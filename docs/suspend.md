@@ -54,7 +54,7 @@ patch 0147 keeps the link up. See [kernel-7.3](kernel-7.3.md).
 - `qrtr 5-19: PM: parent remoteproc0:smd-edge.IPCRTR.-1.-1 should not be
   sleeping`: a device-link warning from the ADSP's QRTR, harmless so far.
 
-## Deep sleep (work in progress, 2026-11-10: first vmin)
+## Deep sleep (work in progress, 2026-11-10: first vmin; 2026-11-20: vmin on every suspend)
 
 Goal: the RPM turning XO off (vlow) and lowering the rails (vmin) while the tablet sleeps. Before this
 work its counters (`/sys/kernel/debug/qcom_stats/vlow`, `vmin`) never moved. Tested on an SM-T820 from
@@ -71,6 +71,8 @@ RAM boots, battery only (cable out), display blanked.
 | Unused RPM clocks in the sleep set | **Patch 0185**: the RPM clock driver's handoff at probe votes every RPM clock on in the active and the sleep set, and nothing withdrew the votes of clocks no driver claims (no `.is_prepared`, so `clk_disable_unused()` skipped them): the XO buffers BB_CLK1/2, RF_CLK1/2 and DIV_CLK1-3, IPA, CE1 and QDSS stayed on in the sleep set. Now released; what is on while awake does not change (releasing the active-only halves as well broke the USB2 PHY at resume) |
 | Display engine bandwidth | **Patch 0186**: MDP5 voted 6.4 GB/s at probe and never dropped it, which kept the memory buses at 800 MHz in the sleep set. Now only while the MDP is resumed |
 | RPM turns XO off | **Yes, in suspend without Wi-Fi**: with 0185 + 0186 and `test-deepidle-mpm-nopcie.dts`, a 60 s suspend-to-idle on battery spent 61 s in RPM vmin (XO off, rails lowered), and USB came back. With Wi-Fi (PCIe link kept up across suspend, patch 0147) it stays out of vmin: the link, PHY and reference clocks stay on and the CPU wakes ~85 times a minute. Zeroing all bus votes at once hangs the system, so the remaining ones are per device |
+| Second and later suspends | **Patch 0221** (2026-11-20): only the first suspend after boot reached vmin. Mainline's I2C QUP driver turns the clocks of a runtime-suspended controller on at system resume and never off again (its suspend skips such a controller, its resume did not), so every resume leaked one XO-sourced clock enable per idle I2C bus (`bi_tcxo` enables 4, then 9). Found by diffing the enabled clocks before and after the first resume. With the fix, two back-to-back 60 s suspends spent 61.0 s and 61.3 s in vmin |
+| MPM in the kernel config | **Patch 0222**: the postmarketOS config leaves `CONFIG_QCOM_MPM` off, and a device tree with the MPM node routes the PMIC's interrupts through it, so the deep-sleep device tree hangs at boot without the driver. Now built in; it does nothing until a device tree has the node |
 | Idle current | 129 mA with XO held, 90-97 mA (lowest 72) with all masters releasing XO; 50-90 mA (lowest 49) after 0185 + 0186, awake, display blanked |
 
 How to read it: the kernel-side RPM requests can be traced from boot with

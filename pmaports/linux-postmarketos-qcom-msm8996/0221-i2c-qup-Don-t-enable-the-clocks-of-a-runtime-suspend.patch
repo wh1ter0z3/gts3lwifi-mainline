@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 20 Nov 2026 18:15:48 +0530
+Subject: [PATCH] i2c: qup: Don't enable the clocks of a runtime-suspended
+ controller on resume
+
+qup_i2c_suspend() only turns the clocks off when the controller is
+runtime-active, but qup_i2c_resume() always turns them on again and
+then asks for an autosuspend. A controller that was runtime-suspended
+before system suspend is still runtime-suspended after resume, so the
+autosuspend request does nothing and its core and AHB clocks stay
+enabled for good, one more enable count per suspend cycle.
+
+On MSM8996 the QUP core clocks run from XO, so after the first resume
+XO can never be released again and the RPM no longer reaches vmin in
+later suspends. Leave a runtime-suspended controller off on resume, as
+suspend did.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/i2c/busses/i2c-qup.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/i2c/busses/i2c-qup.c b/drivers/i2c/busses/i2c-qup.c
+index ee7915ee2..0c3d7187e 100644
+--- a/drivers/i2c/busses/i2c-qup.c
++++ b/drivers/i2c/busses/i2c-qup.c
+@@ -2002,6 +2002,10 @@ static int qup_i2c_resume(struct device *device)
+ {
+ 	int ret;
+ 
++	/* qup_i2c_suspend() left a runtime-suspended controller alone */
++	if (pm_runtime_suspended(device))
++		return 0;
++
+ 	ret = qup_i2c_pm_resume_runtime(device);
+ 	if (ret)
+ 		return ret;
