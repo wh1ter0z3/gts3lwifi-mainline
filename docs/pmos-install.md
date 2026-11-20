@@ -47,7 +47,7 @@ What the install runs, against this repository:
 - **deviceinfo:** as in `pmaports/device-samsung-gts3lwifi`, except
   `deviceinfo_dtb` (the DTB above) and
 
-      deviceinfo_kernel_cmdline="console=tty0 clk_ignore_unused pd_ignore_unused sysctl.kernel.firmware_config.ignore_sysfs_fallback=1"
+      deviceinfo_kernel_cmdline="console=tty0 sysctl.kernel.firmware_config.ignore_sysfs_fallback=1"
 
   With the display in the DT the msm driver drives the panel, and the GPU
   binds to the display's DRM device, so `lk2nd.pass-simplefb=autorefresh`

@@ -84,6 +84,8 @@ misc clocks, `clk1`/`clk2` bus/memory clocks, `bmas`/`bslv` bandwidth), and
 
 Still holding XO in daily use: USB (the T820 does not notice an unplug: `s2mm005 ... failed to set USB
 role device: -95`), the Bluetooth UART (open even when Bluetooth is off), the PCIe link during suspend
-(patch 0147), and the boot options `clk_ignore_unused`/`pd_ignore_unused`. `test-deepidle-mpm-nopcie.dts`
+(patch 0147). The boot options `clk_ignore_unused`/`pd_ignore_unused`, which kept every clock and power
+domain the bootloader left on, are gone from the device package since 2026-11-20 (they dated from booting
+on lk2nd's framebuffer, before the msm driver ran the panel). `test-deepidle-mpm-nopcie.dts`
 (no Wi-Fi) is still the way to see vmin; the power key and the RTC alarm wake the tablet from it.
 

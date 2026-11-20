@@ -26,7 +26,7 @@ deviceinfo_screen_height="1536"
 # Samsung boot.img (and the lk2nd image itself) are packed with.
 deviceinfo_flash_method="fastboot"
 deviceinfo_generate_bootimg="true"
-deviceinfo_kernel_cmdline="console=tty0 clk_ignore_unused pd_ignore_unused sysctl.kernel.firmware_config.ignore_sysfs_fallback=1"
+deviceinfo_kernel_cmdline="console=tty0 sysctl.kernel.firmware_config.ignore_sysfs_fallback=1"
 deviceinfo_flash_offset_base="0x80000000"
 deviceinfo_flash_offset_kernel="0x00008000"
 deviceinfo_flash_offset_ramdisk="0x02200000"
