@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=12
+pkgrel=13
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -269,6 +269,7 @@ source="
 	0220-clk-qcom-gcc-msm8996-12.5-MHz-for-the-fingerprint-SPI.patch
 	0221-i2c-qup-Don-t-enable-the-clocks-of-a-runtime-suspend.patch
 	0222-kernel-configs-gts3-android-The-MPM-for-deep-sleep.patch
+	0223-arm64-dts-qcom-gts3lwifi-Deep-sleep-MPM-L2-and-syste.patch
 "
 builddir="$srcdir/linux-$pkgver"
 
@@ -543,4 +544,5 @@ e6d27e1f1c8285e266d85ded02c482db6c942db7d7aa3c3c8b4042fe09ca9f198679c0d092851777
 1b2374666d4610fc484deefa10c38f245ddb48b2cb13f7701bc2d29771a2e4055f2291d525af8c0b4c4d05fa56540e2f1ce6ffa0f4567613db8104495401f9ba  0220-clk-qcom-gcc-msm8996-12.5-MHz-for-the-fingerprint-SPI.patch
 46160635c2fc662442f943ea97ba534b1b963331a77f08d3b048cac1ad2c1adfbf1c604bcd3023987efed3b204c031cbd078a97701b7004b1c35f8641ac5bd09  0221-i2c-qup-Don-t-enable-the-clocks-of-a-runtime-suspend.patch
 6c6022fad308507c538c6790c71660e3ee1c08260ad766756e786dbc4ab23232a444a6b815d3339e4256f943f0479c48684fa9358a2e7d0a136d65996ff12fd8  0222-kernel-configs-gts3-android-The-MPM-for-deep-sleep.patch
+b0765948216feef9a8fbb3e4ef9b681e84a98da5d122ae8257aec3819f1136cddfeb4378cf0d66cde8ca54b73e3a0aba681563aa71d8145d1c24bd58ca933ff5  0223-arm64-dts-qcom-gts3lwifi-Deep-sleep-MPM-L2-and-syste.patch
 "

@@ -73,6 +73,7 @@ RAM boots, battery only (cable out), display blanked.
 | RPM turns XO off | **Yes, in suspend without Wi-Fi**: with 0185 + 0186 and `test-deepidle-mpm-nopcie.dts`, a 60 s suspend-to-idle on battery spent 61 s in RPM vmin (XO off, rails lowered), and USB came back. With Wi-Fi (PCIe link kept up across suspend, patch 0147) it stays out of vmin: the link, PHY and reference clocks stay on and the CPU wakes ~85 times a minute. Zeroing all bus votes at once hangs the system, so the remaining ones are per device |
 | Second and later suspends | **Patch 0221** (2026-11-20): only the first suspend after boot reached vmin. Mainline's I2C QUP driver turns the clocks of a runtime-suspended controller on at system resume and never off again (its suspend skips such a controller, its resume did not), so every resume leaked one XO-sourced clock enable per idle I2C bus (`bi_tcxo` enables 4, then 9). Found by diffing the enabled clocks before and after the first resume. With the fix, two back-to-back 60 s suspends spent 61.0 s and 61.3 s in vmin |
 | MPM in the kernel config | **Patch 0222**: the postmarketOS config leaves `CONFIG_QCOM_MPM` off, and a device tree with the MPM node routes the PMIC's interrupts through it, so the deep-sleep device tree hangs at boot without the driver. Now built in; it does nothing until a device tree has the node |
+| In the main device tree | **Patch 0223** (2026-11-20): the MPM and the two deep states moved from the test DTs into the board DTS (kernel r13). With Wi-Fi's PCIe link up, which is the default, suspend resumes cleanly and Wi-Fi reconnects, but the tablet stays out of vmin, also with the Wi-Fi radio off: the link stays up across suspend (patch 0147). With `pcie0` disabled the same kernel reaches vmin on every suspend |
 | Idle current | 129 mA with XO held, 90-97 mA (lowest 72) with all masters releasing XO; 50-90 mA (lowest 49) after 0185 + 0186, awake, display blanked |
 
 How to read it: the kernel-side RPM requests can be traced from boot with
@@ -83,7 +84,6 @@ misc clocks, `clk1`/`clk2` bus/memory clocks, `bmas`/`bslv` bandwidth), and
 
 Still holding XO in daily use: USB (the T820 does not notice an unplug: `s2mm005 ... failed to set USB
 role device: -95`), the Bluetooth UART (open even when Bluetooth is off), the PCIe link during suspend
-(patch 0147), and the boot options `clk_ignore_unused`/`pd_ignore_unused`. The test DTs are not for daily
-use: `test-deepidle-mpm-nopcie.dts` drops Wi-Fi, and a deep suspend can leave the tablet asleep until a
-power-key reset.
+(patch 0147), and the boot options `clk_ignore_unused`/`pd_ignore_unused`. `test-deepidle-mpm-nopcie.dts`
+(no Wi-Fi) is still the way to see vmin; the power key and the RTC alarm wake the tablet from it.
 

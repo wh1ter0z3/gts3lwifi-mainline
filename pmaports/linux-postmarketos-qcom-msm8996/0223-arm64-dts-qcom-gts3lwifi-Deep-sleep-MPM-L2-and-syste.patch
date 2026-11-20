@@ -1,0 +1,114 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 20 Nov 2026 13:49:49 +0000
+Subject: [PATCH] arm64: dts: qcom: gts3lwifi: Deep sleep (MPM, L2 and system
+ power collapse)
+
+The two deepest idle states the stock kernel uses, L2 power collapse
+(0x01000044) and system power collapse (0x02003444), which Samsung's
+TrustZone grants, as the last cluster and system domain-idle-states, and
+the RPM's MPM, which upstream does not describe for msm8996: the driver
+programs the vMPM wake-up timer and routes the PMIC's wake-ups (pin 87,
+the power key and the RTC alarm), so the RPM can turn XO off, lower the
+rails (vmin) and wake the system again. The CPU state stays mode 4
+(TrustZone keeps the context).
+
+Needs CONFIG_QCOM_MPM: the PMIC's interrupts go through the MPM. The LTE
+model includes this DTS; its running modem keeps the system out of vmin.
+
+On an SM-T820, two back-to-back 60 s suspends spent 60.7 s and 61.4 s in
+vmin (with Wi-Fi's PCIe controller disabled); the power key and the RTC
+alarm wake it.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../dts/qcom/apq8096-samsung-gts3lwifi.dts    | 78 +++++++++++++++++++
+ 1 file changed, 78 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+index ef1af0b3b..347ccacfc 100644
+--- a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
++++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+@@ -2304,3 +2304,81 @@ channel@77 {
+ &{/firmware/scm} {
+ 	memory-region = <&qseecom_mem>;
+ };
++
++/*
++ * Deep sleep: L2 power collapse and system power collapse as the
++ * deepest cluster and system idle states, the way stock's lpm-levels
++ * compose them (CPU mode 0 bit, cluster mode 4, system 0x34, affinity 24;
++ * reset bit 30 only from the CPU level, which stock never sets). The TZ
++ * grants 0x01000044 / 0x02003444 (the bit-30 forms are NOT_SUPPORTED).
++ * Plus the MPM: in system power collapse the CPUs' arch timers stop and
++ * wake-up interrupts other than the memory-mapped timer reach the CPUs only
++ * through the RPM's MPM, which mainline does not describe for msm8996. The
++ * driver (irqchip/qcom-mpm) programs the vMPM wake-up timer and routes the
++ * PMIC's wakes (pin 87) so the RPM can wake the AP from vmin.
++ */
++/ {
++	domain-idle-states {
++		cluster_pc: cluster-pc {
++			compatible = "domain-idle-state";
++			arm,psci-suspend-param = <0x01000044>;
++			entry-latency-us = <400>;
++			exit-latency-us = <700>;
++			min-residency-us = <5000>;
++		};
++
++		system_pc: system-pc {
++			compatible = "domain-idle-state";
++			arm,psci-suspend-param = <0x02003444>;
++			entry-latency-us = <4000>;
++			exit-latency-us = <11000>;
++			min-residency-us = <50000>;
++		};
++	};
++};
++
++&cluster0_pd {
++	domain-idle-states = <&cluster_gdhs>, <&cluster_pc>;
++};
++
++&cluster1_pd {
++	domain-idle-states = <&cluster_gdhs>, <&cluster_pc>;
++};
++
++&system_pd {
++	domain-idle-states = <&system_ret>, <&system_pc>;
++	power-domains = <&mpm>;
++};
++
++&rpm_msg_ram {
++	compatible = "qcom,rpm-msg-ram", "mmio-sram";
++	#address-cells = <1>;
++	#size-cells = <1>;
++	ranges = <0 0x00068000 0x6000>;
++
++	apss_mpm: sram@1b8 {
++		reg = <0x1b8 0x48>;
++	};
++};
++
++&rpm {
++	mpm: interrupt-controller {
++		compatible = "qcom,mpm";
++		qcom,rpm-msg-ram = <&apss_mpm>;
++		interrupts = <GIC_SPI 171 IRQ_TYPE_EDGE_RISING>;
++		mboxes = <&apcs_glb 1>;
++		interrupt-controller;
++		#interrupt-cells = <2>;
++		#power-domain-cells = <0>;
++		interrupt-parent = <&intc>;
++		qcom,mpm-pin-count = <96>;
++		qcom,mpm-pin-map = <2 184>,
++				   <52 180>,
++				   <87 326>;	/* SPMI PMIC arbiter */
++	};
++};
++
++&spmi_bus {
++	/delete-property/ interrupts;
++	interrupts-extended = <&mpm 87 IRQ_TYPE_LEVEL_HIGH>;
++};
