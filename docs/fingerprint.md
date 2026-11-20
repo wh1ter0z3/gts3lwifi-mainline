@@ -1,10 +1,18 @@
 # Fingerprint sensor (Home key)
 
-## Status (2026-11-06): kernel side done; the finger scan waits for Android
+## Status (2026-11-20): HAL registers, TA loads, sensor blocked on SPI handoff
 
-Linux still can't drive the sensor's SPI bus: TrustZone keeps it locked even
-after the BLSP ownership call (tested 2026-11-01, "Ownership test result"
-below). The other route, using Samsung's own `dualfp` trustlet, is open now.
+**Update (2026-11-20):** on Android-on-mainline the full fingerprint HAL
+(AIDL V4) registers with the framework, the `dualfp` TA loads (app id 6) via
+our open dma-heap `libQSEEComAPI`, and the sensor powers on through
+`/dev/esfp0`. Every fingerprint command still returns **42**: the `dualfp`
+trustlet tries to read the Egis ET510 over SPI (TZ owns BLSP1 QUP6) and
+fails because our mainline driver does not perform the BLSP → TrustZone SPI
+ownership handoff that the downstream 3.18 kernel does. The 12.5 MHz SPI
+clock fix (patch 0220 on the `fp-spi-clock` branch) is correct and necessary
+but not sufficient — the BLSP/QUP6 TZ-protect SCM call is the remaining wall.
+Full details in [trustzone.md](trustzone.md).
+
 On the `android` branch (kernel 7.3.1; the same work on 6.19.5 is on
 `qseecom-wip`) the mainline kernel:
 

@@ -1,10 +1,10 @@
 # Widevine DRM
 
-## Status (2026-10-30)
+## Status (2026-11-20)
 
 | Level | Where | State |
 |---|---|---|
-| L1 (hardware) | stock Android, LineageOS (also with an unlocked bootloader and a tripped Knox, as group members report on LineageOS 24) | not on mainline (below) |
+| L1 (hardware) | stock Android, LineageOS 24 (even with an unlocked bootloader / tripped Knox) | TA loads + operates on mainline (below); full integration parked |
 | L3 (software) | Waydroid (Android 13) | works: Bitmovin's Widevine demo plays in Android's browser |
 | L3 (software) | Flatpak Firefox on pmOS | works: Bitmovin's Widevine demo plays |
 
@@ -12,18 +12,23 @@
 files from Google's own servers, under Google's licence, for use on your own
 tablet. The same rule as for Samsung's firmware: never commit or mirror them.
 
-## Why not L1 on mainline
+## L1 on mainline (2026-11-20)
 
-L1 keeps decrypted video out of Linux' reach end to end. On this tablet that
-is Samsung's stack: the Widevine trusted app (`widevine.mdt` on `apnhlos`),
-Qualcomm's QSEECOM driver to load and call it, secure memory heaps, Venus in
-secure mode, a secure display path, and Samsung's Android 9 OEMCrypto
-libraries. Mainline has none of the kernel pieces for msm8996 (its QSEECOM
-only finds already running apps on newer laptop SoCs and cannot load one),
-Waydroid's Android does not use Venus at all, and the vendor libraries are
-built for the downstream kernel's interfaces. The keys themselves survive
-(L1 works on LineageOS with an unlocked bootloader), so this is a kernel
-problem, not a lost certificate.
+The earlier verdict that mainline cannot load QSEECOM apps is **obsolete**.
+Our open dma-heap `libQSEEComAPI` loads the Widevine TA (`app id 6`) and
+executes real commands (getTzVersion → ver 2.4, get_capabilities → 1) on
+mainline kernel 7.3.1. A 32-bit Widevine HIDL service
+(`drm@1.1-service.widevine`) starts and reaches `joinThreadPool` with no
+crash. L1 *reporting* (license / security level) is likely reachable. HD
+*playback* additionally needs the secure video path (secure heaps, Venus
+secure mode, secure display) which mainline msm8996 currently lacks. The
+per-device keybox in RPMB/SFS survives an unlocked bootloader on this device
+(confirmed by L1 working on LineageOS 24 unlocked). Full details in
+[trustzone.md](trustzone.md).
+
+This work is **parked** in favour of deep sleep and usability. The
+remaining integration steps (boot sequencing, SELinux, vendor linker
+namespace) are known and documented.
 
 ## L3 in Waydroid (Android 13, arm64)
 

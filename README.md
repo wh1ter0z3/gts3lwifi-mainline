@@ -94,10 +94,10 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Light sensor | Works | lux through iio-sensor-proxy; KWin auto-brightness is off by default and needs training (patch 0077, [sensors](docs/sensors.md)) |
 | Cover (hall) sensor | Not yet | test DT `dts/test/test-hall.dts`; waits for reliable suspend |
 | Grip sensor (SM-T825) | Not yet | test DT `dts/test/test-sar.dts`; nothing reads it without the modem |
-| Fingerprint (Home key) | Kernel side done, finger scan untested | Egis ET510 on a TrustZone-owned SPI bus, run by Samsung's `dualfp` trustlet. On the `android` branch (7.3) the kernel loads the trustlets, offers `/dev/qseecom` and drives the sensor's power, clocks and interrupt; a finger scan needs Samsung's Android fingerprint HAL, so it waits for Android on this kernel ([fingerprint](docs/fingerprint.md)) |
+| Fingerprint (Home key) | HAL registers, TA loads, sensor blocked | Egis ET510: HAL registers with the framework, `dualfp` TA loads via our open `libQSEEComAPI`, sensor powers on; every command returns 42 (BLSP→TZ SPI handoff missing in mainline). Parked ([fingerprint](docs/fingerprint.md), [trustzone](docs/trustzone.md)) |
 | **Software** | | |
 | postmarketOS with Plasma (Wayland) | Works | installed on the eMMC behind lk2nd; build and install it yourself, Plasma or console: [install-pmbootstrap](docs/install-pmbootstrap.md) (our original manual install: [pmos-install](docs/pmos-install.md)) |
-| Widevine DRM | Partial | L3 plays in Waydroid and Flatpak Firefox; L1 not on mainline ([widevine](docs/widevine.md)) |
+| Widevine DRM | Partial | L3 works in Waydroid and Flatpak Firefox; L1 TA loads + operates on mainline (parked, [widevine](docs/widevine.md), [trustzone](docs/trustzone.md)) |
 | Waydroid (Android 13) | Works | Android apps on Linux, GPU-accelerated; an extra, not a stock Android replacement; optional `-waydroid` subpackage ([waydroid](docs/waydroid.md)) |
 
 ## Needs testing
