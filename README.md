@@ -4,7 +4,7 @@
 
 Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both models, Wi-Fi and LTE.
 
-**Latest:** [dual boot test 2](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test2) — Nura and an Android side by side.
+**Latest:** [dual boot test 3](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test3) — Nura and an Android side by side; Nura now sleeps deeply.
 
 - SoC: Qualcomm APQ8096 (SM-T820) / MSM8996 (SM-T825), Snapdragon 820; PMICs PM8994 + PM8004
 - Storage: eMMC (not UFS)
@@ -18,7 +18,7 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 Nura (postmarketOS with Plasma) and an Android side by side on internal
 storage, plus OrangeFox on our kernel. lk2nd picks one at every start, and
 they switch without a PC. [How it works](docs/dual-boot.md),
-[release notes](docs/release-notes-dualboot-test2.md).
+[release notes](docs/release-notes-dualboot-test3.md).
 
 Both Androids keep Nura, so the choice is only which Android:
 
