@@ -14,8 +14,10 @@ On a Tab S3 with no panel attached, booted from RAM with
 - scans find networks on both bands with sensible signal levels, and
   NetworkManager manages `wlan0`.
 
-Not checked yet: association and throughput (needs a network password typed
-on the tablet), suspend.
+Since then: association and throughput (an SM-T825Y reported 866.7 Mbit/s
+VHT-MCS 9 80 MHz 2x2 at -42 dBm, and about 214 Mbit/s downloading), and
+suspend: the link goes down and comes back on every suspend since kernel r14
+(docs/suspend.md).
 
 Logs: `docs/logs/wifi-coldboot.txt` (working boot) and
 `docs/logs/wifi-firstboot-nolink.txt` (first attempt, no link).
@@ -98,11 +100,31 @@ The fix in `dts/test/test-wifi.dts`:
   Add `sysctl.kernel.firmware_config.ignore_sysfs_fallback=1` to the kernel
   command line. With it, Wi-Fi is up as soon as udev loads `ath10k_pci`.
 
+## Power save (off by default since device r18)
+
+With power save on (NetworkManager's default), the chip answers an idle ping
+only after 100-400 ms: 300 ms reported on an SM-T825Y, 126 ms average (up to
+403 ms) measured on an SM-T820. With it off, about 16 ms. The device package
+turns it off in `/usr/lib/NetworkManager/conf.d/60-gts3-wifi-powersave.conf`
+(`wifi.powersave = 2`). It costs some power while awake and connected; in
+suspend the link is down anyway. To turn it back on, put
+`[connection]` / `wifi.powersave = 3` in a file in
+`/etc/NetworkManager/conf.d/`.
+
+## Regulatory domain
+
+The tablet doesn't set a country, so Wi-Fi starts in the world domain, which
+limits the 5 GHz channels (the chip's OTP says GB, EEPROM regdomain 0x833a).
+It depends on where the tablet is, so there is no default. Set your country's
+two-letter code once, for example Thailand:
+
+    echo "options cfg80211 ieee80211_regdom=TH" | sudo tee /etc/modprobe.d/cfg80211-regdom.conf
+
+and reboot (or `sudo iw reg set TH` for this boot only). `iw reg get` shows
+the domain in use.
+
 ## Open items
 
-- **Regulatory domain:** the chip's OTP says GB (EEPROM regdomain 0x833a).
-  Setting the local country needs `iw reg set` or a cfg80211 hint. Check
-  whether ath accepts a user override.
 - **MAC address:** ath10k uses the address from the chip's OTP (a Qualcomm
   OUI), not Samsung's per-device address (kept in `/efs`). Pass it through a
   `local-mac-address` on a PCIe child node, or set it in NetworkManager.
