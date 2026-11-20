@@ -63,7 +63,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | eMMC | Works | HS400 |
 | microSD | Works | UHS-I (SDR104); hot-plug not tested |
 | Reboot, power-off | Works | through PS_HOLD, PSCI hangs in Samsung's TrustZone ([reboot](docs/reboot.md)) |
-| Suspend | Partial | s2idle; deep sleep (RPM vmin) works on every suspend with Wi-Fi's PCIe link off, not yet with it up ([suspend](docs/suspend.md)) |
+| Suspend | Works | s2idle with deep sleep (RPM vmin) on every suspend, Wi-Fi on; Wi-Fi reconnects after resume; tested on an SM-T820 without a panel ([suspend](docs/suspend.md)) |
 | **Display and input** | | |
 | Display | Works | colours, brightness, blank/unblank; HBM (outdoor brightness) through the panel's `hbm` attribute ([display](docs/display.md)) |
 | GPU (Adreno 530) | Works | freedreno, OpenGL ES 3.1 ([gpu](docs/gpu.md)) |

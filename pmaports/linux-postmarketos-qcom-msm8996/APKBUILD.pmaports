@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=13
+pkgrel=14
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -212,7 +212,6 @@ source="
 	0144-iio-qcom-smgr-soft-timestamp-channel.patch
 	0145-iio-qcom-smgr-gyro-magn-mount-matrix.patch
 	0146-net-qrtr-send-pending-hello-first.patch
-	0147-pci-qcom-keep-link-up-across-suspend-msm8996.patch
 	0148-drm-msm-mdp5-assign-pipes-on-resume.patch
 	0159-dt-bindings-input-tm2-touchkey-add-coreriver-tc305k.patch
 	0160-input-tm2-touchkey-add-coreriver-tc305k.patch
@@ -270,6 +269,8 @@ source="
 	0221-i2c-qup-Don-t-enable-the-clocks-of-a-runtime-suspend.patch
 	0222-kernel-configs-gts3-android-The-MPM-for-deep-sleep.patch
 	0223-arm64-dts-qcom-gts3lwifi-Deep-sleep-MPM-L2-and-syste.patch
+	0224-PCI-qcom-Reset-the-MSM8996-controller-each-time-it-i.patch
+	0225-arm64-dts-qcom-gts3lwifi-Reset-for-the-PCIe-controll.patch
 "
 builddir="$srcdir/linux-$pkgver"
 
@@ -487,7 +488,6 @@ bb0abd7b92c2a0886067de748ced85695c1af721f5765905556eb3a3d4e37f10b5b6f3dc6abf5180
 107b09c18916d581caade3195cb9822251027e29f9b32670f1448eb66da2e6611dc4a8aca7c55b58e84a34c18da7c0329da3cb796f380da6ef2066ddaf2d46b4  0144-iio-qcom-smgr-soft-timestamp-channel.patch
 0bab4727cb5cbcf9498aca5b1f22d42c68ffabbae951f36b8881047dc73e6bd76cca30f4ec07fea3693857fd79307ceae5a864c739a2b723bafb067ff9e880b6  0145-iio-qcom-smgr-gyro-magn-mount-matrix.patch
 218b7f1427a252c56544ca238e4a5eb32138f8074f149f10dd05c729700cdacb2b791b72873ca09140c627f493764d6f5c9b204b4e6e979fe61802a7910b77fe  0146-net-qrtr-send-pending-hello-first.patch
-d3f63e62acf02212316637b61c4387562a7d34cc7b00e7622c46798cb768399d47e5635d39ec6d160b65cd966c7a23ca15d6353d0dc478e936cd254b4fd06d9c  0147-pci-qcom-keep-link-up-across-suspend-msm8996.patch
 cb711e5336e88d23c37a440c233a148f48eda00fb88f6076c3514d2b15bd577ecf266df050d5a4cacb958324fc6dff1ca638447b4c2e7967b4812e51a13d9fbd  0148-drm-msm-mdp5-assign-pipes-on-resume.patch
 98067d97a403cdb8894f7b0eb16f8f711c52af6b35e2d9296790f0ae0dd577df33397299e2b42dc892c563f90f11182de30128a6c6d23d3ca740bf20392767c2  0159-dt-bindings-input-tm2-touchkey-add-coreriver-tc305k.patch
 40c988bd434f362c7c538efefdc07f42cbcfc5d571fb567abd8cd43dac455947be8689d1975d5c3af987cfab67e5a846f2645352316cd6009de268fc21f05a82  0160-input-tm2-touchkey-add-coreriver-tc305k.patch
@@ -545,4 +545,6 @@ e6d27e1f1c8285e266d85ded02c482db6c942db7d7aa3c3c8b4042fe09ca9f198679c0d092851777
 46160635c2fc662442f943ea97ba534b1b963331a77f08d3b048cac1ad2c1adfbf1c604bcd3023987efed3b204c031cbd078a97701b7004b1c35f8641ac5bd09  0221-i2c-qup-Don-t-enable-the-clocks-of-a-runtime-suspend.patch
 6c6022fad308507c538c6790c71660e3ee1c08260ad766756e786dbc4ab23232a444a6b815d3339e4256f943f0479c48684fa9358a2e7d0a136d65996ff12fd8  0222-kernel-configs-gts3-android-The-MPM-for-deep-sleep.patch
 b0765948216feef9a8fbb3e4ef9b681e84a98da5d122ae8257aec3819f1136cddfeb4378cf0d66cde8ca54b73e3a0aba681563aa71d8145d1c24bd58ca933ff5  0223-arm64-dts-qcom-gts3lwifi-Deep-sleep-MPM-L2-and-syste.patch
+6222c0fa3c0f7126ce6cfb5bdccb2b7bacce39d6120f755643138875f97895d5dcbdce90d517767f5c35b19f7d5174f7c5d51b4fd426e71a6b94233ba7c79551  0224-PCI-qcom-Reset-the-MSM8996-controller-each-time-it-i.patch
+474c17fb6d73031b3eef7610ba61d73b8c0aae88c43ca0a011e53b66fb6a8cede861bc22167dc2b93abda2f583572deee80bc481cf3bc2ab4508fb39e95d154d  0225-arm64-dts-qcom-gts3lwifi-Reset-for-the-PCIe-controll.patch
 "

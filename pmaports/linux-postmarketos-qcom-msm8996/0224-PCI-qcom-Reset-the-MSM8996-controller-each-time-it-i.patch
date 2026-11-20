@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 20 Nov 2026 15:00:43 +0000
+Subject: [PATCH 224/225] PCI: qcom: Reset the MSM8996 controller each time it
+ is set up
+
+Nothing resets the MSM8996 (2.3.2) controller: its init only turns on the
+supplies and clocks, and its GDSC stays on across system suspend. That is
+fine at probe, but not after a system suspend that powered the endpoint
+off (D3cold). On a Samsung Galaxy Tab S3 with a QCA6174:
+
+- after PME_Turn_Off and L2 the link never trains again (LTSSM stays in
+  Detect.Quiet, "Device not found"), whether the endpoint lost power or
+  not;
+- without PME_Turn_Off the link trains, but the endpoint never completes
+  a configuration request (all ones, "Unable to change power state from
+  D3hot to D0, device inaccessible"), not even seconds later.
+
+Pulsing the controller's block reset before setting it up again fixes
+both: the link comes back in L0, ath10k resumes and Wi-Fi reconnects, over
+repeated suspends. Take an optional "core" reset and pulse it whenever the
+controller is set up, at probe and at resume, like the downstream driver
+does on every enable.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/pci/controller/dwc/pcie-qcom.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/drivers/pci/controller/dwc/pcie-qcom.c b/drivers/pci/controller/dwc/pcie-qcom.c
+index b58a607b7..4890f21a3 100644
+--- a/drivers/pci/controller/dwc/pcie-qcom.c
++++ b/drivers/pci/controller/dwc/pcie-qcom.c
+@@ -215,6 +215,7 @@ struct qcom_pcie_resources_2_3_2 {
+ 	struct clk_bulk_data *clks;
+ 	int num_clks;
+ 	struct regulator_bulk_data supplies[QCOM_PCIE_2_3_2_MAX_SUPPLY];
++	struct reset_control *rst;
+ };
+ 
+ #define QCOM_PCIE_2_3_3_MAX_RESETS		7
+@@ -719,6 +720,10 @@ static int qcom_pcie_get_resources_2_3_2(struct qcom_pcie *pcie)
+ 		return res->num_clks;
+ 	}
+ 
++	res->rst = devm_reset_control_get_optional_exclusive(dev, "core");
++	if (IS_ERR(res->rst))
++		return dev_err_probe(dev, PTR_ERR(res->rst), "Failed to get core reset\n");
++
+ 	return 0;
+ }
+ 
+@@ -743,6 +748,25 @@ static int qcom_pcie_init_2_3_2(struct qcom_pcie *pcie)
+ 	struct device *dev = pci->dev;
+ 	int ret;
+ 
++	/*
++	 * Nothing else resets the controller: its GDSC stays on across system
++	 * suspend. After the endpoint has been powered off, the controller
++	 * left as it was neither trains the link again (after PME_Turn_Off)
++	 * nor completes configuration requests to the endpoint.
++	 */
++	ret = reset_control_assert(res->rst);
++	if (ret) {
++		dev_err(dev, "cannot assert core reset\n");
++		return ret;
++	}
++	usleep_range(1000, 1500);
++	ret = reset_control_deassert(res->rst);
++	if (ret) {
++		dev_err(dev, "cannot deassert core reset\n");
++		return ret;
++	}
++	usleep_range(1000, 1500);
++
+ 	ret = regulator_bulk_enable(ARRAY_SIZE(res->supplies), res->supplies);
+ 	if (ret < 0) {
+ 		dev_err(dev, "cannot enable regulators\n");

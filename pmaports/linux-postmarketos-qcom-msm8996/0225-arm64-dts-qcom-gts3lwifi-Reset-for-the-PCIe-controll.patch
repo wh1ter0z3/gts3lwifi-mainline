@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Fri, 20 Nov 2026 15:00:43 +0000
+Subject: [PATCH 225/225] arm64: dts: qcom: gts3lwifi: Reset for the PCIe
+ controller
+
+Give PCIe0 its block reset (GCC_PCIE_0_BCR) so the driver can reset the
+controller when it sets it up again at resume; without it the QCA6174 is
+gone after a suspend that powers it off.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+index 347ccacfc..b4e723b31 100644
+--- a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
++++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+@@ -1318,6 +1318,9 @@ &gpu_zap_shader {
+  */
+ &pcie0 {
+ 	vddpe-3v3-supply = <&vreg_wlan_en>;
++	/* the controller is reset each time it is set up, also at resume */
++	resets = <&gcc GCC_PCIE_0_BCR>;
++	reset-names = "core";
+ 	vdda-supply = <&vreg_l28a_0p925>;
+ 
+ 	perst-gpios = <&tlmm 35 GPIO_ACTIVE_LOW>;

@@ -85,8 +85,11 @@ None of these are in 7.4-rc1.
   the service announcement is lost, and the modem crashes about 40 s later.
 - **0147 `PCI: qcom`:** since mainline 2cc0e7454c, suspend cuts vddpe-3v3, which on
   this board is the Wi-Fi chip's power. The link never returned, and Wi-Fi stayed
-  dead until reboot. This keeps the link up during suspend, as 6.19 did. Why it
-  doesn't retrain is unknown: holding BT_EN low doesn't help.
+  dead until reboot. This kept the link up during suspend, as 6.19 did. Dropped
+  in kernel r14 (2026-11-20): the controller was never reset, so after the chip lost
+  power the link did not train again after PME_Turn_Off and the chip answered no
+  configuration request. Patches 0224/0225 reset it (GCC_PCIE_0_BCR) every time it
+  is set up, and the link now goes down in suspend (see [suspend](suspend.md)).
 - **0148 `drm/msm/mdp5`:** not caused by 7.3, 6.19 has the same bug. The second
   suspend after a boot failed at `prepare`. See [suspend](suspend.md).
 
