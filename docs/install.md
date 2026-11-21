@@ -203,7 +203,8 @@ erases Nura and Android together.
 
 ## Report
 
-Open an [issue](https://github.com/wh1ter0z3/gts3lwifi-mainline/issues) and say:
+For questions or a quick chat, there is the [Telegram group](https://t.me/+J_vEuef2Xk1iZGE9).
+For a report, open an [issue](https://github.com/wh1ter0z3/gts3lwifi-mainline/issues) and say:
 
 - your model (SM-T820 or SM-T825) and PC (Windows or Linux);
 - which setup you chose, and whether the script finished (copy its last
