@@ -90,6 +90,7 @@ SGDISK=$(tool sgdisk) || die "this recovery has no sgdisk"
 MKE2FS=$(tool mke2fs) || die "this recovery has no mke2fs"
 E2FSCK=$(tool e2fsck) || die "this recovery has no e2fsck"
 RESIZE2FS=$(tool resize2fs) || die "this recovery has no resize2fs"
+TUNE2FS=$(tool tune2fs) || TUNE2FS=
 SIMG2IMG=$(tool simg2img) || die "this recovery has no simg2img"
 LOSETUP=$(tool losetup) || die "this recovery has no losetup"
 
@@ -118,6 +119,18 @@ fixroot() {
 	$E2FSCK -fy "$G/nura" > /dev/null 2>&1
 	[ $? -le 1 ] || die "e2fsck of Nura's root"
 	$RESIZE2FS "$G/nura" > /dev/null 2>&1 || die "resize2fs of Nura's root"
+	# ext4's encrypt feature, for fscrypt (existing files are unaffected)
+	[ -z "$TUNE2FS" ] || $TUNE2FS -O encrypt "$G/nura" > /dev/null 2>&1 ||
+		ui "Nura: couldn't turn on ext4's encrypt feature (encryption stays off)"
+}
+# Nura's root mount options with inlinecrypt, so fscrypt encrypts on the
+# eMMC's inline crypto engine (docs/encryption.md); harmless without fscrypt
+ice_cmdline() {
+	case " $1 " in
+	*inlinecrypt*) printf '%s' "$1" ;;
+	*" pmos_rootfsopts="*) printf '%s' "$1" | sed -E 's/(pmos_rootfsopts=[^ ]*)/\1,inlinecrypt/' ;;
+	*) printf '%s pmos_rootfsopts=defaults,inlinecrypt' "$1" ;;
+	esac
 }
 # the last step: lk2nd v2 to the start of the boot partition
 flashlk2nd() {
@@ -365,7 +378,7 @@ mkdir -p "$W/mnt/extlinux"
 		echo "	linux /vmlinuz"
 		echo "	initrd /initramfs"
 		echo "	fdt /$DTB"
-		echo "	append $NURA_CMDLINE"
+		echo "	append $(ice_cmdline "$NURA_CMDLINE")"
 	else
 		echo "default android"
 	fi

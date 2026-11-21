@@ -44,6 +44,15 @@ PATH=$PATH:/usr/sbin:/sbin
 MiB=1048576
 
 die() { echo "error: $*" >&2; exit 1; }
+# Nura's root mount options with inlinecrypt, so fscrypt encrypts on the
+# eMMC's inline crypto engine (docs/encryption.md); harmless without fscrypt
+ice_cmdline() {
+	case " $1 " in
+	*inlinecrypt*) printf '%s' "$1" ;;
+	*" pmos_rootfsopts="*) printf '%s' "$1" | sed -E 's/(pmos_rootfsopts=[^ ]*)/\1,inlinecrypt/' ;;
+	*) printf '%s pmos_rootfsopts=defaults,inlinecrypt' "$1" ;;
+	esac
+}
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found ($2)"; }
 say() { echo "== $*"; }
 
@@ -235,6 +244,7 @@ if [ -n "$PAYLOAD" ]; then
 		tune2fs -O ^orphan_file "$N/root.img" > /dev/null || die "can't drop orphan_file from Nura's root"
 		e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
 	fi
+	tune2fs -O encrypt "$N/root.img" > /dev/null || die "can't turn on ext4's encrypt feature in Nura's root"
 	add_hook
 	# raw and xz'd, for busybox's unxz in the recovery (a sparse image can't
 	# be read from a pipe, and release files must stay under 2 GiB)
@@ -287,7 +297,7 @@ mkdir -p "$B/extlinux"
 		echo "	linux /vmlinuz"
 		echo "	initrd /initramfs"
 		echo "	fdt /$DTB"
-		echo "	append $NURA_CMDLINE"
+		echo "	append $(ice_cmdline "$NURA_CMDLINE")"
 	else
 		echo "default android"
 	fi
@@ -358,6 +368,7 @@ if [ -n "$HASNURA" ]; then
 	set -- $(part "$IMG" "$(pnum "$IMG" nura)")
 	e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
 	resize2fs "$N/root.img" $(($2 / 8))  > /dev/null 2>&1 || die "Nura's root doesn't fit"
+	tune2fs -O encrypt "$N/root.img" > /dev/null || die "can't turn on ext4's encrypt feature in Nura's root"
 	add_hook
 	part_in "$IMG" "$(pnum "$IMG" nura)" "$N/root.img"
 fi
