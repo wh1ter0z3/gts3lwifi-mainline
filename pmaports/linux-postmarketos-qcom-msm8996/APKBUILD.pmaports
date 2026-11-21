@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=16
+pkgrel=17
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -276,6 +276,7 @@ source="
 	0228-mmc-sdhci-msm-Inline-encryption-with-ICE-v2-MSM8996.patch
 	0229-dt-bindings-crypto-qcom-inline-crypto-engine-Add-MSM.patch
 	0230-arm64-dts-qcom-msm8996-The-eMMC-inline-crypto-engine.patch
+	0231-media-v4l2-common-A-negative-tv_usec-counts-as-negat.patch
 "
 builddir="$srcdir/linux-$pkgver"
 
@@ -557,4 +558,5 @@ b0765948216feef9a8fbb3e4ef9b681e84a98da5d122ae8257aec3819f1136cddfeb4378cf0d66cd
 d9421fb1ed099eb488f1e7777c7c81f03b2fbb03f42198c63cbc0845ac4f95540cfa1c422e0a1d9c5b74f91d45c88a673a30d50cd7e5c7798df497a001885dbe  0228-mmc-sdhci-msm-Inline-encryption-with-ICE-v2-MSM8996.patch
 32d6864c264b6ac43f32f1b2372823bb4b90c7674595581ab8d6871a06fe54fbc9c8e6ed3b44f4d80b0883850c7a4be8670adb5594927a498d616b59223358a3  0229-dt-bindings-crypto-qcom-inline-crypto-engine-Add-MSM.patch
 6e95f3c9edc17fa3250df1c5da197f42d7d5a384f9253064fc250d253c8350d1088d9d6f991847cb4190cf735b2eb0d444c1c451084658002870e33e9377989d  0230-arm64-dts-qcom-msm8996-The-eMMC-inline-crypto-engine.patch
+a61d999388f575878d574d5838cd9f81d92b493573d77d340239cf6afdd197c30b361d7dd2f000cce4bbe9dbe66ac88cef86866a59b77d84651164cadf69840c  0231-media-v4l2-common-A-negative-tv_usec-counts-as-negat.patch
 "

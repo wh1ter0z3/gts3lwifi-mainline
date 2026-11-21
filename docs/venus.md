@@ -130,8 +130,38 @@ Open:
   VMEM for Venus is not described.
 - With `v4l2-ctl` defaults the encoder writes level 1.0 and no SPS cropping
   (1280x736 for 720p). Userspace normally sets the level; check the cropping.
-- `ffmpeg -c:v h264_v4l2m2m` aborts in ffmpeg itself (`Assertion pkt failed`).
-  Use GStreamer to test.
+- ~~`ffmpeg -c:v h264_v4l2m2m` aborts in ffmpeg itself (`Assertion pkt failed`).~~
+  Works since the decoder fixes merged with kernel r9; see
+  [In apps](#in-apps-ffmpeg-mpv-firefox-2026-11-21).
+
+## In apps: FFmpeg, mpv, Firefox (2026-11-21)
+
+**FFmpeg's V4L2 decoders work** (`h264_v4l2m2m`, `hevc_v4l2m2m`,
+`vp9_v4l2m2m`, `vp8_v4l2m2m`), bit-exact against FFmpeg's software decoders
+on an SM-T820 with kernel r17: H.264 1080p30 (180 frames, at 64 fps), HEVC,
+VP9 and VP8 at 720p, and seeking (`-ss`), timestamps included.
+
+Apps don't use the hardware decoder by themselves:
+
+- **mpv** (and mpv-based players such as Haruna): `--hwdec=v4l2m2m-copy`, or
+  `hwdec=v4l2m2m-copy` in `~/.config/mpv/mpv.conf`. The log says
+  `Using hardware decoding (v4l2m2m-copy)`. Decoding 1080p H.264 as fast as
+  it goes took 49 % of one core, the software decoder 220 %.
+- **GStreamer** players (Showtime, Clapper, `gst-play-1.0`) pick
+  `v4l2h264dec` and the others by themselves.
+- **Firefox** can't use it yet: its V4L2 path wants FFmpeg to hand over
+  frames as DRM PRIME buffers, which upstream FFmpeg's V4L2 decoders don't
+  do (Raspberry Pi's FFmpeg fork does), and it only tries H.264 and AV1.
+  Browser video decodes on the CPU.
+
+**Negative timestamps (patch 0231, kernel r17):** FFmpeg gives a negative
+timestamp that isn't a whole number of seconds a negative `tv_usec`
+(`v4l2_set_pts()`: -0.966 s becomes tv_sec 0, tv_usec -966037), which V4L2
+read as 4293 s. The frames before an accurate seek point have negative
+timestamps, so `ffmpeg -ss` returned them stamped 4294 s and couldn't drop
+them; files whose timestamps start below zero had the same problem. The
+kernel now takes a negative `tv_usec` as negative (valid timestamps are
+unchanged). Upstream FFmpeg still splits timestamps this way.
 
 ## Firmware and DT
 

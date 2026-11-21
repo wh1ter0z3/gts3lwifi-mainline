@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sat, 21 Nov 2026 11:27:05 +0000
+Subject: [PATCH] media: v4l2-common: A negative tv_usec counts as negative
+
+FFmpeg's V4L2 mem2mem decoders and encoders (libavcodec v4l2_buffers.c,
+v4l2_set_pts()) split a timestamp with C's truncating / and %, so a
+negative one that isn't a whole number of seconds gets a negative
+tv_usec: -0.966 s becomes tv_sec 0, tv_usec -966037. The u32 cast here
+turns that into 4293 s, the decoder hands the frame back with that
+timestamp, and FFmpeg can't place it. Negative timestamps are common in
+FFmpeg: after an accurate seek, the frames before the seek point are
+decoded with negative timestamps and dropped by timestamp, and files
+whose timestamps start below zero have them.
+
+Use the low 32 bits of tv_usec as signed. Valid input (0 to 999999) is
+unchanged and the upper bits are still ignored for 32-bit user space; an
+invalid negative tv_usec now means what FFmpeg meant. The way back is
+already right: the timestamp is returned normalized (tv_sec -1, tv_usec
+34000 for -0.966 s), which FFmpeg reads correctly.
+
+Tested on an SM-T820 (Venus): ffmpeg -ss 3 with h264_v4l2m2m now gives
+the software decoder's frames and timestamps bit for bit (before: frames
+stamped 4294 s), a stream shifted by -0.5 s decodes with the right
+timestamps, full-file H.264, HEVC, VP9 and VP8 decodes are unchanged
+(bit-exact), and GStreamer's v4l2h264dec is unaffected.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ include/media/v4l2-common.h | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/include/media/v4l2-common.h b/include/media/v4l2-common.h
+index edd416178..56eb803f1 100644
+--- a/include/media/v4l2-common.h
++++ b/include/media/v4l2-common.h
+@@ -715,11 +715,13 @@ static inline u64 v4l2_buffer_get_timestamp(const struct v4l2_buffer *buf)
+ {
+ 	/*
+ 	 * When the timestamp comes from 32-bit user space, there may be
+-	 * uninitialized data in tv_usec, so cast it to u32.
+-	 * Otherwise allow invalid input for backwards compatibility.
++	 * uninitialized data in tv_usec, so use its low 32 bits only.
++	 * Otherwise allow invalid input for backwards compatibility: a
++	 * negative tv_usec counts as negative (FFmpeg gives a timestamp of
++	 * -0.5 s as tv_sec 0, tv_usec -500000), instead of as 4294 s.
+ 	 */
+ 	return buf->timestamp.tv_sec * NSEC_PER_SEC +
+-		(u32)buf->timestamp.tv_usec * NSEC_PER_USEC;
++		(s64)(s32)buf->timestamp.tv_usec * NSEC_PER_USEC;
+ }
+ 
+ static inline void v4l2_buffer_set_timestamp(struct v4l2_buffer *buf,
