@@ -32,6 +32,7 @@ common/     BoardConfigCommon.mk, recovery.fstab (Android format: /misc),
 gts3lwifi/  SM-T820: product, board config, prebuilt kernel
 gts3llte/   SM-T825: the same
 tools/      screen.sh: the recovery's screen on the PC over adb
+patches/    for the OrangeFox source tree (bootable_recovery: bootable/recovery)
 ```
 
 ## Building
@@ -44,6 +45,7 @@ cd sync && ./orangefox_sync.sh --branch 12.1 --path /path/to/fox_12.1
 cd /path/to/fox_12.1
 git clone https://github.com/wh1ter0z3/gts3lwifi-mainline /tmp/gts3lwifi-mainline
 cp -a /tmp/gts3lwifi-mainline/android/orangefox device/samsung/gts3l-recovery
+git -C bootable/recovery am "$PWD"/device/samsung/gts3l-recovery/patches/bootable_recovery/*.patch
 export ALLOW_MISSING_DEPENDENCIES=true LC_ALL=C FOX_BUILD_DEVICE=gts3lwifi
 source build/envsetup.sh
 lunch twrp_gts3lwifi-eng          # twrp_gts3llte-eng for the SM-T825
@@ -51,6 +53,19 @@ mka adbd recoveryimage
 ```
 
 The image: `out/target/product/gts3lwifi/OrangeFox-*.img`.
+
+The patches let the GUI's DRM backend (minuitwrp) drive mainline msm, for
+OrangeFox on our mainline kernel: it was written for Qualcomm's SDE driver,
+split the screen across two planes and set a zpos mainline doesn't take, so
+the kernel refused every commit and only the kernel console showed.
+
+An incremental build doesn't always refresh the ramdisk: libraries are
+copied into `recovery/root` only when it is made, and OrangeFox's own
+changes to it (such as leaving out the Magisk entries) run only with it.
+After changing a library, copy it from `system/lib64` to
+`recovery/root/system/lib64` and delete
+`obj/PACKAGING/recovery_intermediates/ramdisk_files-timestamp` and
+`ramdisk-recovery.*` before building again.
 
 ## Installing
 

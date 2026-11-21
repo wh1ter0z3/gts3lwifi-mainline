@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sat, 21 Nov 2026 06:29:12 +0000
+Subject: [PATCH 2/2] minuitwrp: drm: set zpos only to a value the driver takes
+
+The atomic backend set every plane's zpos to 0. Mainline msm (mdp5)
+gives zpos the range 1 to 255, and one property value out of range fails
+the whole commit without a message (-EINVAL from
+drm_property_change_valid_get()): the CRTC was never enabled. Set zpos
+only when the property takes the value, else keep the driver's own.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ minuitwrp/graphics_drm.cpp | 23 +++++++++++++++++++++--
+ 1 file changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/minuitwrp/graphics_drm.cpp b/minuitwrp/graphics_drm.cpp
+index 8a68439f0..76c627fe2 100644
+--- a/minuitwrp/graphics_drm.cpp
++++ b/minuitwrp/graphics_drm.cpp
+@@ -234,6 +234,23 @@ static int atomic_add_prop_to_plane(Plane *plane_res, drmModeAtomicReq *req,
+ 
+ 
+ 
++/* Whether the plane's property prop_name takes value: one value a driver
++ * doesn't take (out of its range, or an immutable property) fails the
++ * whole commit. */
++static bool plane_prop_takes(Plane *obj, const char *prop_name, uint64_t value) {
++  for (int j = 0; obj->props && j < (int)obj->props->count_props; ++j) {
++    drmModePropertyRes *prop = obj->props_info[j];
++    if (!prop || strcmp(prop->name, prop_name))
++      continue;
++    if (prop->flags & DRM_MODE_PROP_IMMUTABLE)
++      return false;
++    if ((prop->flags & DRM_MODE_PROP_RANGE) && prop->count_values >= 2)
++      return value >= prop->values[0] && value <= prop->values[1];
++    return true;
++  }
++  return false;
++}
++
+ static int atomic_populate_plane(int plane, drmModeAtomicReqPtr atomic_req) {
+   uint32_t src_x, src_y, src_w, src_h;
+   uint32_t crtc_x, crtc_y, crtc_w, crtc_h;
+@@ -254,8 +271,10 @@ static int atomic_populate_plane(int plane, drmModeAtomicReqPtr atomic_req) {
+   if (number_of_lms == 4)
+     zpos = plane >> 1;
+ 
+-  atomic_add_prop_to_plane(plane_res, atomic_req,
+-                           plane_res[plane].plane->plane_id, "zpos", zpos);
++  /* mainline msm's zpos is 1 to 255: there the driver's own stays */
++  if (plane_prop_takes(&plane_res[plane], "zpos", zpos))
++    atomic_add_prop_to_plane(plane_res, atomic_req,
++                             plane_res[plane].plane->plane_id, "zpos", zpos);
+ 
+   if (atomic_add_prop_to_plane(plane_res, atomic_req,
+                                plane_res[plane].plane->plane_id, "FB_ID",

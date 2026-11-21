@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sat, 21 Nov 2026 06:10:02 +0000
+Subject: [PATCH 1/2] minuitwrp: drm: one plane without an SDE topology
+
+Qualcomm's SDE driver gives the mode's layer mixers in the connector's
+"mode_properties" blob, and without it the atomic backend assumed two:
+the mode split across two half-width planes. Mainline msm has no such
+property and splits one plane between the mixers of a bonded DSI itself;
+the second plane got its FB but no CRTC, so the kernel refused every
+commit (-EINVAL, "FB set but no CRTC") and nothing reached the screen.
+Use one plane when the connector has no mode_properties.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ minuitwrp/graphics_drm.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/minuitwrp/graphics_drm.cpp b/minuitwrp/graphics_drm.cpp
+index 99ebd2842..8a68439f0 100644
+--- a/minuitwrp/graphics_drm.cpp
++++ b/minuitwrp/graphics_drm.cpp
+@@ -846,6 +846,12 @@ static GRSurface* drm_init(minui_backend* backend __unused) {
+   if (!conn_res.props_info)
+     return NULL;
+   else {
++    /* Qualcomm's SDE driver gives the mode's layer mixers in the
++     * connector's "mode_properties". Drivers without it (mainline msm,
++     * which splits a plane between the mixers of a bonded DSI itself)
++     * take one plane across the whole mode: two half-width planes leave
++     * the second one without a CRTC, and every commit fails. */
++    number_of_lms = 1;
+     for (int j = 0; j < (int)conn_res.props->count_props; ++j) {
+       conn_res.props_info[j] = drmModeGetProperty(drm_fd,
+                                  conn_res.props->props[j]);
