@@ -8,7 +8,10 @@
 # streams Nura's root and the GSI to it over USB (docs/dual-boot.md, "Staged
 # install"). setup.ps1 does the same on Windows.
 #
-# usage: setup.sh [--gsi <GSI .img or .img.xz>] [<folder with the release files>]
+# usage: setup.sh [--gsi <GSI .img or .img.xz>] [--ssh-key <public key file>]
+#                 [<folder with the release files>]
+#   --ssh-key: turn on Nura's SSH server with that key (key logins only);
+#   without it, setup asks whether to turn SSH on
 #   the folder (default: this script's): gts3-dualboot-*.zip,
 #   OrangeFox-mainline-<model>-fastboot-boot.img, and nura-root.img.xz (+ its
 #   .sha256) for Nura; a GSI (*system*.img(.xz) or *gsi*.img(.xz)) for Android
@@ -19,11 +22,12 @@
 set -euo pipefail
 
 T=/tmp/gts3-setup
-DIR= GSI=
+DIR= GSI= SSHKEYFILE=
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--gsi) GSI=$2; shift 2 ;;
-	-h | --help) sed -n '2,20p' "$0"; exit 0 ;;
+	--ssh-key) SSHKEYFILE=$2; shift 2 ;;
+	-h | --help) sed -n '2,23p' "$0"; exit 0 ;;
 	*) DIR=$1; shift ;;
 	esac
 done
@@ -139,6 +143,22 @@ if [ -n "$ROOT" ]; then
 		done
 		[ -z "$p1" ] || put wifi_psk "$p1"
 		unset p1
+	fi
+	# SSH: log in from a PC (USB: 172.16.42.1, Wi-Fi: <tablet name>.local)
+	if [ -z "$SSHKEYFILE" ] && yes_no "Turn on SSH (log in to the tablet from a PC)?"; then
+		k=
+		for f in "$HOME/.ssh/id_ed25519.pub" "$HOME/.ssh/id_ecdsa.pub" "$HOME/.ssh/id_rsa.pub"; do
+			[ -f "$f" ] && { k=$f; break; }
+		done
+		SSHKEYFILE=$(ask "Your public key file (empty: log in with the password)" "$k")
+		[ -n "$SSHKEYFILE" ] || put ssh yes
+	fi
+	if [ -n "$SSHKEYFILE" ]; then
+		[ -f "$SSHKEYFILE" ] || die "no such key file: $SSHKEYFILE"
+		case "$SSHKEYFILE" in *.pub) ;; *) die "$SSHKEYFILE: give the public key (.pub), not the private one" ;; esac
+		put ssh yes
+		put ssh_key "$(grep -E '^(ssh-|ecdsa-|sk-)' "$SSHKEYFILE")"
+		[ -s "$A/ssh_key" ] || die "$SSHKEYFILE has no public key line"
 	fi
 fi
 

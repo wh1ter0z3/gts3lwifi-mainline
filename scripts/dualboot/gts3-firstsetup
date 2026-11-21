@@ -20,11 +20,15 @@
 #   country    two-letter code: the Wi-Fi regulatory domain (5 GHz channels)
 #   wifi_ssid, wifi_psk   a Wi-Fi network to join at first boot (no psk:
 #              an open network)
+#   ssh        yes: start the SSH server at every boot (log in from a PC
+#              over USB, 172.16.42.1, or Wi-Fi, <hostname>.local)
+#   ssh_key    public key(s) for the account's authorized_keys, one per
+#              line; with a key, password logins over SSH are turned off
 # <utc seconds>: the PC's time, to set the clock both systems share
 # (gts3-clock: the offset from the RTC, kept on the boot partition).
 set -eu
 
-[ $# -ge 3 ] || { sed -n '2,24p' "$0" >&2; exit 1; }
+[ $# -ge 3 ] || { sed -n '2,28p' "$0" >&2; exit 1; }
 R=$1 BOOTMNT=$2 A=$3 UTC=${4:-}
 [ -f "$R/etc/passwd" ] || { echo "gts3-firstsetup: no Nura root at $R" >&2; exit 1; }
 [ -d "$BOOTMNT" ] || { echo "gts3-firstsetup: no boot partition at $BOOTMNT" >&2; exit 1; }
@@ -40,6 +44,7 @@ OLD=user
 NEW=$(ans username) FULL=$(ans fullname) PASS=$(ans password) HOST=$(ans hostname)
 TZ_=$(ans timezone) LOC=$(ans locale) KBD=$(ans keyboard) CC=$(ans country)
 SSID=$(ans wifi_ssid) PSK=$(ans wifi_psk)
+SSH=$(ans ssh) SSHKEY=$(ans ssh_key)
 
 # Check everything first: nothing is changed if one answer is wrong
 if [ -n "$NEW" ]; then
@@ -61,6 +66,15 @@ fi
 [ -z "$PSK" ] || [ -n "$SSID" ] || die "a Wi-Fi password without a network name"
 [ -z "$PSK" ] || { oneline "$PSK" && [ ${#PSK} -ge 8 ] && [ ${#PSK} -le 63 ]; } || die "Wi-Fi password: 8 to 63 characters"
 [ -z "$UTC" ] || printf '%s' "$UTC" | grep -Eq '^[0-9]{10}$' || die "time '$UTC': seconds since 1970"
+case "$SSH" in "" | yes | no) ;; *) die "ssh '$SSH': yes or no" ;; esac
+[ -z "$SSHKEY" ] || [ "$SSH" = yes ] || die "an SSH key without ssh=yes"
+if [ -n "$SSHKEY" ]; then
+	printf '%s\n' "$SSHKEY" | while IFS= read -r k; do
+		[ -z "$k" ] && continue
+		printf '%s' "$k" | grep -Eq '^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521)|sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com) [A-Za-z0-9+/]+=* ?[^[:cntrl:]]*$' ||
+			die "ssh_key: not an OpenSSH public key line: $(printf '%s' "$k" | cut -c1-30)..."
+	done || exit 1
+fi
 
 # The account tools run in Nura's root (shadow's usermod, chpasswd)
 for d in dev proc sys; do
@@ -122,6 +136,26 @@ if [ -n "$SSID" ]; then
 	chmod 600 "$f"
 	chown 0:0 "$f"
 	say "Wi-Fi: $SSID"
+fi
+if [ "$SSH" = yes ]; then
+	W=$R/etc/systemd/system/multi-user.target.wants
+	mkdir -p "$W"
+	ln -sfn /usr/lib/systemd/system/sshd.service "$W/sshd.service"
+	if [ -n "$SSHKEY" ]; then
+		H=$(awk -F: -v u="$U" '$1 == u { print $6 }' "$R/etc/passwd")
+		[ -n "$H" ] && [ -d "$R$H" ] || die "no home for $U"
+		mkdir -p "$R$H/.ssh"
+		printf '%s\n' "$SSHKEY" > "$R$H/.ssh/authorized_keys"
+		chmod 700 "$R$H/.ssh"
+		chmod 600 "$R$H/.ssh/authorized_keys"
+		ch chown -R "$U:" "$H/.ssh" || die "owner of $H/.ssh"
+		mkdir -p "$R/etc/ssh/sshd_config.d"
+		printf '# gts3-firstsetup: key logins only\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n' \
+			> "$R/etc/ssh/sshd_config.d/50-gts3-setup.conf"
+		say "SSH: on, key login only ($(printf '%s\n' "$SSHKEY" | grep -c .) key(s))"
+	else
+		say "SSH: on, password login"
+	fi
 fi
 if [ -n "$UTC" ]; then
 	rtc=$(cat /sys/class/rtc/rtc0/since_epoch) || die "no RTC to set the clock from"

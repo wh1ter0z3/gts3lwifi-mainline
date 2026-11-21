@@ -9,7 +9,9 @@ The tablet does the work: this script starts our OrangeFox on it from RAM
 (nothing is flashed for that), hands it the release's installer zip and
 streams Nura's root and the GSI to it over USB.
 
-usage (PowerShell):  .\setup.ps1 [-Gsi <GSI .img or .img.xz>] [<folder>]
+usage (PowerShell):  .\setup.ps1 [-Gsi <GSI .img or .img.xz>] [-SshKey <public key file>] [<folder>]
+  -SshKey: turn on Nura's SSH server with that key (key logins only);
+  without it, setup asks whether to turn SSH on
   the folder (default: this script's): gts3-dualboot-*.zip,
   OrangeFox-mainline-<model>-fastboot-boot.img, and nura-root.img.xz (+ its
   .sha256) for Nura; a GSI (*system*.img(.xz) or *gsi*.img(.xz)) for Android
@@ -19,7 +21,7 @@ fastboot), or already in our OrangeFox.
 ERASES the userdata partition (internal storage). The microSD card, the
 tablet's firmware partitions and its recovery partition are not touched.
 #>
-param([string]$Folder = $PSScriptRoot, [string]$Gsi = "")
+param([string]$Folder = $PSScriptRoot, [string]$Gsi = "", [string]$SshKey = "")
 $ErrorActionPreference = "Stop"
 $T = "/tmp/gts3-setup"
 
@@ -178,6 +180,24 @@ if ($root) {
 		}
 		if ($p1) { Put "wifi_psk" $p1 }
 		$p1 = $null
+	}
+	# SSH: log in from a PC (USB: 172.16.42.1, Wi-Fi: <tablet name>.local)
+	if (-not $SshKey -and ((Ask "Turn on SSH (log in to the tablet from a PC)? [y/N]" "") -match "^[yY]")) {
+		$k = ""
+		foreach ($f in @("id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub")) {
+			$c = Join-Path (Join-Path $HOME ".ssh") $f
+			if (Test-Path $c) { $k = $c; break }
+		}
+		$SshKey = Ask "Your public key file (empty: log in with the password)" $k
+		if (-not $SshKey) { Put "ssh" "yes" }
+	}
+	if ($SshKey) {
+		if (-not (Test-Path $SshKey)) { Die "no such key file: $SshKey" }
+		if ($SshKey -notmatch "\.pub$") { Die "${SshKey}: give the public key (.pub), not the private one" }
+		$keys = (Get-Content $SshKey | Where-Object { $_ -match "^(ssh-|ecdsa-|sk-)" }) -join "`n"
+		if (-not $keys) { Die "$SshKey has no public key line" }
+		Put "ssh" "yes"
+		Put "ssh_key" $keys
 	}
 }
 
