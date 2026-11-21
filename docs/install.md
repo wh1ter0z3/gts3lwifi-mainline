@@ -139,13 +139,20 @@ The script asks:
      suggests your PC's own; press Enter to take a suggestion;
    - a **Wi-Fi network** and its password, so Nura is online at its first
      start (press Enter to skip).
+   - whether to make an **encrypted folder**, `~/Private`, and its
+     passphrase: the tablet's storage chip encrypts its files in hardware;
+     after logging in, `fscrypt unlock ~/Private` opens it
+     ([encryption](encryption.md));
+   - whether to turn on **SSH**, to log in to the tablet from your PC (over
+     the USB cable at `172.16.42.1`, or over Wi-Fi). It offers your PC's
+     SSH key if you have one; with a key, the tablet only accepts that key.
 3. Then it finds the tablet, starts the recovery on it (nothing is installed
    yet), and asks you to type **yes**. That is the point of no return: the
    tablet's internal storage is erased after it.
 
 Now leave it alone, with the cable connected. The script shows each step:
-the layout, sending Nura (about 1.4 GB) and the GSI over USB, then your
-settings. Every file is checked on the tablet after it arrives; a damaged
+the layout, sending Nura (about 1.4 GB, which currently takes around 15-20
+minutes over USB) and the GSI, then your settings. Every file is checked on the tablet after it arrives; a damaged
 one is refused, and the script tells you to run it again. At the end it
 offers to restart the tablet.
 

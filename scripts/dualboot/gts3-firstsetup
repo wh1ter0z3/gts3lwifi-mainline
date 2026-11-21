@@ -24,11 +24,15 @@
 #              over USB, 172.16.42.1, or Wi-Fi, <hostname>.local)
 #   ssh_key    public key(s) for the account's authorized_keys, one per
 #              line; with a key, password logins over SSH are turned off
+#   private    a passphrase: makes ~/Private, a folder encrypted with fscrypt
+#              (on the eMMC's inline crypto engine) and locked with it;
+#              unlock it after logging in with `fscrypt unlock ~/Private`.
+#              Needs fscrypt in Nura's image; skipped with a note otherwise
 # <utc seconds>: the PC's time, to set the clock both systems share
 # (gts3-clock: the offset from the RTC, kept on the boot partition).
 set -eu
 
-[ $# -ge 3 ] || { sed -n '2,28p' "$0" >&2; exit 1; }
+[ $# -ge 3 ] || { sed -n '2,32p' "$0" >&2; exit 1; }
 R=$1 BOOTMNT=$2 A=$3 UTC=${4:-}
 [ -f "$R/etc/passwd" ] || { echo "gts3-firstsetup: no Nura root at $R" >&2; exit 1; }
 [ -d "$BOOTMNT" ] || { echo "gts3-firstsetup: no boot partition at $BOOTMNT" >&2; exit 1; }
@@ -44,7 +48,7 @@ OLD=user
 NEW=$(ans username) FULL=$(ans fullname) PASS=$(ans password) HOST=$(ans hostname)
 TZ_=$(ans timezone) LOC=$(ans locale) KBD=$(ans keyboard) CC=$(ans country)
 SSID=$(ans wifi_ssid) PSK=$(ans wifi_psk)
-SSH=$(ans ssh) SSHKEY=$(ans ssh_key)
+SSH=$(ans ssh) SSHKEY=$(ans ssh_key) PRIV=$(ans private)
 
 # Check everything first: nothing is changed if one answer is wrong
 if [ -n "$NEW" ]; then
@@ -67,6 +71,7 @@ fi
 [ -z "$PSK" ] || { oneline "$PSK" && [ ${#PSK} -ge 8 ] && [ ${#PSK} -le 63 ]; } || die "Wi-Fi password: 8 to 63 characters"
 [ -z "$UTC" ] || printf '%s' "$UTC" | grep -Eq '^[0-9]{10}$' || die "time '$UTC': seconds since 1970"
 case "$SSH" in "" | yes | no) ;; *) die "ssh '$SSH': yes or no" ;; esac
+[ -z "$PRIV" ] || { oneline "$PRIV" && [ ${#PRIV} -ge 8 ]; } || die "Private folder passphrase: one line, 8 characters or more"
 [ -z "$SSHKEY" ] || [ "$SSH" = yes ] || die "an SSH key without ssh=yes"
 if [ -n "$SSHKEY" ]; then
 	printf '%s\n' "$SSHKEY" | while IFS= read -r k; do
@@ -155,6 +160,30 @@ if [ "$SSH" = yes ]; then
 		say "SSH: on, key login only ($(printf '%s\n' "$SSHKEY" | grep -c .) key(s))"
 	else
 		say "SSH: on, password login"
+	fi
+fi
+if [ -n "$PRIV" ]; then
+	H=$(awk -F: -v u="$U" '$1 == u { print $6 }' "$R/etc/passwd")
+	if [ ! -x "$R/usr/bin/fscrypt" ]; then
+		say "Private folder: skipped, this Nura image has no fscrypt (apk add fscrypt, then see docs/encryption.md)"
+	elif [ -z "$H" ] || [ ! -d "$R$H" ]; then
+		die "no home for $U"
+	else
+		# root-only fscrypt metadata; the folder's own policy and protector
+		# go to the user below, so that they can unlock and lock it
+		[ -f "$R/etc/fscrypt.conf" ] || printf 'n\n' | ch fscrypt setup --quiet > /dev/null 2>&1 ||
+			die "fscrypt setup"
+		mkdir "$R$H/Private"
+		ch chown "$U:" "$H/Private"
+		printf '%s\n' "$PRIV" | ch fscrypt encrypt "$H/Private" --user="$U" --source=custom_passphrase \
+			--name=Private --quiet > /dev/null 2>&1 || die "fscrypt encrypt of $H/Private"
+		st=$(ch fscrypt status "$H/Private")
+		pol=$(printf '%s\n' "$st" | sed -n 's/^Policy: *//p')
+		prot=$(printf '%s\n' "$st" | awk '/^[0-9a-f]{16} / { print $1; exit }')
+		[ -n "$pol" ] && [ -n "$prot" ] || die "fscrypt status of $H/Private"
+		ch chown "$U:" "/.fscrypt/policies/$pol" "/.fscrypt/protectors/$prot" || die "owner of the fscrypt metadata"
+		ch fscrypt lock "$H/Private" --user="$U" > /dev/null 2>&1 || :
+		say "Private folder: $H/Private, encrypted (unlock: fscrypt unlock ~/Private)"
 	fi
 fi
 if [ -n "$UTC" ]; then

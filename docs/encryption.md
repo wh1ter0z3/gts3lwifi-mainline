@@ -7,8 +7,13 @@ full disk encryption. Since kernel r16 our mainline kernel drives it too,
 through the standard blk-crypto interface, so fscrypt (file-based
 encryption on ext4 and f2fs) uses it with the `inlinecrypt` mount option.
 
-**Nothing is encrypted by default yet.** Neither Nura's install nor our
-Android sets up encryption; this is the kernel side.
+**Nura (2026-11-22):** the dual boot installer prepares every install for
+it (ext4's `encrypt` feature on Nura's root, mounted with `inlinecrypt`),
+Nura's partitions pass the engine through (device package r22), and the PC
+setup can make an **encrypted folder, `~/Private`**, with its own passphrase
+(below). Encrypting the whole home, unlocked with the login password, needs
+fscrypt's PAM module, which Alpine doesn't ship; not done yet. Our Android
+doesn't set up encryption.
 
 ## What works
 
@@ -49,6 +54,40 @@ How the key format was found: with fscrypt's documented key derivation
 blocks of a file ICE had written, only big endian key words with a little
 endian DUN decrypt to the plaintext.
 
+## In Nura
+
+**The layout.** Nura's partitions sit inside the userdata partition. The
+initramfs hook used to attach userdata as a loop device, which hides the
+engine (fscrypt then falls back to the CPU). Since device package r22 it
+maps each partition with device-mapper (`/dev/mapper/gts3-gts3_boot`,
+`gts3-android_data`, `gts3-nura`), which passes inline encryption through:
+every one of them advertises AES-256-XTS in
+`/sys/block/dm-*/queue/crypto/modes`. A read-only loop device only lets the
+kernel read the layout's GPT; if device-mapper fails, the hook falls back to
+the loop device.
+
+**The installer** turns on ext4's `encrypt` feature on Nura's root and adds
+`inlinecrypt` to its mount options (`pmos_rootfsopts=` on the `nura` boot
+entry). Neither changes anything until something is encrypted. On an
+existing install the same by hand:
+`sudo tune2fs -O encrypt /dev/mapper/gts3-nura`, and `,inlinecrypt` after
+`pmos_rootfsopts=defaults` in `/boot/extlinux/extlinux.conf`.
+
+**`~/Private`.** `setup.sh` / `setup.ps1` ask "Make an encrypted folder,
+~/Private?" and its passphrase; the install creates the folder with
+Google's `fscrypt` (in every image since device package r23) and locks it.
+The passphrase stays in the tablet's RAM during the install. After logging
+in:
+
+    fscrypt unlock ~/Private     # asks for the passphrase
+    fscrypt lock ~/Private       # or restart the tablet
+
+Tested on an SM-T820 (2026-11-22): fscrypt reports "AES-256-XTS using
+blk-crypto (native)" for files in Nura's root; reading the blocks under the
+test files straight from `/dev/mapper/gts3-nura` showed only ciphertext;
+locked, the names are scrambled and the files can't be opened; it survives a
+restart locked, and unlocks again.
+
 ## Using it
 
 On ext4 with the `encrypt` feature (`tune2fs -O encrypt`; `stable_inodes`
@@ -58,13 +97,9 @@ files are encrypted by the CPU (the ARMv8 crypto extensions), in the same
 format.
 
 What a full setup still needs:
-- **The dual boot layout:** its partitions (Nura's root, Android's data)
-  sit inside userdata behind loop devices, and a loop device doesn't pass
-  inline encryption through: fscrypt would fall back to the CPU there. ICE
-  needs them as device-mapper (dm-linear) partitions instead. A filesystem
-  directly on an eMMC partition uses ICE as it is.
-- **Nura:** an encrypted home or root, unlocked at login or in the
-  initramfs.
+- **Nura:** the whole home encrypted and unlocked with the login password
+  (fscrypt's PAM module, `pam_fscrypt.so`, which Alpine's fscrypt package
+  doesn't include).
 - **Android:** file-based encryption with `inlinecrypt` in the vendor's
   fstab. A software Keymaster works; hardware-backed keys need the parked
   TrustZone work ([trustzone](trustzone.md)).

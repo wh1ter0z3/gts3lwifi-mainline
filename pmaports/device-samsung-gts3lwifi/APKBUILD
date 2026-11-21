@@ -3,7 +3,7 @@ maintainer="psigod <psigod@example.com>"
 pkgname=device-samsung-gts3lwifi
 pkgdesc="Samsung Galaxy Tab S3 (SM-T820, SM-T825)"
 pkgver=1
-pkgrel=22
+pkgrel=23
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -11,6 +11,7 @@ options="!check !archcheck"
 depends="
 	$pkgname-gnss
 	bluez-btmgmt
+	fscrypt
 	iio-sensor-proxy
 	linux-firmware-ath10k
 	linux-firmware-qca

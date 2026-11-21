@@ -181,6 +181,17 @@ if ($root) {
 		if ($p1) { Put "wifi_psk" $p1 }
 		$p1 = $null
 	}
+	# an encrypted folder (fscrypt on the eMMC's inline crypto engine)
+	if ((Ask "Make an encrypted folder, ~/Private (unlocked with its own passphrase)? [y/N]" "") -match "^[yY]") {
+		while ($true) {
+			$p1 = AskSecret "Passphrase for ~/Private (8 characters or more)"
+			$p2 = AskSecret "Passphrase again"
+			if ($p1.Length -ge 8 -and $p1 -eq $p2) { break }
+			Say "  shorter than 8, or not the same; again"
+		}
+		Put "private" $p1
+		$p1 = $null; $p2 = $null
+	}
 	# SSH: log in from a PC (USB: 172.16.42.1, Wi-Fi: <tablet name>.local)
 	if (-not $SshKey -and ((Ask "Turn on SSH (log in to the tablet from a PC)? [y/N]" "") -match "^[yY]")) {
 		$k = ""

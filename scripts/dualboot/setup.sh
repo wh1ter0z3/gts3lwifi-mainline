@@ -144,6 +144,17 @@ if [ -n "$ROOT" ]; then
 		[ -z "$p1" ] || put wifi_psk "$p1"
 		unset p1
 	fi
+	# an encrypted folder (fscrypt on the eMMC's inline crypto engine)
+	if yes_no "Make an encrypted folder, ~/Private (unlocked with its own passphrase)?"; then
+		while :; do
+			read -r -s -p "Passphrase for ~/Private (8 characters or more): " p1; echo
+			read -r -s -p "Passphrase again: " p2; echo
+			[ ${#p1} -ge 8 ] && [ "$p1" = "$p2" ] && break
+			say "  shorter than 8, or not the same; again"
+		done
+		put private "$p1"
+		unset p1 p2
+	fi
 	# SSH: log in from a PC (USB: 172.16.42.1, Wi-Fi: <tablet name>.local)
 	if [ -z "$SSHKEYFILE" ] && yes_no "Turn on SSH (log in to the tablet from a PC)?"; then
 		k=
