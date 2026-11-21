@@ -1,6 +1,11 @@
 [Unit]
-Description=Store the clock offset once NTP has set the time (dual boot)
+Description=Store the clock offset whenever NTP has set the time (dual boot)
 RequiresMountsFor=/boot
+# the path unit fires on deletion too (timesyncd stopping): no sync then
+ConditionPathExists=/run/systemd/timesync/synchronized
+# a quick run that writes only when the offset moved: no reason to refuse
+# one (the path unit's own trigger limit still stops an event storm)
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot

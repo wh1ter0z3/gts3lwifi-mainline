@@ -200,7 +200,11 @@ boot partition:
   (device package r15):
   - `gts3-clock.service` sets the time from it early at boot and stores it at
     shutdown;
-  - `gts3-clock-sync.path` stores it once NTP has set the time.
+  - `gts3-clock-sync.path` stores it whenever NTP has set the time: it
+    watches `/run/systemd/timesync/synchronized`, which timesyncd touches at
+    every sync (r19; up to r18 it used `PathExists=`, which restarted the
+    service in a loop until `start-limit-hit` and left systemd "degraded").
+    The file is written only when the offset moved by more than 2 s.
   It only stores a time that was loaded or synced at this boot, never
   systemd's fallback.
 - **Android:** gsi-init (`gsi.parts=1`) sets the time from it before

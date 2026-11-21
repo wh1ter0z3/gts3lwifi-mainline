@@ -1,9 +1,14 @@
 [Unit]
-Description=Store the clock offset once NTP has set the time (dual boot)
+Description=Store the clock offset whenever NTP has set the time (dual boot)
 ConditionPathExists=/boot/extlinux/extlinux.conf
 
 [Path]
-PathExists=/run/systemd/timesync/synchronized
+# timesyncd touches this file at every successful sync. Not PathExists=:
+# that starts the oneshot service again each time it finishes, for as long
+# as the file is there (start-limit-hit right after the first sync).
+# paths.target starts this before the network is up, so the first sync
+# isn't missed.
+PathChanged=/run/systemd/timesync/synchronized
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=paths.target
