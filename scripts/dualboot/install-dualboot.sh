@@ -1,15 +1,17 @@
 #!/bin/sh
-# Installs Nura (postmarketOS) and, optionally, our Android (any GSI on our
-# vendor) side by side on a Galaxy Tab S3 that runs lk2nd, from a Linux PC:
+# Installs Nura (postmarketOS), our Android (any GSI on our vendor), or both
+# side by side on a Galaxy Tab S3 that runs lk2nd, from a Linux PC:
 # builds the userdata partition's image here with the dual boot layout
 # (docs/dual-boot.md), flashes it and lk2nd v2 over lk2nd's fastboot. The
 # tablet's own firmware stays on its partitions.
 #
-# usage: install-dualboot.sh --zip <release zip> --root <nura-root.img.xz> [options]
+# usage: install-dualboot.sh --zip <release zip> [--root <nura-root.img.xz>] [--gsi <GSI>] [options]
 #    or: install-dualboot.sh --nura <Nura userdata image> [options]
 #   --zip FILE       the dual boot release's zip (the OrangeFox installer):
 #                    Nura's boot files, our Android files, the recovery, lk2nd
-#   --root FILE      with --zip: the release's nura-root.img.xz
+#   --root FILE      with --zip: the release's nura-root.img.xz (Nura); with
+#                    --zip, --root and --gsi pick the setup: Nura only, Android
+#                    only, or both side by side
 #   --nura FILE      instead of --zip: Nura's userdata image (.simg/.img, may
 #                    be .zst/.xz), e.g. pmos-...-userdata.simg.zst
 #   --gsi FILE       Android: the GSI (system.img, .img.xz/.gz/.zst, or a zip
@@ -59,12 +61,16 @@ while [ $# -gt 0 ]; do
 done
 if [ -n "$ZIPIN" ]; then
 	[ -f "$ZIPIN" ] || die "--zip: no such file '$ZIPIN'"
-	[ -f "$ROOTIN" ] || die "--zip needs --root nura-root.img.xz"
+	[ -z "$ROOTIN" ] || [ -f "$ROOTIN" ] || die "--root: no such file '$ROOTIN'"
+	[ -n "$ROOTIN$GSI" ] || die "--zip needs --root nura-root.img.xz (Nura), --gsi (Android), or both"
 	[ -z "$NURA$ANDROID$PAYLOAD" ] || die "--zip brings Nura and our Android: no --nura, --android or --payload"
 else
 	[ -f "$NURA" ] || die "--nura: no such file '$NURA'"
 fi
 [ -z "$GSI" ] || [ -n "$ANDROID$ZIPIN" ] || die "--gsi needs --android (our vendor and boot files)"
+# Nura: always without --zip (--nura); with --zip if --root is given
+HASNURA=yes
+[ -z "$ZIPIN" ] || [ -n "$ROOTIN" ] || HASNURA=
 if [ -n "$ANDROID" ]; then
 	for f in Image.gz initramfs cmdline; do
 		[ -s "$ANDROID/$f" ] || die "--android: no $f in $ANDROID"
@@ -123,6 +129,8 @@ unpack() {
 }
 # start and size (sectors) of partition $2 of disk image $1
 part() { sfdisk -d "$1" | sed -n "s/^[^ ]*[^0-9]$2 : *start= *\([0-9]*\), *size= *\([0-9]*\),.*/\1 \2/p"; }
+# the number of the partition named $2 on disk image $1
+pnum() { sfdisk -d "$1" | sed -n "s/^[^ ]*[^0-9]\([0-9]*\) : .*name=\"$2\".*/\1/p"; }
 # a partition of disk image $1 into file $3 / from file $3 (sparse)
 part_out() { set -- "$1" "$3" $(part "$1" "$2"); dd if="$1" of="$2" bs=512 skip="$3" count="$4" conv=sparse status=none; }
 part_in() { set -- "$1" "$3" $(part "$1" "$2"); dd if="$2" of="$1" bs=512 seek="$3" conv=sparse,notrunc status=none; }
@@ -136,17 +144,19 @@ if [ -n "$ZIPIN" ]; then
 	unzip -q -o "$ZIPIN" -x 'META-INF/*' 'tools/*' -d "$W/zip" || die "can't unpack $ZIPIN"
 	(cd "$W/zip" && grep -v ' tools/' SHA256SUMS | sha256sum -c --quiet) || die "the zip's files are damaged, download it again"
 	. "$W/zip/nura.env"
-	tar -C "$W/bootfs" -xf "$W/zip/nura-boot.tar" || die "Nura's boot files"
+	[ -z "$HASNURA" ] || tar -C "$W/bootfs" -xf "$W/zip/nura-boot.tar" || die "Nura's boot files"
 	[ -d "$W/zip/android" ] && ANDROID=$W/zip/android
 	[ -n "$GSI" ] && [ -z "$ANDROID" ] && die "this zip has no Android files"
 	[ -n "$LK2ND" ] || LK2ND=$W/zip/lk2nd-$(case $MODEL in T820) echo gts3lwifi ;; T825) echo gts3llte ;; esac).img
 	[ -s "$LK2ND" ] || die "the zip has no lk2nd for SM-$MODEL"
-	if [ -f "$ROOTIN.sha256" ]; then
+	if [ -n "$HASNURA" ] && [ -f "$ROOTIN.sha256" ]; then
 		say "checking $(basename "$ROOTIN")"
 		[ "$(sha256sum "$ROOTIN" | cut -d' ' -f1)" = "$(cut -d' ' -f1 "$ROOTIN.sha256")" ] || die "$(basename "$ROOTIN") is damaged, download it again"
 	fi
-	say "Nura: unpacking $(basename "$ROOTIN")"
-	xz -dc "$ROOTIN" | dd of="$N/root.img" bs=1M conv=sparse status=none || die "unpacking $ROOTIN"
+	if [ -n "$HASNURA" ]; then
+		say "Nura: unpacking $(basename "$ROOTIN")"
+		xz -dc "$ROOTIN" | dd of="$N/root.img" bs=1M conv=sparse status=none || die "unpacking $ROOTIN"
+	fi
 	B=$W/bootfs
 fi
 # our Android's device tree and the recovery's for this model
@@ -268,15 +278,19 @@ fi
 
 mkdir -p "$B/extlinux"
 {
-	echo "# Galaxy Tab S3 dual boot (docs/dual-boot.md). lk2nd boots the default"
-	echo "# label; switch with gts3-boot, or Volume Down at power-on for lk2nd's menu."
-	echo "default nura"
-	echo
-	echo "label nura"
-	echo "	linux /vmlinuz"
-	echo "	initrd /initramfs"
-	echo "	fdt /$DTB"
-	echo "	append $NURA_CMDLINE"
+	echo "# Galaxy Tab S3 (docs/dual-boot.md). lk2nd boots the default label;"
+	echo "# switch with gts3-boot, or Volume Down at power-on for lk2nd's menu."
+	if [ -n "$HASNURA" ]; then
+		echo "default nura"
+		echo
+		echo "label nura"
+		echo "	linux /vmlinuz"
+		echo "	initrd /initramfs"
+		echo "	fdt /$DTB"
+		echo "	append $NURA_CMDLINE"
+	else
+		echo "default android"
+	fi
 	if [ -n "$GSI" ]; then
 		echo
 		echo "label android"
@@ -307,11 +321,20 @@ if [ -n "$GSI" ]; then
 	esac
 fi
 
-say "the layout"
+if [ -n "$HASNURA" ] && [ -n "$GSI" ]; then SETUP="Nura and Android"
+elif [ -n "$HASNURA" ]; then SETUP="Nura only"
+else SETUP="Android only"; fi
+say "the layout: $SETUP"
 IMG=${IMAGE:-$W/userdata.img}
 rm -f "$IMG"
 truncate -s "$SIZE" "$IMG"
-if [ -n "$SHARED" ]; then
+# Nura only: no Android system or vendor, and android_data only for the
+# recovery's /data (it must not be userdata: that holds the layout).
+# Android only: no Nura, android_data to the end.
+NURAOPT=
+if [ -z "$GSI" ] && [ -n "$HASNURA" ]; then SYSTEM=0 VENDOR=0 DATA=256M; fi
+[ -n "$HASNURA" ] || NURAOPT=no
+if [ -n "$SHARED" ] && [ -n "$HASNURA" ]; then
 	# shared gets the rest; Nura what's left of the disk before it
 	nura_mib=$(( SIZE / MiB - 1 - 512 ))
 	for s in "$SYSTEM" "$VENDOR" "$DATA" "$SHARED"; do
@@ -319,7 +342,7 @@ if [ -n "$SHARED" ]; then
 	done
 	SHARED=yes BOOT=512M SYSTEM=$SYSTEM VENDOR=$VENDOR DATA=$DATA NURA=${nura_mib}M sh "$LAYOUT" "$IMG" yes > /dev/null
 else
-	SHARED=no BOOT=512M SYSTEM=$SYSTEM VENDOR=$VENDOR DATA=$DATA sh "$LAYOUT" "$IMG" yes > /dev/null
+	SHARED=no BOOT=512M SYSTEM=$SYSTEM VENDOR=$VENDOR DATA=$DATA NURA=${NURAOPT:-auto} sh "$LAYOUT" "$IMG" yes > /dev/null
 fi
 
 say "boot partition"
@@ -330,22 +353,24 @@ mke2fs -q -F -t ext2 -b 1024 -L pmOS_boot -U "$BOOT_UUID" -d "$B" "$W/bootpart.i
 part_in "$IMG" 1 "$W/bootpart.img"
 rm -f "$W/bootpart.img"
 
-say "Nura's root"
-set -- $(part "$IMG" 5)
-e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
-resize2fs "$N/root.img" $(($2 / 8))  > /dev/null 2>&1 || die "Nura's root doesn't fit"
-add_hook
-part_in "$IMG" 5 "$N/root.img"
+if [ -n "$HASNURA" ]; then
+	say "Nura's root"
+	set -- $(part "$IMG" "$(pnum "$IMG" nura)")
+	e2fsck -fy "$N/root.img" > /dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck of Nura's root failed"
+	resize2fs "$N/root.img" $(($2 / 8))  > /dev/null 2>&1 || die "Nura's root doesn't fit"
+	add_hook
+	part_in "$IMG" "$(pnum "$IMG" nura)" "$N/root.img"
+fi
 rm -f "$N/root.img" "$N/boot.img"
 
 if [ -n "$GSI" ]; then
 	say "Android: system, vendor"
-	set -- $(part "$IMG" 2)
+	set -- $(part "$IMG" "$(pnum "$IMG" android_system)")
 	[ "$(stat -c %s "$W/system.img")" -le $(($2 * 512)) ] || die "the system image is larger than android_system ($SYSTEM)"
-	part_in "$IMG" 2 "$W/system.img"
-	set -- $(part "$IMG" 3)
+	part_in "$IMG" "$(pnum "$IMG" android_system)" "$W/system.img"
+	set -- $(part "$IMG" "$(pnum "$IMG" android_vendor)")
 	[ "$(stat -c %s "$ANDROID/vendor.img")" -le $(($2 * 512)) ] || die "vendor.img is larger than android_vendor ($VENDOR)"
-	part_in "$IMG" 3 "$ANDROID/vendor.img"
+	part_in "$IMG" "$(pnum "$IMG" android_vendor)" "$ANDROID/vendor.img"
 	rm -f "$W/system.img"
 fi
 
@@ -368,4 +393,8 @@ if [ -n "$LK2ND" ]; then
 	fastboot flash lk2nd "$LK2ND"
 fi
 fastboot reboot
-echo "Done: the tablet boots Nura; gts3-boot switches."
+if [ -n "$HASNURA" ]; then
+	echo "Done ($SETUP): the tablet boots Nura."
+else
+	echo "Done ($SETUP): the tablet boots Android."
+fi

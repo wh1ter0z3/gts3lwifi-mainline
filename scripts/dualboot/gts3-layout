@@ -1,14 +1,18 @@
 #!/bin/sh
-# Make the dual boot layout on a disk: a GPT with
+# Make the layout on a disk: a GPT with
 #
-#   gts3_boot       ext2 "pmOS_boot": extlinux.conf for lk2nd, both kernels
-#   android_system  raw: the GSI's system image
-#   android_vendor  raw: our vendor image
-#   android_data    ext4 "android_data": Android's /data
-#   nura            ext4 "pmOS_root": Nura's root
+#   gts3_boot       ext2 "pmOS_boot": extlinux.conf for lk2nd, the kernels
+#   android_system  raw: the GSI's system image (SYSTEM=0: none)
+#   android_vendor  raw: our vendor image (VENDOR=0: none)
+#   android_data    ext4 "android_data": Android's /data, and the recovery's
+#   nura            ext4 "pmOS_root": Nura's root (NURA=no: none)
 #   shared          exFAT "Shared": files for both (the rest of the disk);
 #                   SHARED=no leaves it out (a microSD card is the shared
-#                   storage) and nura gets the rest
+#                   storage) and nura gets the rest (without nura, android_data)
+#
+# Nura only: SYSTEM=0 VENDOR=0 DATA=256M (android_data stays: the recovery's
+# /data must not be userdata, which holds the layout). Android only: NURA=no.
+# Everything finds these partitions by name, never by number.
 #
 # and the hybrid MBR entry lk2nd needs to find gts3_boot (it reads MBR only;
 # Linux keeps using the GPT). The disk is the userdata partition (the layout
@@ -17,7 +21,8 @@
 #
 # usage: gts3-layout <disk> [yes]       (yes: don't ask)
 #   sizes (sfdisk units: M, G): BOOT=512M SYSTEM=8G VENDOR=1G DATA=6G NURA=7G
-#   SHARED=no: no shared partition, nura to the end (NURA is ignored)
+#   SYSTEM=0, VENDOR=0: no such partition; NURA=no: no Nura partition
+#   SHARED=no: no shared partition, the last one to the end (its size ignored)
 # Needs sfdisk, mke2fs; mkfs.exfat for the shared partition (else left empty).
 set -eu
 
@@ -26,6 +31,7 @@ DISK=$1
 BOOT=${BOOT:-512M} SYSTEM=${SYSTEM:-8G} VENDOR=${VENDOR:-1G} DATA=${DATA:-6G} NURA=${NURA:-7G}
 SHARED=${SHARED:-yes}
 [ -e "$DISK" ] || { echo "no $DISK" >&2; exit 1; }
+[ "$NURA" != no ] || [ "$SYSTEM" != 0 ] || { echo "neither Nura nor Android" >&2; exit 1; }
 
 if [ "${2:-}" != yes ]; then
 	echo "This ERASES everything on $DISK:"
@@ -41,25 +47,38 @@ ESP=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 LINUX=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 MSDATA=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
 
-if [ "$SHARED" = no ]; then
-	LAST=5 NURAPART="type=$LINUX, name=nura" SHAREDPART=
-else
-	LAST=6 NURAPART="size=$NURA, type=$LINUX, name=nura" SHAREDPART="type=$MSDATA, name=shared"
-fi
-sfdisk -q --wipe always --wipe-partitions always "$DISK" <<EOF
-label: gpt
-size=$BOOT, type=$ESP, name=gts3_boot
-size=$SYSTEM, type=$LINUX, name=android_system
-size=$VENDOR, type=$LINUX, name=android_vendor
-size=$DATA, type=$LINUX, name=android_data
-$NURAPART
-$SHAREDPART
-EOF
+# The partitions in order; the last one gets the rest of the disk
+{
+	echo "label: gpt"
+	echo "size=$BOOT, type=$ESP, name=gts3_boot"
+	[ "$SYSTEM" = 0 ] || echo "size=$SYSTEM, type=$LINUX, name=android_system"
+	[ "$VENDOR" = 0 ] || echo "size=$VENDOR, type=$LINUX, name=android_vendor"
+	if [ "$NURA" = no ] && [ "$SHARED" = no ]; then
+		echo "type=$LINUX, name=android_data"
+	else
+		echo "size=$DATA, type=$LINUX, name=android_data"
+	fi
+	if [ "$NURA" != no ]; then
+		if [ "$SHARED" = no ]; then
+			echo "type=$LINUX, name=nura"
+		else
+			echo "size=$NURA, type=$LINUX, name=nura"
+		fi
+	fi
+	[ "$SHARED" = no ] || echo "type=$MSDATA, name=shared"
+} > /tmp/gts3-table.$$
+sfdisk -q --wipe always --wipe-partitions always "$DISK" < /tmp/gts3-table.$$
+rm -f /tmp/gts3-table.$$
 
 # start and size (512-byte sectors) of partition $1, from sfdisk's dump
 part() {
 	sfdisk -d "$DISK" | sed -n "s/^[^ ]*[^0-9]$1 : *start= *\([0-9]*\), *size= *\([0-9]*\),.*/\1 \2/p"
 }
+# the number of the partition named $1 (empty: none)
+num() {
+	sfdisk -d "$DISK" | sed -n "s/^[^ ]*[^0-9]\([0-9]*\) : .*name=\"$1\".*/\1/p"
+}
+LAST=$(sfdisk -d "$DISK" | grep -c '^[^ ]*[0-9] : ')
 
 # The last partition up to the last sector: sfdisk ends it on a MiB boundary, and with
 # any free space at the end of a nested GPT ("subpartitions") the pmOS
@@ -97,15 +116,16 @@ fs() {	# <partition number> <type> <label> [mke2fs options]
 }
 # 1 KiB blocks for lk2nd, as pmbootstrap makes pmOS_boot
 fs 1 ext2 pmOS_boot -b 1024
-fs 4 ext4 android_data
-fs 5 ext4 pmOS_root
+fs "$(num android_data)" ext4 android_data
+[ "$NURA" = no ] || fs "$(num nura)" ext4 pmOS_root
 
 # exFAT has no offset option: through the partition's own device
 if [ "$SHARED" = no ]; then
 	:
 elif command -v mkfs.exfat > /dev/null 2>&1; then
 	if [ -b "$DISK" ]; then
-		case $DISK in *[0-9]) pdev=${DISK}p6 ;; *) pdev=${DISK}6 ;; esac
+		n=$(num shared)
+		case $DISK in *[0-9]) pdev=${DISK}p$n ;; *) pdev=${DISK}$n ;; esac
 		partprobe "$DISK" 2>/dev/null || blockdev --rereadpt "$DISK" 2>/dev/null || true
 		[ -b "$pdev" ] && mkfs.exfat -L Shared "$pdev" > /dev/null || echo "shared: $pdev not formatted"
 	else

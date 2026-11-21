@@ -38,13 +38,14 @@ done
 [ -e $G/android_data ] || { echo "no android_data: /data left as it is"; exit 0; }
 # /data: android_data, without the crypto footer reserve userdata had
 sed -i 's|^/data[[:space:]].*|/data           ext4    /dev/block/gts3/android_data     flags=display="Data (Android)"|' $FLAGS
+# only the partitions this install has (Nura only, Android only, or both)
 {
 	echo
-	echo "# Dual boot layout in userdata (added at start by gts3-dualboot-fox)"
-	echo '/nura           ext4    /dev/block/gts3/nura            flags=display="Nura (postmarketOS)";backup=1'
-	echo '/gts3boot       emmc    /dev/block/gts3/gts3_boot       flags=display="Dual boot: menu, kernels";backup=1'
-	echo '/android_system emmc    /dev/block/gts3/android_system  flags=display="Android system image";backup=1;flashimg=1'
-	echo '/android_vendor emmc    /dev/block/gts3/android_vendor  flags=display="Android vendor image";backup=1;flashimg=1'
+	echo "# Layout in userdata (added at start by gts3-dualboot-fox)"
+	[ -e $G/nura ] && echo '/nura           ext4    /dev/block/gts3/nura            flags=display="Nura (postmarketOS)";backup=1'
+	echo '/gts3boot       emmc    /dev/block/gts3/gts3_boot       flags=display="Boot menu, kernels";backup=1'
+	[ -e $G/android_system ] && echo '/android_system emmc    /dev/block/gts3/android_system  flags=display="Android system image";backup=1;flashimg=1'
+	[ -e $G/android_vendor ] && echo '/android_vendor emmc    /dev/block/gts3/android_vendor  flags=display="Android vendor image";backup=1;flashimg=1'
 } >> $FLAGS
 setprop ro.gts3.dualboot 1
 echo "twrp.flags: /data is android_data"
