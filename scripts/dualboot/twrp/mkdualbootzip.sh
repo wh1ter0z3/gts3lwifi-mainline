@@ -3,8 +3,10 @@
 # the payload of `install-dualboot.sh --payload` except Nura's root (users
 # put nura-root.img.xz next to the zip), lk2nd v2 for each model there is one
 # of, a static aarch64 busybox (Alpine's busybox-static) and, for GSI zips
-# over 4 GB, gsi-unzip (gsi branch, gsi/unzip64), and gts3-firstsetup. pc/ holds the PC
-# installer, which takes the same zip (install-dualboot.sh --zip).
+# over 4 GB, gsi-unzip (gsi branch, gsi/unzip64), and gts3-firstsetup. pc/
+# holds the PC setup scripts (setup.sh, setup.ps1: everything over adb, Linux
+# and Windows) and the Linux installer that builds the image on the PC
+# (install-dualboot.sh --zip).
 # usage: mkdualbootzip.sh <payload dir> <lk2nd dir> <busybox> <gsi-unzip|-> <out.zip>
 #   lk2nd dir: lk2nd-gts3lwifi.img and/or lk2nd-gts3llte.img (v2)
 set -eu
@@ -31,7 +33,7 @@ tools = [(bb, "tools/busybox")] + ([(unz, "tools/gsi-unzip")] if unz != "-" else
 # Nura's one-time setup, for the staged install from a PC
 tools += [(os.path.join(dualboot, "gts3-firstsetup"), "tools/gts3-firstsetup")]
 hook = os.path.join(dualboot, "..", "..", "pmaports", "device-samsung-gts3lwifi", "20-gts3-dualboot.sh")
-tools += [(os.path.join(dualboot, f), "pc/" + f) for f in ("install-dualboot.sh", "gts3-layout")]
+tools += [(os.path.join(dualboot, f), "pc/" + f) for f in ("setup.sh", "setup.ps1", "install-dualboot.sh", "gts3-layout")]
 tools += [(hook, "pc/20-gts3-dualboot.sh")]
 sums = []
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, allowZip64=False) as z:

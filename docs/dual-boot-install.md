@@ -51,7 +51,9 @@ start. Don't wipe them.
   (sha256 `d06c66e45c6d1e8d61b45d1261a65cb7ccf2e7946739602011e500a12ae55ad6`).
   Leave it out for Nura only.
 - Battery above 50 %.
-- Either TWRP / OrangeFox on the tablet (way A, no PC) or a Linux PC (way B).
+- Either TWRP / OrangeFox on the tablet (way A, no PC), a Linux PC (way B),
+  or, from test 4 on, a Linux or Windows PC with only adb and fastboot (way C,
+  which also sets up your account, Wi-Fi, time zone and keyboard in Nura).
 
 Check your model in Settings, About tablet, or on the back: SM-T825 has a SIM
 slot.
@@ -107,6 +109,39 @@ On Arch: `pacman -S android-tools e2fsprogs util-linux cpio unzip xz python`.
    2. builds the userdata image on the PC (10 to 20 minutes);
    3. asks you to type `yes`;
    4. flashes userdata, then lk2nd v2, and restarts the tablet.
+
+## C. From a PC with the setup script (Linux or Windows)
+
+From test 4 on. The PC needs only adb and fastboot: on Windows, Google's
+[platform-tools](https://developer.android.com/tools/releases/platform-tools)
+unzipped next to the script; on Linux, the `android-tools` package (Arch,
+Fedora) or `adb fastboot` (Debian, Ubuntu). The tablet needs lk2nd (step 1 of
+way B).
+
+1. Put the release files in one folder: the zip, the OrangeFox
+   `-fastboot-boot.img` for your model, `nura-root.img.xz` with its `.sha256`
+   for Nura, a GSI (`.img` or `.img.xz`) for Android, and `setup.sh` or
+   `setup.ps1` (also in the zip's `pc/` folder).
+2. Run it in that folder:
+   - Linux: `bash setup.sh`
+   - Windows: right-click `setup.ps1`, **Run with PowerShell** (or
+     `powershell -ExecutionPolicy Bypass -File .\setup.ps1`).
+3. Answer its questions: what to install (Nura, Android, or both, from the
+   files it finds), then for Nura your user name, password, the tablet's
+   name, time zone, language, keyboard, Wi-Fi country, and a Wi-Fi network to
+   join. It suggests the PC's own settings.
+4. Connect the tablet in lk2nd's fastboot mode (step 2 of way B). The script
+   starts our OrangeFox on it from RAM (nothing is flashed for that) and asks
+   you to type `yes`.
+5. It then runs the installer on the tablet and streams Nura's root and the
+   GSI to it over USB: about 5 to 10 minutes. The tablet checks every image
+   against its sha256 and refuses a damaged one. Your settings are applied in
+   Nura, the clock is set from the PC's, and lk2nd v2 is flashed last.
+6. It offers to restart the tablet into Nura (or Android).
+
+If anything fails, run the script again: it starts over with the layout.
+Your password and Wi-Fi password go to the tablet once, in RAM, and are
+deleted from the PC and the tablet when it is done.
 
 ## First start
 
