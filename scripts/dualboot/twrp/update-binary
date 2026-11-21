@@ -19,6 +19,22 @@
 # resize2fs, simg2img, and toybox's losetup (offsets and sizes).
 # Arguments (update-binary protocol): <api> <outfd> <zip>
 # Test overrides: MODEL, DATA_DEV, BOOT_DEV, GSI, SYSTEM, VENDOR, DATA, WORK
+#
+# Staged, for a PC over adb (setup.sh, setup.ps1), with the big images on
+# the PC instead of next to the zip. GTS3_STAGE picks the stage:
+#   layout  GTS3_SETUP=nura|android|both: everything but Nura's root and the
+#           GSI: the layout, the boot partition, Android's vendor and data.
+#           The partitions stay attached for the next stages
+#   recv    GTS3_PART=nura|android_system, GTS3_FORMAT=xz|raw,
+#           GTS3_SHA256=<the sha256 of what is sent>: writes the image on
+#           stdin to that partition (adb shell -T ... < image; not adb
+#           exec-in, which returns before the tablet is done and without
+#           its output). It fails if the stream's sha256 differs (the zip's
+#           xzcat doesn't check xz's CRC64)
+#   finish  Nura's root checked and grown; GTS3_ANSWERS=<dir> (optional):
+#           gts3-firstsetup with those answers and GTS3_UTC=<the PC's time>;
+#           then lk2nd v2
+# Without GTS3_STAGE, all of it in one go from the files next to the zip.
 OUTFD=$2
 ZIP=$3
 case "$0" in /*) SELF=$0 ;; *) SELF=$PWD/$0 ;; esac
@@ -42,6 +58,10 @@ SYSTEM=${SYSTEM:-4G} VENDOR=${VENDOR:-1G} DATA=${DATA:-4G}
 W=${WORK:-/tmp/gts3-install}
 G=$W/dev
 DIR=$(dirname "$ZIP")
+STAGE=${GTS3_STAGE:-all}
+# the stages after the layout keep its partitions attached, also on errors
+KEEP=
+[ "$STAGE" = all ] || [ "$STAGE" = layout ] || KEEP=1
 
 ui() { echo "ui_print $*" >&"$OUTFD"; echo "ui_print" >&"$OUTFD"; }
 die() {
@@ -52,10 +72,12 @@ die() {
 	exit 1
 }
 cleanup() {
-	umount "$W/mnt" 2> /dev/null
+	umount "$W/nura/sys" "$W/nura/proc" "$W/nura/dev" "$W/nura" "$W/mnt" 2> /dev/null
+	[ -z "$KEEP" ] || return 0
 	for l in $(cat "$W/loops" 2> /dev/null); do losetup -d "$l" 2> /dev/null; done
 	rm -f "$W/loops"
 }
+case "$STAGE" in all | layout | recv | finish) ;; *) die "GTS3_STAGE: layout, recv or finish" ;; esac
 # the recovery's tools (not the zip's busybox)
 tool() {
 	for c in $(which -a "$1" 2> /dev/null) /system/bin/$1 /sbin/$1; do
@@ -89,6 +111,86 @@ gts3llte) DTB=msm8996-samsung-gts3llte.dtb ;;
 esac
 mkdir -p "$W" "$G" "$W/mnt"
 cd "$W" || die "no $W"
+
+# Nura's root once it is written: checked, and grown to its partition
+fixroot() {
+	ui "Nura: checking its root..."
+	$E2FSCK -fy "$G/nura" > /dev/null 2>&1
+	[ $? -le 1 ] || die "e2fsck of Nura's root"
+	$RESIZE2FS "$G/nura" > /dev/null 2>&1 || die "resize2fs of Nura's root"
+}
+# the last step: lk2nd v2 to the start of the boot partition
+flashlk2nd() {
+	ui "lk2nd v2..."
+	dd if="$W/$LK2ND" of="$BOOT_DEV" bs=4096 conv=notrunc,fsync 2> /dev/null || die "writing lk2nd"
+	if [ -n "$1" ]; then
+		ui "Done ($SETUP). Reboot: lk2nd starts Nura"
+	else
+		ui "Done ($SETUP). Reboot: lk2nd starts Android"
+	fi
+	ui "(Volume Down at power-on: lk2nd's menu, with orangefox)."
+}
+
+# after a layout stage userdata is changed, whatever fails
+[ -z "$KEEP" ] || [ ! -f stage.env ] || ERASED=1
+if [ "$STAGE" = recv ]; then
+	P=${GTS3_PART:-} F=${GTS3_FORMAT:-xz}
+	case "$P" in nura | android_system) ;; *) die "GTS3_PART: nura or android_system" ;; esac
+	case "$F" in xz | raw) ;; *) die "GTS3_FORMAT: xz or raw" ;; esac
+	printf '%s' "${GTS3_SHA256:-}" | grep -Eq '^[0-9a-f]{64}$' || die "GTS3_SHA256: the sha256 of the image as sent"
+	[ -f stage.env ] && [ -b "$G/$P" ] || die "no $P partition: run the layout stage first"
+	rm -f "got-$P" recv.fifo recv.sum
+	mkfifo recv.fifo || die "mkfifo"
+	# the sha256 of the stream as sent, for the PC to compare
+	sha256sum < recv.fifo > recv.sum &
+	set -o pipefail
+	if [ "$F" = xz ]; then
+		tee recv.fifo | xzcat > "$G/$P"
+	else
+		tee recv.fifo | dd of="$G/$P" bs=4M 2> /dev/null
+	fi
+	rc=$?
+	set +o pipefail
+	wait
+	sync
+	[ $rc = 0 ] || die "writing $P: a damaged image, or larger than its partition"
+	if [ "$P" = android_system ] && [ "$(od -An -tx1 -N4 "$G/$P" | tr -d ' ')" = 3aff26ed ]; then
+		die "the GSI is a sparse image: unpack it first (simg2img)"
+	fi
+	s=$(cut -d' ' -f1 recv.sum)
+	[ "$s" = "$GTS3_SHA256" ] || die "$P arrived damaged (sha256 $s): send it again"
+	echo "$s" > "got-$P"
+	ui "$P: written, sha256 matches"
+	exit 0
+fi
+
+if [ "$STAGE" = finish ]; then
+	[ -f stage.env ] || die "run the layout stage first"
+	. ./stage.env
+	[ -z "$HAS_NURA" ] || [ -f got-nura ] || die "Nura's root wasn't sent"
+	[ -z "$HAS_GSI" ] || [ -f got-android_system ] || die "the GSI wasn't sent"
+	if [ -n "$HAS_NURA" ]; then
+		fixroot
+		if [ -n "${GTS3_ANSWERS:-}" ]; then
+			ui "Nura: your settings..."
+			[ -d "$GTS3_ANSWERS" ] || die "no answers in $GTS3_ANSWERS"
+			mkdir -p "$W/nura"
+			mount -t ext4 "$G/nura" "$W/nura" || die "mount Nura's root"
+			mount -t ext2 "$G/gts3_boot" "$W/mnt" 2> /dev/null || mount -t ext4 "$G/gts3_boot" "$W/mnt" || die "mount boot"
+			sh tools/gts3-firstsetup "$W/nura" "$W/mnt" "$GTS3_ANSWERS" ${GTS3_UTC:-} > firstsetup.log 2>&1
+			rc=$?
+			while read -r l; do ui "${l#gts3-firstsetup: }"; done < firstsetup.log
+			[ $rc = 0 ] || die "Nura's settings weren't all applied: fix the answer above, run finish again"
+			umount "$W/nura" && umount "$W/mnt" || die "umount"
+		fi
+	fi
+	KEEP=
+	cleanup
+	flashlk2nd "$HAS_NURA"
+	exit 0
+fi
+
+rm -f stage.env got-* recv.* firstsetup.log
 # Small files here; the big ones (Nura's boot files, the vendor image) are
 # checked and later written straight from the zip: /tmp is RAM in a recovery
 BIG="nura-boot.tar android/vendor.img"
@@ -113,8 +215,16 @@ if [ -s android/Image.gz ]; then
 fi
 RDTB=
 [ -s android/recovery/ramdisk ] && [ -s "android/recovery/$DTB" ] && RDTB=android/recovery/$DTB
-# the GSI: a system image by its name (other images may be in the folder)
-if [ -z "${GSI:-}" ]; then
+# the GSI: a system image by its name (other images may be in the folder);
+# staged: the PC has them, GTS3_SETUP says which
+if [ "$STAGE" = layout ]; then
+	case "${GTS3_SETUP:-}" in
+	nura) ROOT=pc GSI= ;;
+	android) ROOT= GSI=pc ;;
+	both) ROOT=pc GSI=pc ;;
+	*) die "GTS3_SETUP: nura, android or both" ;;
+	esac
+elif [ -z "${GSI:-}" ]; then
 	GSI=$(ls "$DIR"/*system*.img "$DIR"/*system*.img.xz "$DIR"/*gsi*.img "$DIR"/*gsi*.img.xz \
 		"$DIR"/*system*.zip "$DIR"/*gsi*.zip 2> /dev/null | grep -v -e nura-root -e "$(basename "$ZIP")" | head -n 1)
 fi
@@ -124,12 +234,14 @@ if [ -n "$ROOT" ] && [ -n "$GSI" ]; then SETUP="Nura and Android"
 elif [ -n "$ROOT" ]; then SETUP="Nura only"
 else SETUP="Android only"; fi
 ui "Installing: $SETUP"
-[ -z "$ROOT" ] || ui "Nura: $(basename "$ROOT")"
-[ -z "$GSI" ] || ui "Android: $(basename "$GSI")"
+if [ "$STAGE" = all ]; then
+	[ -z "$ROOT" ] || ui "Nura: $(basename "$ROOT")"
+	[ -z "$GSI" ] || ui "Android: $(basename "$GSI")"
+fi
 ui "Checking the zip..."
 [ -z "$ROOT" ] || zsum nura-boot.tar || die "nura-boot.tar in the zip is damaged, download it again"
 [ -z "$GSI" ] || zsum android/vendor.img || die "the vendor image in the zip is damaged, download it again"
-if [ -n "$ROOT" ] && [ -f "$ROOT.sha256" ]; then
+if [ "$STAGE" = all ] && [ -n "$ROOT" ] && [ -f "$ROOT.sha256" ]; then
 	ui "Checking $(basename "$ROOT")..."
 	[ "$(sha256sum "$ROOT" | cut -d' ' -f1)" = "$(cut -d' ' -f1 "$ROOT.sha256")" ] || die "$(basename "$ROOT") is damaged, download it again"
 fi
@@ -277,7 +389,7 @@ mkdir -p "$W/mnt/extlinux"
 sync
 umount "$W/mnt" || die "umount boot"
 
-if [ -n "$ROOT" ]; then
+if [ "$STAGE" = all ] && [ -n "$ROOT" ]; then
 	ui "Nura: its root (a few minutes)..."
 	case "$ROOT" in
 	*.xz)
@@ -287,9 +399,7 @@ if [ -n "$ROOT" ]; then
 		xzcat "$ROOT" > "$G/nura" || die "unpacking $(basename "$ROOT")" ;;
 	*) $SIMG2IMG "$ROOT" "$G/nura" || die "simg2img $(basename "$ROOT")" ;;
 	esac
-	$E2FSCK -fy "$G/nura" > /dev/null 2>&1
-	[ $? -le 1 ] || die "e2fsck of Nura's root"
-	$RESIZE2FS "$G/nura" > /dev/null 2>&1 || die "resize2fs of Nura's root"
+	fixroot
 fi
 
 [ -n "$GSI" ] && ui "Android: data..." || ui "The recovery's data partition..."
@@ -297,6 +407,8 @@ $MKE2FS -q -F -t ext4 -L android_data "$G/android_data" > /dev/null 2>&1 || die 
 if [ -n "$GSI" ]; then
 	ui "Android: vendor, system..."
 	unzip -p "$ZIP" android/vendor.img | dd of="$G/android_vendor" bs=4M conv=fsync 2> /dev/null || die "vendor image"
+fi
+if [ "$STAGE" = all ] && [ -n "$GSI" ]; then
 	# zip64 (GSI zips over 4 GB): gsi-unzip from the Android release
 	UNZIP=unzip
 	[ -x "$W/tools/gsi-unzip" ] && UNZIP=$W/tools/gsi-unzip
@@ -315,14 +427,20 @@ if [ -n "$GSI" ]; then
 	esac
 fi
 sync
-cleanup
-
-ui "lk2nd v2..."
-dd if="$LK2ND" of="$BOOT_DEV" bs=4096 conv=notrunc,fsync 2> /dev/null || die "writing lk2nd"
-if [ -n "$ROOT" ]; then
-	ui "Done ($SETUP). Reboot: lk2nd starts Nura"
-else
-	ui "Done ($SETUP). Reboot: lk2nd starts Android"
+if [ "$STAGE" = layout ]; then
+	# for the next stages; the partitions stay attached
+	{
+		echo "SETUP='$SETUP'"
+		echo "HAS_NURA=${ROOT:+1}"
+		echo "HAS_GSI=${GSI:+1}"
+		echo "LK2ND=$LK2ND"
+	} > stage.env
+	n=
+	[ -z "$ROOT" ] || n="Nura's root"
+	[ -z "$GSI" ] || n="${n:+$n and }the GSI"
+	ui "Layout done. Next: the PC sends $n"
+	exit 0
 fi
-ui "(Volume Down at power-on: lk2nd's menu, with orangefox)."
+cleanup
+flashlk2nd "$ROOT"
 exit 0
