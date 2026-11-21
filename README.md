@@ -96,10 +96,9 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Light sensor | Works | lux through iio-sensor-proxy; KWin auto-brightness is off by default and needs training (patch 0077, [sensors](docs/sensors.md)) |
 | Cover (hall) sensor | Not yet | test DT `dts/test/test-hall.dts`; waits for reliable suspend |
 | Grip sensor (SM-T825) | Not yet | test DT `dts/test/test-sar.dts`; nothing reads it without the modem |
-| Fingerprint (Home key) | HAL registers, TA loads, sensor blocked | Egis ET510: HAL registers with the framework, `dualfp` TA loads via our open `libQSEEComAPI`, sensor powers on; every command returns 42 (BLSP→TZ SPI handoff missing in mainline). Parked ([fingerprint](docs/fingerprint.md), [trustzone](docs/trustzone.md)) |
 | **Software** | | |
 | postmarketOS with Plasma (Wayland) | Works | installed on the eMMC behind lk2nd; build and install it yourself, Plasma or console: [install-pmbootstrap](docs/install-pmbootstrap.md) (our original manual install: [pmos-install](docs/pmos-install.md)) |
-| Widevine DRM | Partial | L3 works in Waydroid and Flatpak Firefox; L1 TA loads + operates on mainline (parked, [widevine](docs/widevine.md), [trustzone](docs/trustzone.md)) |
+| TrustZone: fingerprint, Widevine L1, hardware encryption | Parked | Samsung's TrustZone apps load and run on mainline through our open `libQSEEComAPI` ([trustzone](docs/trustzone.md)). **Fingerprint** (Egis ET510, Home key): the HAL registers and the sensor powers on, but every command returns 42: the SPI handoff to TrustZone is missing in mainline ([fingerprint](docs/fingerprint.md)). **Widevine**: L1's TA loads and runs, with no HAL yet; L3 works today in Waydroid and Flatpak Firefox ([widevine](docs/widevine.md)). **Hardware encryption**: the eMMC's inline crypto engine (ICE v2) needs a driver port; nothing is encrypted yet |
 | Waydroid (Android 13) | Works | Android apps on Linux, GPU-accelerated; an extra, not a stock Android replacement; optional `-waydroid` subpackage ([waydroid](docs/waydroid.md)) |
 
 ## Needs testing
