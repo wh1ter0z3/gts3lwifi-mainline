@@ -417,7 +417,10 @@ the mainline OrangeFox on the SM-T820: all five partitions, /data and
 an extlinux entry with the Android kernel, its own ramdisk and a device tree
 that carries `ro.boot.*` in /firmware/android. An `androidboot` on the
 command line makes lk2nd append S-Boot's command line. It needs:
-- 28 modules in the ramdisk;
+- 32 modules in the ramdisk, from the same kernel package as Nura's: display,
+  touch, S-Pen, keys, USB-C and the MUIC, the SM5705 charger and fuel gauge
+  with their I2C-GPIO bus (the battery in the status bar), the USB gadget,
+  exFAT, vkms;
 - memfd instead of ashmem (`ro.vndk.version`, `sys.use_memfd`);
 - vkms on a board without panel (`gts3.vkms=1`).
 

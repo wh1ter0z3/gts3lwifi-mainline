@@ -12,8 +12,13 @@ BOARD_KERNEL_IMAGE_NAME := Image.gz
 BOARD_KERNEL_CMDLINE := console=tty0 clk_ignore_unused pd_ignore_unused \
     msm.separate_gpu_kms=1 printk.devkmsg=on
 # display, S-Pen, touch keys, USB-C and the MUIC (USB data), the USB gadget,
-# exFAT: loaded by the first stage init from /lib/modules
+# the fuel gauge, exFAT: loaded by the first stage init from /lib/modules
 BOARD_RECOVERY_KERNEL_MODULES := $(GTS3_MAINLINE_MODULES)
 # vkms (a virtual display, for a board without panel) only with gts3.vkms=1
 BOARD_RECOVERY_KERNEL_MODULES_LOAD := $(filter-out %/vkms.ko,$(GTS3_MAINLINE_MODULES))
 TW_BRIGHTNESS_PATH := "/sys/class/backlight/994000.dsi.0/brightness"
+# the battery: mainline's SM5705 fuel gauge (sm5705_fuel_gauge.ko), not
+# "battery" as in Samsung's kernel, read directly (a recovery has no health
+# HAL; recovery's Android.mk sets this one too late for itself)
+TW_CUSTOM_BATTERY_PATH := /sys/class/power_supply/sm5705-battery
+TW_USE_LEGACY_BATTERY_SERVICES := true
