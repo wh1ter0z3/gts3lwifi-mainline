@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sat, 21 Nov 2026 05:24:54 +0000
+Subject: [PATCH] i2c: qup: Suspend through runtime PM in the late phase
+
+qup_i2c_suspend() only turns the clocks off when the controller is
+runtime-active, but qup_i2c_resume() always turns them on again, so a
+controller that was runtime-suspended before system suspend comes back
+with its core and AHB clocks enabled once more than its runtime PM
+status says. Checking the runtime status again in resume isn't enough:
+runtime PM is enabled again in the early resume phase, before the
+normal-phase resume callback runs, and a client that transfers in that
+window (a charger reading its fuel gauge after the cable was plugged in
+during suspend) runtime-resumes the controller first. Resume then sees
+an active controller and enables its clocks a second time.
+
+Either way one enable count is never dropped. On MSM8996 the QUP core
+clocks run from XO, so XO can't be released again and the RPM no
+longer reaches vmin in any later suspend.
+
+Let the PM core keep the books: pm_runtime_force_suspend() in the late
+phase runtime-suspends the controller only if it is active and records
+that, and pm_runtime_force_resume() in the early phase resumes only
+what it suspended. A controller that is runtime-suspended stays off,
+and later transfers resume it the normal way. This also closes the
+window between the normal and the late suspend phases in which the
+controller was off while its runtime PM status still said active.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/i2c/busses/i2c-qup.c | 21 +--------------------
+ 1 file changed, 1 insertion(+), 20 deletions(-)
+
+diff --git a/drivers/i2c/busses/i2c-qup.c b/drivers/i2c/busses/i2c-qup.c
+index ee7915ee2..1e5d020a2 100644
+--- a/drivers/i2c/busses/i2c-qup.c
++++ b/drivers/i2c/busses/i2c-qup.c
+@@ -1991,27 +1991,8 @@ static int qup_i2c_pm_resume_runtime(struct device *device)
+ 	return qup_i2c_enable_clocks(qup);
+ }
+ 
+-static int qup_i2c_suspend(struct device *device)
+-{
+-	if (!pm_runtime_suspended(device))
+-		return qup_i2c_pm_suspend_runtime(device);
+-	return 0;
+-}
+-
+-static int qup_i2c_resume(struct device *device)
+-{
+-	int ret;
+-
+-	ret = qup_i2c_pm_resume_runtime(device);
+-	if (ret)
+-		return ret;
+-
+-	pm_request_autosuspend(device);
+-	return 0;
+-}
+-
+ static const struct dev_pm_ops qup_i2c_qup_pm_ops = {
+-	SYSTEM_SLEEP_PM_OPS(qup_i2c_suspend, qup_i2c_resume)
++	LATE_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
+ 	RUNTIME_PM_OPS(qup_i2c_pm_suspend_runtime,
+ 		       qup_i2c_pm_resume_runtime, NULL)
+ };
