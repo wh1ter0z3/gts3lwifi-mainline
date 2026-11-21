@@ -10,6 +10,9 @@ side by side, and lk2nd picks one at every start:
 You switch between them on the tablet, without a PC. How it works:
 [dual-boot.md](dual-boot.md).
 
+**New to this?** The [install guide](install.md) walks through the
+simplest way (way C, a setup script on Windows or Linux) step by step.
+
 **Want LineageOS 24 instead of our open Android?** It also keeps Nura,
 from its own zip: [lineage-dual-boot-install.md](lineage-dual-boot-install.md).
 The README compares the two.

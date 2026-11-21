@@ -4,6 +4,8 @@
 
 Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both models, Wi-Fi and LTE.
 
+**Install it:** [the install guide](docs/install.md), with one setup script for Windows or Linux (from dual boot test 4).
+
 **Latest:** [dual boot test 3](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test3) — Nura and an Android side by side; Nura now sleeps deeply.
 
 - SoC: Qualcomm APQ8096 (SM-T820) / MSM8996 (SM-T825), Snapdragon 820; PMICs PM8994 + PM8004
