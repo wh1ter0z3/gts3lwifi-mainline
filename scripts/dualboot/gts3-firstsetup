@@ -1,0 +1,133 @@
+#!/bin/sh
+# One-time setup of a freshly installed Nura, from the answers the PC setup
+# script asked for (setup.sh / setup.ps1), so the tablet starts with its
+# owner's account, time and network instead of the image's defaults. Runs in
+# the recovery (or any aarch64 Linux) after the install, with Nura's root and
+# its boot partition mounted.
+#
+# usage: gts3-firstsetup <nura root> <boot partition> <answers dir> [<utc seconds>]
+#
+# The answers dir has one file per answer, its whole content the value (no
+# quoting, no trailing newline needed); a missing or empty file keeps the
+# image's default:
+#   username   login name, renames the image's "user" (and its home)
+#   fullname   the name shown on the login screen
+#   password   the account's password (replaces the published default)
+#   hostname   the tablet's name on the network
+#   timezone   e.g. Asia/Kolkata (a file under /usr/share/zoneinfo)
+#   locale     e.g. en_GB.UTF-8 (LANG)
+#   keyboard   XKB layout(s) for Plasma, e.g. us or de,us
+#   country    two-letter code: the Wi-Fi regulatory domain (5 GHz channels)
+#   wifi_ssid, wifi_psk   a Wi-Fi network to join at first boot (no psk:
+#              an open network)
+# <utc seconds>: the PC's time, to set the clock both systems share
+# (gts3-clock: the offset from the RTC, kept on the boot partition).
+set -eu
+
+[ $# -ge 3 ] || { sed -n '2,24p' "$0" >&2; exit 1; }
+R=$1 BOOTMNT=$2 A=$3 UTC=${4:-}
+[ -f "$R/etc/passwd" ] || { echo "gts3-firstsetup: no Nura root at $R" >&2; exit 1; }
+[ -d "$BOOTMNT" ] || { echo "gts3-firstsetup: no boot partition at $BOOTMNT" >&2; exit 1; }
+
+say() { echo "gts3-firstsetup: $*"; }
+die() { echo "gts3-firstsetup: error: $*" >&2; exit 1; }
+# the answer $1, or nothing
+ans() { [ -s "$A/$1" ] && cat "$A/$1" || true; }
+# one line, no control characters
+oneline() { [ "$(printf '%s' "$1" | wc -l)" -eq 0 ] && ! printf '%s' "$1" | grep -q '[[:cntrl:]]'; }
+
+OLD=user
+NEW=$(ans username) FULL=$(ans fullname) PASS=$(ans password) HOST=$(ans hostname)
+TZ_=$(ans timezone) LOC=$(ans locale) KBD=$(ans keyboard) CC=$(ans country)
+SSID=$(ans wifi_ssid) PSK=$(ans wifi_psk)
+
+# Check everything first: nothing is changed if one answer is wrong
+if [ -n "$NEW" ]; then
+	printf '%s' "$NEW" | grep -Eq '^[a-z_][a-z0-9_-]{0,30}$' ||
+		die "username '$NEW': lowercase letters, digits, - and _, starting with a letter"
+	[ "$NEW" = "$OLD" ] || ! grep -q "^$NEW:" "$R/etc/passwd" || die "username '$NEW' is already a system account"
+fi
+[ -z "$FULL" ] || { oneline "$FULL" && ! printf '%s' "$FULL" | grep -q '[:,]'; } || die "full name: one line, no : or ,"
+[ -z "$PASS" ] || oneline "$PASS" || die "password: one line"
+[ -z "$HOST" ] || printf '%s' "$HOST" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$' || die "hostname '$HOST'"
+if [ -n "$TZ_" ]; then
+	printf '%s' "$TZ_" | grep -Eq '^[A-Za-z0-9_+/-]+$' && ! printf '%s' "$TZ_" | grep -q '\.\.' &&
+		[ -f "$R/usr/share/zoneinfo/$TZ_" ] || die "timezone '$TZ_' is not in Nura's zoneinfo"
+fi
+[ -z "$LOC" ] || printf '%s' "$LOC" | grep -Eq '^[A-Za-z]{2,3}(_[A-Za-z]{2})?(\.[A-Za-z0-9-]+)?(@[a-z]+)?$' || die "locale '$LOC'"
+[ -z "$KBD" ] || printf '%s' "$KBD" | grep -Eq '^[a-z]{2,8}(,[a-z]{2,8}){0,3}$' || die "keyboard '$KBD': XKB layouts like us or de,us"
+[ -z "$CC" ] || printf '%s' "$CC" | grep -Eq '^[A-Z]{2}$' || die "country '$CC': two capital letters"
+[ -z "$SSID" ] || { oneline "$SSID" && [ ${#SSID} -le 32 ]; } || die "Wi-Fi name: one line, 32 characters at most"
+[ -z "$PSK" ] || [ -n "$SSID" ] || die "a Wi-Fi password without a network name"
+[ -z "$PSK" ] || { oneline "$PSK" && [ ${#PSK} -ge 8 ] && [ ${#PSK} -le 63 ]; } || die "Wi-Fi password: 8 to 63 characters"
+[ -z "$UTC" ] || printf '%s' "$UTC" | grep -Eq '^[0-9]{10}$' || die "time '$UTC': seconds since 1970"
+
+# The account tools run in Nura's root (shadow's usermod, chpasswd)
+for d in dev proc sys; do
+	mountpoint -q "$R/$d" 2> /dev/null || mount --bind "/$d" "$R/$d"
+done
+trap 'for d in sys proc dev; do umount "$R/$d" 2> /dev/null || :; done' EXIT
+ch() { chroot "$R" /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin "$@"; }
+
+U=$OLD
+if [ -n "$NEW" ] && [ "$NEW" != "$OLD" ] && grep -q "^$OLD:" "$R/etc/passwd"; then
+	ch usermod -l "$NEW" -d "/home/$NEW" -m "$OLD" || die "renaming $OLD to $NEW"
+	ch groupmod -n "$NEW" "$OLD" 2> /dev/null || :
+	U=$NEW
+	say "account: $NEW"
+fi
+if [ -n "$FULL" ]; then
+	ch usermod -c "$FULL" "$U" || die "full name"
+	say "full name set"
+fi
+if [ -n "$PASS" ]; then
+	printf '%s:%s\n' "$U" "$PASS" | ch chpasswd || die "password"
+	# the preview's reminder to replace the published password has done its job
+	rm -f "$R/etc/gts3-preview/default-password-hash"
+	say "password set"
+fi
+if [ -n "$HOST" ]; then
+	printf '%s\n' "$HOST" > "$R/etc/hostname"
+	sed -i "s/gts3-preview/$HOST/g" "$R/etc/hosts" 2> /dev/null || :
+	say "hostname: $HOST"
+fi
+if [ -n "$TZ_" ]; then
+	ln -sfn "/usr/share/zoneinfo/$TZ_" "$R/etc/localtime"
+	say "timezone: $TZ_"
+fi
+if [ -n "$LOC" ]; then
+	printf 'LANG=%s\n' "$LOC" > "$R/etc/locale.conf"
+	say "locale: $LOC"
+fi
+if [ -n "$KBD" ]; then
+	mkdir -p "$R/etc/xdg"
+	printf '[Layout]\nLayoutList=%s\nUse=true\n' "$KBD" > "$R/etc/xdg/kxkbrc"
+	say "keyboard: $KBD"
+fi
+if [ -n "$CC" ]; then
+	mkdir -p "$R/etc/modprobe.d"
+	printf 'options cfg80211 ieee80211_regdom=%s\n' "$CC" > "$R/etc/modprobe.d/cfg80211-regdom.conf"
+	say "Wi-Fi country: $CC"
+fi
+if [ -n "$SSID" ]; then
+	C=$R/etc/NetworkManager/system-connections
+	mkdir -p "$C"
+	f=$C/gts3-setup.nmconnection
+	{
+		printf '[connection]\nid=%s\nuuid=%s\ntype=wifi\nautoconnect=true\n\n' "$SSID" "$(cat /proc/sys/kernel/random/uuid)"
+		printf '[wifi]\nmode=infrastructure\nssid=%s\n\n' "$SSID"
+		[ -z "$PSK" ] || printf '[wifi-security]\nkey-mgmt=wpa-psk\npsk=%s\n\n' "$PSK"
+		printf '[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=auto\n'
+	} > "$f"
+	chmod 600 "$f"
+	chown 0:0 "$f"
+	say "Wi-Fi: $SSID"
+fi
+if [ -n "$UTC" ]; then
+	rtc=$(cat /sys/class/rtc/rtc0/since_epoch) || die "no RTC to set the clock from"
+	mkdir -p "$BOOTMNT/gts3"
+	printf 'offset=%s\n' $((UTC - rtc)) > "$BOOTMNT/gts3/clock"
+	say "clock: offset $((UTC - rtc)) from the RTC"
+fi
+sync
+say "done"
