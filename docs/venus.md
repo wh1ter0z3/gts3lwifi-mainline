@@ -153,6 +153,10 @@ Apps don't use the hardware decoder by themselves:
   frames as DRM PRIME buffers, which upstream FFmpeg's V4L2 decoders don't
   do (Raspberry Pi's FFmpeg fork does), and it only tries H.264 and AV1.
   Browser video decodes on the CPU.
+- **YouTube**: [Smedio](https://github.com/wh1ter0z3/smedio) (package
+  `pmaports/smedio`) plays YouTube and live TV in an embedded mpv with
+  `v4l2m2m-copy`, and asks YouTube for VP9 when the decoder takes it: VP9
+  1080p decodes on Venus at about 1.4 load.
 
 **Negative timestamps (patch 0231, kernel r17):** FFmpeg gives a negative
 timestamp that isn't a whole number of seconds a negative `tv_usec`
