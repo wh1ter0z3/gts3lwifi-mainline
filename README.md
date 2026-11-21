@@ -90,7 +90,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
 | Flash LED | Works | as a torch |
 | **Multimedia** | | |
-| Speakers (4), headphones, microphones, headset mic | Works | jack detection and centre button tested on the T820 ([audio](docs/audio.md)) |
+| Speakers (4), headphones, microphones, headset mic | Works | jack detection and centre button tested on the T820; the speakers sound like stock (the stock speaker processing re-created from measurements) ([audio](docs/audio.md)) |
 | Video decode / encode (Venus) | Works | decode H.264, HEVC, VP8, VP9, bit-exact (with the stream's crop, patch 0182) and stable under `tests/venus-stress.sh` (parallel decoders, encode during decode, killed decodes, seeks, resolution changes); real time up to 1536p. Encode H.264 and HEVC, 4K30 HEVC from the camera. Limits: 4K HEVC decode about 20 fps and 4K H.264 encode about 27 fps; 10-bit HEVC untested. Apps: GStreamer players by themselves, mpv with `--hwdec=v4l2m2m-copy` (FFmpeg, bit-exact); not Firefox yet ([venus](docs/venus.md)) |
 | Cameras (front, rear) | Works | rear 13 MP with autofocus, front 5 MP, through libcamera (`pmaports/libcamera` for AF) ([camera](docs/camera.md)) |
 | **Sensors** | | |

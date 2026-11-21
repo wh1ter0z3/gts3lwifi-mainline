@@ -203,7 +203,7 @@ sink (UCM device `Speaker`, below the headphones while those are plugged in).
 | ADSP ports | PRIMARY_TDM_RX_0 and QUAT_TDM_RX_0, each alone in its group, internal bit clocks `PRI_TDM_IBIT` / `QUAD_TDM_IBIT` |
 | Routing | MultiMedia1 (`hw:0,0`) -> both ports at once |
 | Channels | landscape with the home button on the right (keyboard cover): top pair left, bottom pair right |
-| Volume | per amplifier `<name> DAC Volume`, 255 = 0 dB, 0.5 dB per step (measured); the UCM profile sets 225 (-15 dB) and leaves the rest to software volume, because the amplifiers' speaker protection is not used |
+| Volume | per amplifier `<name> DAC Volume`, 255 = 0 dB, 0.5 dB per step (measured); the UCM profile sets 255, as the stock firmware runs them; the speaker sound processing below guards the speakers |
 
 New in the kernel:
 
@@ -220,6 +220,55 @@ New in the kernel:
 - **q6afe** (0022/0023): the TDM sync inversion, data delay and data-out
   settings from the DT never reached the DSP; and the slot mapping is only
   sent when the machine driver sets a channel map.
+
+### Speaker sound
+
+The stock firmware's speakers sound full and loud for their size; plain
+audio on them sounds thin and quiet. The difference is processing in front of
+the amplifiers, and the device package re-creates it: `device-samsung-gts3lwifi-speaker`
+(installed with PipeWire) puts the `gts3_speaker` LADSPA plugin in front of the
+speaker sink as a WirePlumber smart filter, so everything played on the
+speakers goes through it, while headphones and Bluetooth get the plain signal.
+
+Where the stock sound comes from (checked on the T820 firmware, Android 9):
+
+- not the amplifiers: the RT5508s have their own speaker protection, EQ and
+  compressor, but nothing in the stock system loads their parameters (and
+  their factory calibration stays in each chip's OTP memory);
+- not the ADSP: in the Qualcomm calibration (`Speaker_cal.acdb`, device 15)
+  the speaker's EQ and multiband compressor are switched off;
+- not Dolby: its speaker tuning is flat;
+- it is Samsung's SoundBooster, a library on the CPU in the audio HAL that
+  processes every stream for the four speakers (it also does the stereo
+  rotation with the screen). LineageOS uses the same library.
+
+How it was re-created: SoundBooster was run on the tablet in a chroot with
+the stock libraries, fed test signals, and measured: the gain at 30
+frequencies and 11 levels, which frequencies share a band (a loud tone and a
+quiet probe), and the attack and release times. The plugin is written from
+those measurements alone (no Samsung code or files): an FFT multiband
+processor in which every frequency gets the measured gain for the current
+level of its band, 9 bands (below 60 Hz the cut follows the whole bass
+region), attack 12 ms, release 100-300 ms, then a limiter at -0.5 dBFS.
+
+| | stock SoundBooster | `gts3_speaker` |
+|---|---|---|
+| Quiet passages, 100 Hz-2.5 kHz | up to +17 dB, less as they get louder | the same tables |
+| Treble | fixed EQ, +5 to +13 dB peaks, -3 dB at 6-8 kHz | the same tables |
+| Below 60 Hz | cut, harder as the level rises | cut about 4 dB more |
+| Output | limited (about -6 dBFS for full-scale tones) | limited at -0.5 dBFS |
+| Latency | about 30 ms | 21 ms |
+
+On four music and film clips, the plugin's output matches the stock
+library's within about 1 dB in every band from 60 Hz up and within 0.4 dB
+overall; side by side on the tablet it sounds the same.
+
+The plugin has one control, `Boost` (-12 to +12 dB, default 0), after the
+processing and before the limiter: some content (quiet film soundtracks)
+benefits from a few dB more. To change it, copy
+`/usr/share/pipewire/pipewire.conf.d/52-gts3-speaker.conf` to
+`~/.config/pipewire/pipewire.conf.d/` and edit `"Boost"`. The volume control
+of the speakers works after the processing.
 
 ### What had to be found
 

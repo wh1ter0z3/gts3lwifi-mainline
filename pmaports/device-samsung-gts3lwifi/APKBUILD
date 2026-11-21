@@ -3,7 +3,7 @@ maintainer="psigod <psigod@example.com>"
 pkgname=device-samsung-gts3lwifi
 pkgdesc="Samsung Galaxy Tab S3 (SM-T820, SM-T825)"
 pkgver=1
-pkgrel=19
+pkgrel=20
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -20,8 +20,8 @@ depends="
 	postmarketos-base
 	soc-qcom-msm8996
 	"
-makedepends="devicepkg-dev"
-subpackages="$pkgname-openrc $pkgname-waydroid:_waydroid $pkgname-gnss:_gnss"
+makedepends="devicepkg-dev ladspa-dev"
+subpackages="$pkgname-openrc $pkgname-waydroid:_waydroid $pkgname-gnss:_gnss $pkgname-speaker:_speaker"
 source="
 	deviceinfo
 	modules-load.conf
@@ -58,10 +58,17 @@ source="
 	gts3-clock.service
 	gts3-clock-sync.path
 	gts3-clock-sync.service
+	gts3-speaker.c
+	gts3-speaker-tables.h
+	52-gts3-speaker.conf
 	"
 
 build() {
 	devicepkg_build $startdir $pkgname
+
+	# The speaker sound (docs/audio.md): a LADSPA plugin for PipeWire
+	${CC:-gcc} $CFLAGS -O2 -ffast-math -shared -fPIC -o "$srcdir"/gts3_speaker.so \
+		"$srcdir"/gts3-speaker.c $LDFLAGS -lm
 }
 
 package() {
@@ -150,6 +157,16 @@ package() {
 		"$pkgdir/usr/share/alsa/ucm2/conf.d/apq8096/Galaxy Tab S3.conf"
 }
 
+_speaker() {
+	pkgdesc="The Galaxy Tab S3's speaker sound: the stock firmware's speaker processing, re-created for PipeWire"
+	depends="pipewire-filter-graph-ladspa"
+	install_if="$pkgname=$pkgver-r$pkgrel pipewire"
+
+	install -Dm755 "$srcdir"/gts3_speaker.so "$subpkgdir"/usr/lib/ladspa/gts3_speaker.so
+	install -Dm644 "$srcdir"/52-gts3-speaker.conf \
+		-t "$subpkgdir"/usr/share/pipewire/pipewire.conf.d
+}
+
 _waydroid() {
 	pkgdesc="Waydroid (Android 13) on the Galaxy Tab S3: firewall rule and a full-screen Android session"
 	depends="cage waydroid"
@@ -215,7 +232,7 @@ ec0d2cddecf7448b9f62335a464f5864a485d07c05ff014357110c93fc0763b94f8e50e017f45545
 356575e074aed11df8486478a9cc4ab01c5752b23315ff007c9ae9300ecfd7fad0709da1f8b7e8affe2e0f2d82edeff8e6ad8ae95133de12f38ddd683fe07dd6  modules-initfs
 dbddae3d44f0d4370c9111e17fb287bb02d88bfe67d824f547805d24230378406eef99c3b970afadb546fb4ab966b90f95e1a7397e1cdb364caf34e98c7b860c  51-gts3lwifi-audio.conf
 1e4ce6c102487fb79b13ee3a62c7801bee9eb135992b93a5b1b8af4bba325eaa1527e0d2cc588a976c0956be652d4c579036237684ec5a4d209b37b5c5c188e7  ucm2-gts3lwifi.conf
-f8debc6bc2806973f09d332c337882d3e2166fd8acf23a61bd8a9bc445a058832ebed963e7a316c3a16f734ee60499c3aba548c4ac688a1048753bdfa912457a  ucm2-gts3lwifi-HiFi.conf
+1c54ac23065264ec9b18747bfde13cecca1879573a5ffb28dae440b2b9e951755a586733d6d25483991285dae68924f15c4d70b4359261cf909c43bd1cb12a52  ucm2-gts3lwifi-HiFi.conf
 cf9b543a487e4c4a2f578dde576189da1c90c852b4a5eb49257df5a8ce09f6f132c82fb14067865674ce203a187c7e9af5c844ea3520efe5cf1988dde0442964  waydroid-firewall.nft
 a80a0dbd4b86de00ae5c147b785215274384dad50319c3f6c7f332b407874b27a73f2987dbdc68479073fd7f9e10242831bad9730be270e5b4c69407b591bca5  gts3-waydroid-session
 be4208211112f3e4b0950b490819de2bcf9760d45a1d5b390de5b7fd60e2a6ea8cee3cb6202ef52bbbb0030dbd14b3ab6a38d788f80c18bbdd29a13d1681e3f3  waydroid-fullscreen.desktop
@@ -231,4 +248,7 @@ cb46230911abd0b00e7b28d4a13710df9fe175c290887a77928a299fb4434e2ae9fb3afc4e979ade
 9eb816eed362afea29e66520753d2e665b2f49b21155d4f8b7d0468f0377ae661d6c19afb112615b4aba311a3b7d55e5c0982b6560aaba9e85ae113797c9a919  gts3-clock.service
 5e76c27982884e4243c6786d5af357490fd4f5113eb19d48a964dbf5aea4ea5b029400933b307cd9fde8a830cf034c6392e849aabebea39f4f9d9f81cbc0bb51  gts3-clock-sync.path
 7797900b96b25a547246d14f6cc6714c3b265674994a3b64cf6846c0b8a938e475b893af8e4c5bab4f828879fcc64dc766c4b53b46ffc7e961b3b0044500a13f  gts3-clock-sync.service
+fab0831901d23b438af4802b00979f4b7e878c7bada3b0cdb91dc45e4485cd198a1f57d2a9c8b3b17eba948aa85f9d9a2ad63e56b23e7aa2240144733c519519  gts3-speaker.c
+32e526498033c06dd84df48c906c4d07bf342b41a8dd632486039eac0d87bd2929d36cda2f5327ae3dde4fc13d4a674774e1cf442e28669830851240ef9d724f  gts3-speaker-tables.h
+a5d88075058cb30187f53b742c39dc9bcaba8c218e2769d6d10e247f6041c7b4ea815f10e3682c779c412bef8082ce6091a918fb58c53f1d232682deb749f8d5  52-gts3-speaker.conf
 "
