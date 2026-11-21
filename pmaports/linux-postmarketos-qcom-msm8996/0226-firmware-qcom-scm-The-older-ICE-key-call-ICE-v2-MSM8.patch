@@ -1,0 +1,139 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sat, 21 Nov 2026 10:43:05 +0000
+Subject: [PATCH 226/230] firmware: qcom: scm: The older ICE key call (ICE v2,
+ MSM8996)
+
+The TrustZone of SoCs with ICE v2, such as MSM8996, has neither
+QCOM_SCM_ES_CONFIG_SET_ICE_KEY (0x4) nor the wrapped key calls. It sets
+an ICE key with ES call 0x2, which takes the two halves of an
+AES-256-XTS key in separate buffers (the second one called the salt) and
+the storage type, and no data unit size, which the storage controller
+gives with each request instead. Invalidating a key is the same call 0x3.
+
+Add qcom_scm_ice_legacy_available() and qcom_scm_ice_legacy_set_key().
+On an SM-T820 (APQ8096) the ES service offers calls 0x2 and 0x3 only.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/firmware/qcom/qcom_scm.c       | 74 ++++++++++++++++++++++++++
+ drivers/firmware/qcom/qcom_scm.h       |  1 +
+ include/linux/firmware/qcom/qcom_scm.h |  7 +++
+ 3 files changed, 82 insertions(+)
+
+diff --git a/drivers/firmware/qcom/qcom_scm.c b/drivers/firmware/qcom/qcom_scm.c
+index c6d0a029c..3a34741b7 100644
+--- a/drivers/firmware/qcom/qcom_scm.c
++++ b/drivers/firmware/qcom/qcom_scm.c
+@@ -1570,6 +1570,80 @@ int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_ice_set_key);
+ 
++/**
++ * qcom_scm_ice_legacy_available() - Are the older ICE key calls available?
++ *
++ * The TrustZone of SoCs with ICE v2, such as MSM8996, sets a key with ES call
++ * 0x2, which takes the two halves of an AES-256-XTS key in separate buffers
++ * (the second one called the salt) and the storage type, and has neither
++ * QCOM_SCM_ES_CONFIG_SET_ICE_KEY nor the wrapped key calls.
++ *
++ * Return: true if the older calls to set and invalidate a key are available.
++ */
++bool qcom_scm_ice_legacy_available(void)
++{
++	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_ES,
++					    QCOM_SCM_ES_SET_ICE_KEY) &&
++	       __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_ES,
++					    QCOM_SCM_ES_INVALIDATE_ICE_KEY);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_ice_legacy_available);
++
++/**
++ * qcom_scm_ice_legacy_set_key() - Set an inline encryption key, older call
++ * @index: the keyslot into which to set the key
++ * @key: the first half of the AES-256-XTS key
++ * @salt: the second half of the AES-256-XTS key
++ * @size: the size of each half in bytes
++ * @storage: the storage the ICE instance serves, QCOM_SCM_ICE_STORAGE_SDCC
++ *
++ * The older counterpart of qcom_scm_ice_set_key() (see
++ * qcom_scm_ice_legacy_available()). The key is used as it is, and the data
++ * unit size is given with each request, not here.
++ *
++ * Return: 0 on success; -errno on failure.
++ */
++int qcom_scm_ice_legacy_set_key(u32 index, const u8 *key, const u8 *salt,
++				u32 size, u32 storage)
++{
++	struct qcom_scm_desc desc = {
++		.svc = QCOM_SCM_SVC_ES,
++		.cmd = QCOM_SCM_ES_SET_ICE_KEY,
++		.arginfo = QCOM_SCM_ARGS(6, QCOM_SCM_VAL, QCOM_SCM_RW,
++					 QCOM_SCM_VAL, QCOM_SCM_RW,
++					 QCOM_SCM_VAL, QCOM_SCM_VAL),
++		.args[0] = index,
++		.args[2] = size,
++		.args[4] = size,
++		.args[5] = storage,
++		.owner = ARM_SMCCC_OWNER_SIP,
++	};
++	int ret;
++
++	void *keybuf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							   size, GFP_KERNEL);
++	if (!keybuf)
++		return -ENOMEM;
++
++	void *saltbuf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							    size, GFP_KERNEL);
++	if (!saltbuf)
++		return -ENOMEM;
++
++	memcpy(keybuf, key, size);
++	memcpy(saltbuf, salt, size);
++	desc.args[1] = qcom_tzmem_to_phys(keybuf);
++	desc.args[3] = qcom_tzmem_to_phys(saltbuf);
++
++	ret = qcom_scm_call(__scm->dev, &desc, NULL);
++
++	memzero_explicit(keybuf, size);
++	memzero_explicit(saltbuf, size);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_ice_legacy_set_key);
++
+ bool qcom_scm_has_wrapped_key_support(void)
+ {
+ 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_ES,
+diff --git a/drivers/firmware/qcom/qcom_scm.h b/drivers/firmware/qcom/qcom_scm.h
+index cf90a565f..d2b7c869e 100644
+--- a/drivers/firmware/qcom/qcom_scm.h
++++ b/drivers/firmware/qcom/qcom_scm.h
+@@ -131,6 +131,7 @@ int qcom_scm_shm_bridge_enable(struct device *scm_dev);
+ #define QCOM_SCM_OCMEM_UNLOCK_CMD	0x02
+ 
+ #define QCOM_SCM_SVC_ES			0x10	/* Enterprise Security */
++#define QCOM_SCM_ES_SET_ICE_KEY		0x02	/* ICE v2 era: key and salt */
+ #define QCOM_SCM_ES_INVALIDATE_ICE_KEY	0x03
+ #define QCOM_SCM_ES_CONFIG_SET_ICE_KEY	0x04
+ #define QCOM_SCM_ES_DERIVE_SW_SECRET	0x07
+diff --git a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+index fab7a2bfa..50ca793a3 100644
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -116,6 +116,13 @@ int qcom_scm_ocmem_lock(enum qcom_scm_ocmem_client id, u32 offset, u32 size,
+ int qcom_scm_ocmem_unlock(enum qcom_scm_ocmem_client id, u32 offset, u32 size);
+ 
+ bool qcom_scm_ice_available(void);
++
++/* The storage type the older ICE key call takes */
++#define QCOM_SCM_ICE_STORAGE_SDCC	20
++
++bool qcom_scm_ice_legacy_available(void);
++int qcom_scm_ice_legacy_set_key(u32 index, const u8 *key, const u8 *salt,
++				u32 size, u32 storage);
+ int qcom_scm_ice_invalidate_key(u32 index);
+ int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
+ 			 enum qcom_scm_ice_cipher cipher, u32 data_unit_size);

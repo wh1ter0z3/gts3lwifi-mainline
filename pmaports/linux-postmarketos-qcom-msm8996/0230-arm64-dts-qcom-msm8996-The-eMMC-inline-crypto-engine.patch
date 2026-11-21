@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sat, 21 Nov 2026 10:43:05 +0000
+Subject: [PATCH 230/230] arm64: dts: qcom: msm8996: The eMMC inline crypto
+ engine
+
+The SDCC1 inline crypto engine at 0x7443000 (downstream sdcc1_ice), with
+its core clock at 300 MHz as downstream runs it, and the host
+controller's register window up to the ICE v2 request registers
+(0x300-0x4ff; downstream maps 0x500).
+
+The engine's clocks follow the controller's runtime PM, so an idle eMMC
+doesn't hold them.
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ arch/arm64/boot/dts/qcom/msm8996.dtsi | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/msm8996.dtsi b/arch/arm64/boot/dts/qcom/msm8996.dtsi
+index ca4f8ece6..833963948 100644
+--- a/arch/arm64/boot/dts/qcom/msm8996.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8996.dtsi
+@@ -3245,9 +3245,21 @@ hsusb_phy2: phy@7412000 {
+ 			status = "disabled";
+ 		};
+ 
++		sdhc1_ice: crypto@7443000 {
++			compatible = "qcom,msm8996-inline-crypto-engine",
++				     "qcom,inline-crypto-engine";
++			reg = <0x07443000 0x8000>;
++			clocks = <&gcc GCC_SDCC1_ICE_CORE_CLK>,
++				 <&gcc GCC_SDCC1_AHB_CLK>;
++			clock-names = "core", "iface";
++			assigned-clocks = <&gcc SDCC1_ICE_CORE_CLK_SRC>;
++			assigned-clock-rates = <300000000>;
++		};
++
+ 		sdhc1: mmc@7464900 {
+ 			compatible = "qcom,msm8996-sdhci", "qcom,sdhci-msm-v4";
+-			reg = <0x07464900 0x11c>, <0x07464000 0x800>;
++			/* up to the ICE v2 request registers at 0x300-0x4ff */
++			reg = <0x07464900 0x500>, <0x07464000 0x800>;
+ 			reg-names = "hc", "core";
+ 
+ 			interrupts = <GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
+@@ -3260,6 +3272,8 @@ sdhc1: mmc@7464900 {
+ 				<&rpmcc RPM_SMD_XO_CLK_SRC>;
+ 			resets = <&gcc GCC_SDCC1_BCR>;
+ 
++			qcom,ice = <&sdhc1_ice>;
++
+ 			pinctrl-names = "default", "sleep";
+ 			pinctrl-0 = <&sdc1_state_on>;
+ 			pinctrl-1 = <&sdc1_state_off>;

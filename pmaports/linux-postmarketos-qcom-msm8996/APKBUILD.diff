@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..c87a43e074 100644
+index 601fa9f44e..bfabd62a30 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -9,7 +9,7 @@ index 601fa9f44e..c87a43e074 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=15
++pkgrel=16
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -18,7 +18,7 @@ index 601fa9f44e..c87a43e074 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,16 +28,260 @@
+@@ -28,16 +28,265 @@
  "
  
  # Source
@@ -267,6 +267,11 @@ index 601fa9f44e..c87a43e074 100644
 +	0223-arm64-dts-qcom-gts3lwifi-Deep-sleep-MPM-L2-and-syste.patch
 +	0224-PCI-qcom-Reset-the-MSM8996-controller-each-time-it-i.patch
 +	0225-arm64-dts-qcom-gts3lwifi-Reset-for-the-PCIe-controll.patch
++	0226-firmware-qcom-scm-The-older-ICE-key-call-ICE-v2-MSM8.patch
++	0227-soc-qcom-ice-ICE-v2.1-with-the-older-TrustZone-key-c.patch
++	0228-mmc-sdhci-msm-Inline-encryption-with-ICE-v2-MSM8996.patch
++	0229-dt-bindings-crypto-qcom-inline-crypto-engine-Add-MSM.patch
++	0230-arm64-dts-qcom-msm8996-The-eMMC-inline-crypto-engine.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
@@ -282,14 +287,14 @@ index 601fa9f44e..c87a43e074 100644
  }
  
  build() {
-@@ -61,6 +305,246 @@
+@@ -61,6 +310,251 @@
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
 -dd30dd113ad9f0b4ab3771ea655de2becce7ddaf5066d2f860b7bb1eb78573137313191d9da740b152348f9f89894ace2bb94fb195e340f7b6dabedeebbc929f  linux-v6.19.5-msm8996.tar.gz
 -6a1e3a18fb454378ef5569a6951426d118144985c9028e663f46d28cde6784723296601d3756176045e22d706a9195938804c6a82f02fcf548e18d2e66c35b27  config-postmarketos-qcom-msm8996.aarch64
 +eac8912be329999150a71257adc513e6a52891d122641943c3a440f775267705eff0b275b4d90d5298518ca638ab48fc2b7c3ee109d82f0bb34a1ac081e9c3a2  linux-7.3.1.tar.xz
-+b44cd5242b86966821e3cf5e2fa70fcc77c0b6c77cf0dbaaad848a51c611fba0cd7be89b2de2258ffeb2305935e58fbfa8144c43c16e9670b9c4cb44df794d0f  config-postmarketos-qcom-msm8996.aarch64
++010494c1a18fcf12ee69f7f9007eed569b440cb978a9035bc9e96dc611b6ba10b67cf4f08bd90b082ef4b72e8884392fd8273e9af103ac486e0acdf67c3b728f  config-postmarketos-qcom-msm8996.aarch64
 +0c629e3643e12f339c357ea0d393d39080aef8675fe7ab3b1f49ec711f8bb9bf8d0f6ea5ab1bb2b722bb8b9480798ecf3d589ad9c4c9fe59452dc6c7fa2befda  m001-media-qcom-camss-make-ispif-reset-go-though-vfe-user-countin.patch
 +af43f2310312af3b470a7989e707100097a1e1593eb3e6fcad3c542ffb4c29910e268e8be092c523d141bc9182b5a71e9b9266f015da867e62e329ad3c5fb2d4  m002-dt-bindings-media-camss-qcom-msm8996-camss-add-camss-power-d.patch
 +21dbaeb5d598852ccefd6963530acdcde70a3b84caf0580a6b4dd2932e1e3e629c2bb7aa6c208864ed74fa3f2b8cc1cccabc1345ac023200ab338fd5fcdbaf66  m003-arm64-dts-qcom-msm8996-add-camss-power-domain-and-power-doma.patch
@@ -530,4 +535,9 @@ index 601fa9f44e..c87a43e074 100644
 +b0765948216feef9a8fbb3e4ef9b681e84a98da5d122ae8257aec3819f1136cddfeb4378cf0d66cde8ca54b73e3a0aba681563aa71d8145d1c24bd58ca933ff5  0223-arm64-dts-qcom-gts3lwifi-Deep-sleep-MPM-L2-and-syste.patch
 +6222c0fa3c0f7126ce6cfb5bdccb2b7bacce39d6120f755643138875f97895d5dcbdce90d517767f5c35b19f7d5174f7c5d51b4fd426e71a6b94233ba7c79551  0224-PCI-qcom-Reset-the-MSM8996-controller-each-time-it-i.patch
 +474c17fb6d73031b3eef7610ba61d73b8c0aae88c43ca0a011e53b66fb6a8cede861bc22167dc2b93abda2f583572deee80bc481cf3bc2ab4508fb39e95d154d  0225-arm64-dts-qcom-gts3lwifi-Reset-for-the-PCIe-controll.patch
++483530022e7300de0aef40e4a8111b79e3fab37f0a88128c294f34253d31daf3475586e94e782c8039dea827dd18fde1b24b76d66dc1266865e898de96e54f9a  0226-firmware-qcom-scm-The-older-ICE-key-call-ICE-v2-MSM8.patch
++42b2167ef8e577c585cbbdf4e45ec333f173a2d126d9a2ee50f9086d21148c001170e64a9d1d540efc994dfda55c1281ffef1aa55156f43e0f6129f859e86ced  0227-soc-qcom-ice-ICE-v2.1-with-the-older-TrustZone-key-c.patch
++d9421fb1ed099eb488f1e7777c7c81f03b2fbb03f42198c63cbc0845ac4f95540cfa1c422e0a1d9c5b74f91d45c88a673a30d50cd7e5c7798df497a001885dbe  0228-mmc-sdhci-msm-Inline-encryption-with-ICE-v2-MSM8996.patch
++32d6864c264b6ac43f32f1b2372823bb4b90c7674595581ab8d6871a06fe54fbc9c8e6ed3b44f4d80b0883850c7a4be8670adb5594927a498d616b59223358a3  0229-dt-bindings-crypto-qcom-inline-crypto-engine-Add-MSM.patch
++6e95f3c9edc17fa3250df1c5da197f42d7d5a384f9253064fc250d253c8350d1088d9d6f991847cb4190cf735b2eb0d444c1c451084658002870e33e9377989d  0230-arm64-dts-qcom-msm8996-The-eMMC-inline-crypto-engine.patch
  "

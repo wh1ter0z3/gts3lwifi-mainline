@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sat, 21 Nov 2026 10:43:05 +0000
+Subject: [PATCH 229/230] dt-bindings: crypto: qcom,inline-crypto-engine: Add
+ MSM8996
+
+Document the inline crypto engine of the MSM8996 eMMC controller (ICE
+v2.1).
+
+Signed-off-by: psigod <psigod@example.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml    | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml b/Documentation/devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml
+index 23bf98c2b..879fc19ee 100644
+--- a/Documentation/devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml
++++ b/Documentation/devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml
+@@ -18,6 +18,7 @@ properties:
+           - qcom,kaanapali-inline-crypto-engine
+           - qcom,maili-inline-crypto-engine
+           - qcom,milos-inline-crypto-engine
++          - qcom,msm8996-inline-crypto-engine
+           - qcom,nord-inline-crypto-engine
+           - qcom,qcs8300-inline-crypto-engine
+           - qcom,sa8775p-inline-crypto-engine
