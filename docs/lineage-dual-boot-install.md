@@ -10,6 +10,11 @@ For the SM-T820 (Wi-Fi) and SM-T825 (LTE). The tablet ends up with:
 LineageOS is installed from its own zip, unchanged, so its own updater keeps
 working. How it works: [dual-boot.md](dual-boot.md).
 
+**Since 2026-11-23 the setup scripts do this in one go.** Put the LineageOS
+zip (`lineage-*.zip`) next to `setup.sh` / `setup.ps1` with the other release
+files and choose "Nura and LineageOS". The guide below is the by-hand way.
+Layouts: [partitions.md](partitions.md).
+
 **Want our own Android instead?** Any GSI on our open vendor and our
 mainline kernel: [dual-boot-install.md](dual-boot-install.md). The README
 compares the two.

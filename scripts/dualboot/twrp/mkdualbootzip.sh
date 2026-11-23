@@ -2,21 +2,23 @@
 # Makes the OrangeFox / TWRP dual boot installer zip (twrp/update-binary):
 # the payload of `install-dualboot.sh --payload` except Nura's root (users
 # put nura-root.img.xz next to the zip), lk2nd v2 for each model there is one
-# of, a static aarch64 busybox (Alpine's busybox-static) and, for GSI zips
-# over 4 GB, gsi-unzip (gsi branch, gsi/unzip64), and gts3-firstsetup. pc/
+# of, a static aarch64 busybox (Alpine's busybox-static), a static aarch64
+# xz (mkxz.sh: unpacks Nura's root on all cores, 5x busybox's xzcat), for GSI
+# zips over 4 GB gsi-unzip (gsi branch, gsi/unzip64), gts3-firstsetup, and
+# LineageOS's /data add-on (lineage/, addon.d/: run after LineageOS). pc/
 # holds the PC setup scripts (setup.sh, setup.ps1: everything over adb, Linux
 # and Windows) and the Linux installer that builds the image on the PC
 # (install-dualboot.sh --zip).
-# usage: mkdualbootzip.sh <payload dir> <lk2nd dir> <busybox> <gsi-unzip|-> <out.zip>
+# usage: mkdualbootzip.sh <payload dir> <lk2nd dir> <busybox> <xz> <gsi-unzip|-> <out.zip>
 #   lk2nd dir: lk2nd-gts3lwifi.img and/or lk2nd-gts3llte.img (v2)
 set -eu
-[ $# -eq 5 ] || { sed -n '2,9p' "$0" >&2; exit 1; }
-PAY=$1 LK=$2 BB=$3 UNZ=$4 OUT=$5
+[ $# -eq 6 ] || { sed -n '2,12p' "$0" >&2; exit 1; }
+PAY=$1 LK=$2 BB=$3 XZ=$4 UNZ=$5 OUT=$6
 HERE=$(cd "$(dirname "$0")" && pwd)
 [ -f "$PAY/nura-boot.tar" ] && [ -f "$PAY/nura.env" ] || { echo "no payload in $PAY" >&2; exit 1; }
-python3 - "$PAY" "$LK" "$BB" "$UNZ" "$HERE/update-binary" "$OUT" "$HERE/.." <<'PY'
+python3 - "$PAY" "$LK" "$BB" "$XZ" "$UNZ" "$HERE/update-binary" "$OUT" "$HERE/.." <<'PY'
 import hashlib, os, sys, zipfile
-pay, lk, bb, unz, ub, out, dualboot = sys.argv[1:]
+pay, lk, bb, xz, unz, ub, out, dualboot = sys.argv[1:]
 files = [(os.path.join(pay, f), f) for f in ("nura-boot.tar", "nura.env")]
 # android/: our Android (vendor.img, Image.gz, initramfs, cmdline, dtb/) and
 # the recovery on its kernel (recovery/)
@@ -29,7 +31,10 @@ for m in ("gts3lwifi", "gts3llte"):
     p = os.path.join(lk, f"lk2nd-{m}.img")
     if os.path.isfile(p):
         files.append((p, f"lk2nd-{m}.img"))
-tools = [(bb, "tools/busybox")] + ([(unz, "tools/gsi-unzip")] if unz != "-" else [])
+tools = [(bb, "tools/busybox"), (xz, "tools/xz")] + ([(unz, "tools/gsi-unzip")] if unz != "-" else [])
+# LineageOS's /data on android_data, run by the installer after LineageOS
+tools += [(os.path.join(dualboot, "lineage", "update-binary-data"), "lineage/update-binary-data"),
+          (os.path.join(dualboot, "lineage", "60-gts3-data.sh"), "addon.d/60-gts3-data.sh")]
 # Nura's one-time setup, for the staged install from a PC
 tools += [(os.path.join(dualboot, "gts3-firstsetup"), "tools/gts3-firstsetup")]
 hook = os.path.join(dualboot, "..", "..", "pmaports", "device-samsung-gts3lwifi", "20-gts3-dualboot.sh")

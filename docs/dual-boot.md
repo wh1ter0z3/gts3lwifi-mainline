@@ -266,15 +266,17 @@ second cpio archive. A current install builds the hook in.
 
 ## LineageOS next to Nura ("LineageOS mode")
 
-LineageOS 24 installs as it always did, and Nura stays. What
-changes is where lk2nd lives and where LineageOS keeps its /data.
+LineageOS (Awesometic's 18-21, Jayden's 24) installs from its own zip, and
+Nura stays. What changes is where lk2nd lives and where LineageOS keeps its
+/data. Since 2026-11-23 `setup.sh` does all of it (choose a LineageOS zip as
+the Android; layouts: [partitions.md](partitions.md)).
 
 | Partition | Dual boot (our Android) | LineageOS mode |
 |---|---|---|
-| boot | lk2nd v2 + `extlinux.conf` | LineageOS's own boot image |
+| boot | lk2nd v2 | LineageOS's own boot image |
 | recovery | the tablet's old recovery | **lk2nd v2** |
-| system | Samsung's (firmware only) | LineageOS |
-| userdata | the layout | the layout, android_data = LineageOS's /data |
+| system, cache, hidden | our layout (with userdata) | Samsung's: LineageOS |
+| userdata | our layout | our layout, android_data = LineageOS's /data |
 
 - A plain start boots the boot partition, so **LineageOS**.
 - The recovery path (`reboot recovery`, or Power + Volume Up + Home) starts
@@ -295,6 +297,10 @@ partition and a whole /data, and lk2nd can only boot it through S-Boot.
 User guide: [lineage-dual-boot-install.md](lineage-dual-boot-install.md).
 
 ### LineageOS's /data: the add-on
+
+The installer runs it itself right after LineageOS's own installer (setup.sh,
+or the zip with a `lineage-*.zip` next to it); by hand it is
+`gts3-lineage-data.zip`.
 
 [scripts/dualboot/lineage](../scripts/dualboot/lineage) makes
 `gts3-lineage-data.zip`, installed in our OrangeFox right after LineageOS.
@@ -454,7 +460,8 @@ from the device tree, and wrote:
    with `XZ_THREADS=2`), its UUIDs and size.
 3. lk2nd v2 for each model: `pack-lk2nd-from-v1.py` on that model's lk2nd-v1
    image, as `lk2nd-<gts3lwifi|gts3llte>.img` in one folder.
-4. `twrp/mkdualbootzip.sh <payload> <lk2nd folder> <busybox> <gsi-unzip>
+4. `twrp/mkxz.sh <xz>` (once: a static aarch64 xz, about 2 minutes), then
+   `twrp/mkdualbootzip.sh <payload> <lk2nd folder> <busybox> <xz> <gsi-unzip>
    <zip>`.
 5. The release: the zip, `nura-root.img.xz` with its `.sha256`, the lk2nd
    images (and Odin tars of them, `boot.img` inside), and SHA256SUMS.

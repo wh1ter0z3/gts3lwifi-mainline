@@ -1,51 +1,91 @@
 #!/system/bin/sh
-# OrangeFox in a Galaxy Tab S3 dual boot (gts3lwifi-mainline
-# docs/dual-boot.md), run by init at "on fs", before the recovery reads its
+# OrangeFox on a Galaxy Tab S3 with our layout (gts3lwifi-mainline
+# docs/partitions.md), run by init at "on fs", before the recovery reads its
 # partitions.
 #
-# When the userdata partition holds the dual boot layout (a GPT in it with a
-# gts3_boot partition), each of its partitions gets a loop device, linked as
-# /dev/block/gts3/<name>, and the recovery's /data becomes android_data:
-# Format Data and Android's factory reset then wipe Android's data only,
-# never Nura, lk2nd's menu or the layout. Nura's root and the Android images
-# are listed for backups.
+# Our layout's GPT is at the start of Samsung's system partition, spanning
+# system, cache, hidden and userdata (Samsung's own table can't be changed
+# outside Download mode), or, with LineageOS (or an older install), at the
+# start of userdata. Each of its partitions gets a loop device on the eMMC,
+# linked as /dev/block/gts3/<name>, and the recovery's /data becomes
+# android_data: Format Data and Android's factory reset then wipe Android's
+# data only, never Nura, lk2nd's menu or the layout. On the whole-storage
+# layout Samsung's system and cache hold our partitions, so they go from
+# the list too. Nura's root and the Android images are listed for backups.
 #
 # Offsets are worked out in awk: mksh computes in 32 bits. The recovery's
 # sgdisk (Android's build) takes long options only.
 # no heredocs: Android's mksh writes them to $TMPDIR, /data/local/tmp
 export TMPDIR=/tmp
-UD=/dev/block/bootdevice/by-name/userdata
+B=/dev/block/bootdevice/by-name
 FLAGS=/system/etc/twrp.flags
 G=/dev/block/gts3
 
 exec > /tmp/gts3-dualboot.log 2>&1
-[ -b $UD ] || { echo "no userdata partition"; exit 0; }
-sgdisk --print $UD > /tmp/gts3-dualboot.gpt 2>&1 || { echo "no GPT in userdata"; exit 0; }
-grep -q " gts3_boot$" /tmp/gts3-dualboot.gpt || { echo "userdata isn't the dual boot layout"; exit 0; }
+# One recovery for both models: on an SM-T825 it says so, for ROM zips that
+# check the device (LineageOS for gts3llte)
+if tr '\0' ' ' < /proc/device-tree/compatible 2> /dev/null | grep -q 'samsung,gts3llte'; then
+	for p in ro.product.device ro.build.product ro.product.vendor.device ro.product.system.device; do
+		resetprop "$p" gts3llte
+	done
+	echo "SM-T825: device gts3llte"
+fi
+# where the layout's GPT is: a GPT header at the start of system, else of userdata
+gpt_at() { [ "$(dd if="$1" bs=8 skip=64 count=1 2> /dev/null)" = "EFI PART" ]; }
+WHOLE=
+if [ -b $B/system ] && gpt_at $B/system; then
+	P=$(readlink -f $B/system)
+	WHOLE=1
+elif [ -b $B/userdata ]; then
+	P=$(readlink -f $B/userdata)
+else
+	echo "no userdata partition"
+	exit 0
+fi
+SP=/sys/class/block/${P##*/}
+DISK=/dev/block/$(basename "$(dirname "$(readlink -f "$SP")")")
+BASE=$(cat "$SP/start")
+# the GPT, through a read-only loop device on the eMMC from there on
+L=$(losetup -f) && losetup -r -o "$(awk -v b="$BASE" 'BEGIN { printf "%.0f", b * 512 }')" "$L" "$DISK" ||
+	{ echo "no loop device for the GPT"; exit 0; }
+sgdisk --print "$L" > /tmp/gts3-dualboot.gpt 2>&1
+losetup -d "$L"
+grep -q " gts3_boot$" /tmp/gts3-dualboot.gpt || { echo "${P##*/} isn't our layout"; exit 0; }
 
 mkdir -p $G
 # sgdisk --print: number, first sector, last sector, size, unit, code, name
 awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ { print $1, $2, $3, $NF }' /tmp/gts3-dualboot.gpt |
 while read -r n first last name; do
-	off=$(awk -v f="$first" 'BEGIN { printf "%.0f", f * 512 }')
+	off=$(awk -v b="$BASE" -v f="$first" 'BEGIN { printf "%.0f", (b + f) * 512 }')
 	len=$(awk -v f="$first" -v l="$last" 'BEGIN { printf "%.0f", (l - f + 1) * 512 }')
 	dev=$(losetup -f) || { echo "$name: no free loop device"; continue; }
-	losetup -o "$off" -S "$len" "$dev" $UD || { echo "$name: losetup failed"; continue; }
+	losetup -o "$off" -S "$len" "$dev" "$DISK" || { echo "$name: losetup failed"; continue; }
 	ln -sf "$dev" $G/"$name"
 	echo "$name: $dev, sectors $first-$last"
 done
 
-[ -e $G/android_data ] || { echo "no android_data: /data left as it is"; exit 0; }
-# /data: android_data, without the crypto footer reserve userdata had
-sed -i 's|^/data[[:space:]].*|/data           ext4    /dev/block/gts3/android_data     flags=display="Data (Android)"|' $FLAGS
+if [ -n "$WHOLE" ]; then
+	# Samsung's system and cache are inside the layout: not the recovery's
+	sed -i -e '/^\/system_root[[:space:]]/d' -e '/^\/system_image[[:space:]]/d' -e '/^\/cache[[:space:]]/d' $FLAGS
+fi
+if [ -e $G/android_data ]; then
+	# /data: android_data, without the crypto footer reserve userdata had
+	sed -i 's|^/data[[:space:]].*|/data           ext4    /dev/block/gts3/android_data     flags=display="Data (Android)"|' $FLAGS
+elif [ -n "$WHOLE" ]; then
+	# no /data at all: Format Data can't reach Nura
+	sed -i '/^\/data[[:space:]]/d' $FLAGS
+else
+	echo "no android_data: /data left as it is"
+	exit 0
+fi
 # only the partitions this install has (Nura only, Android only, or both)
 {
 	echo
-	echo "# Layout in userdata (added at start by gts3-dualboot-fox)"
+	echo "# Our layout in ${P##*/} (added at start by gts3-dualboot-fox)"
 	[ -e $G/nura ] && echo '/nura           ext4    /dev/block/gts3/nura            flags=display="Nura (postmarketOS)";backup=1'
 	echo '/gts3boot       emmc    /dev/block/gts3/gts3_boot       flags=display="Boot menu, kernels";backup=1'
 	[ -e $G/android_system ] && echo '/android_system emmc    /dev/block/gts3/android_system  flags=display="Android system image";backup=1;flashimg=1'
 	[ -e $G/android_vendor ] && echo '/android_vendor emmc    /dev/block/gts3/android_vendor  flags=display="Android vendor image";backup=1;flashimg=1'
 } >> $FLAGS
 setprop ro.gts3.dualboot 1
-echo "twrp.flags: /data is android_data"
+echo "twrp.flags: our layout in ${P##*/}"

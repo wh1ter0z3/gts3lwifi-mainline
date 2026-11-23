@@ -1,13 +1,15 @@
 #!/sbin/sh
-# Galaxy Tab S3 installer for OrangeFox / TWRP (docs/dual-boot.md): Nura
-# (postmarketOS), our Android (any GSI on our vendor), or both side by side
-# on internal storage, with lk2nd v2 to choose.
+# Galaxy Tab S3 installer for OrangeFox / TWRP (docs/dual-boot.md,
+# docs/partitions.md): Nura (postmarketOS), an Android (any GSI on our
+# vendor, or a LineageOS zip for the tablet: Awesometic's, Jayden's), or Nura
+# and one Android side by side on internal storage, with lk2nd v2 to choose.
 #
 # Put this zip in one folder on the microSD card or a USB drive with
 #   nura-root.img.xz                  -> Nura
-#   a GSI (named *system* or *gsi*:   -> Android
+#   a GSI (named *system* or *gsi*:   -> Android on our vendor
 #   .img, .img.xz, or a zip with system.img)
-# (both -> both side by side), then Install this zip. It ERASES the userdata
+#   lineage-*.zip                     -> LineageOS (its own kernel and vendor)
+# (Nura and an Android -> both side by side), then Install this zip. It ERASES the userdata
 # partition (internal storage: all Android data, a postmarketOS install),
 # makes the layout in it with only what is installed, writes the systems and
 # flashes lk2nd v2 to the start of the boot partition. Each way it adds
@@ -18,22 +20,25 @@
 # mksh computes in 32 bits). From the recovery: sgdisk, mke2fs, e2fsck,
 # resize2fs, simg2img, and toybox's losetup (offsets and sizes).
 # Arguments (update-binary protocol): <api> <outfd> <zip>
-# Test overrides: MODEL, DATA_DEV, BOOT_DEV, GSI, SYSTEM, VENDOR, DATA, WORK
+# Test overrides: MODEL, DATA_DEV, BOOT_DEV, RECOVERY_DEV, DISK_DEV, GSI, LOS,
+# SYSTEM, VENDOR, DATA, LOS_DATA, WORK
 #
 # Staged, for a PC over adb (setup.sh, setup.ps1), with the big images on
 # the PC instead of next to the zip. GTS3_STAGE picks the stage:
-#   layout  GTS3_SETUP=nura|android|both: everything but Nura's root and the
-#           GSI: the layout, the boot partition, Android's vendor and data.
-#           The partitions stay attached for the next stages
-#   recv    GTS3_PART=nura|android_system, GTS3_FORMAT=xz|raw,
+#   layout  GTS3_SETUP=nura|android|both|lineage|nura-lineage: everything
+#           but Nura's root, the GSI and the LineageOS zip: the layout, the
+#           boot partition, Android's vendor and data. The partitions stay
+#           attached for the next stages
+#   recv    GTS3_PART=nura|android_system|lineage, GTS3_FORMAT=xz|raw,
 #           GTS3_SHA256=<the sha256 of what is sent>: writes the image on
 #           stdin to that partition (adb shell -T ... < image; not adb
 #           exec-in, which returns before the tablet is done and without
-#           its output). It fails if the stream's sha256 differs (the zip's
-#           xzcat doesn't check xz's CRC64)
+#           its output). It fails if the stream's sha256 differs (busybox's
+#           xzcat, the fallback, doesn't check xz's CRC64). lineage: the zip, kept on
+#           LineageOS's data partition until finish installs it
 #   finish  Nura's root checked and grown; GTS3_ANSWERS=<dir> (optional):
 #           gts3-firstsetup with those answers and GTS3_UTC=<the PC's time>;
-#           then lk2nd v2
+#           the LineageOS zip; then lk2nd v2
 # Without GTS3_STAGE, all of it in one go from the files next to the zip.
 OUTFD=$2
 ZIP=$3
@@ -54,7 +59,12 @@ if [ -z "${GTS3_BB:-}" ]; then
 fi
 DATA_DEV=${DATA_DEV:-/dev/block/bootdevice/by-name/userdata}
 BOOT_DEV=${BOOT_DEV:-/dev/block/bootdevice/by-name/boot}
-SYSTEM=${SYSTEM:-4G} VENDOR=${VENDOR:-1G} DATA=${DATA:-4G}
+RECOVERY_DEV=${RECOVERY_DEV:-/dev/block/bootdevice/by-name/recovery}
+CACHE_DEV=${CACHE_DEV:-/dev/block/bootdevice/by-name/cache}
+DISK=${DISK_DEV:-/dev/block/mmcblk0}
+SYSTEM=${SYSTEM:-4G} VENDOR=${VENDOR:-1G} DATA=${DATA:-4G} LOS_DATA=${LOS_DATA:-8G}
+# the recovery's PATH, for LineageOS's own installer
+RPATH=${PATH#"$GTS3_BB":}
 W=${WORK:-/tmp/gts3-install}
 G=$W/dev
 DIR=$(dirname "$ZIP")
@@ -72,7 +82,7 @@ die() {
 	exit 1
 }
 cleanup() {
-	umount "$W/nura/sys" "$W/nura/proc" "$W/nura/dev" "$W/nura" "$W/mnt" 2> /dev/null
+	umount "$W/nura/sys" "$W/nura/proc" "$W/nura/dev" "$W/nura" "$W/mnt" "$W/los" 2> /dev/null
 	[ -z "$KEEP" ] || return 0
 	for l in $(cat "$W/loops" 2> /dev/null); do losetup -d "$l" 2> /dev/null; done
 	rm -f "$W/loops"
@@ -87,6 +97,18 @@ tool() {
 	return 1
 }
 SGDISK=$(tool sgdisk) || die "this recovery has no sgdisk"
+# xz to stdout: the zip's (XZ Utils 5.8, static: unpacks the image's blocks
+# on all four cores, 5x busybox's xzcat; the eMMC is then the limit), else
+# the recovery's, else busybox's
+unxz() {
+	if [ -x "$W/tools/xz" ] && "$W/tools/xz" --version > /dev/null 2>&1; then
+		"$W/tools/xz" -dc -T0 "$@"
+	elif x=$(tool xz); then
+		"$x" -dc "$@"
+	else
+		xzcat "$@"
+	fi
+}
 MKE2FS=$(tool mke2fs) || die "this recovery has no mke2fs"
 E2FSCK=$(tool e2fsck) || die "this recovery has no e2fsck"
 RESIZE2FS=$(tool resize2fs) || die "this recovery has no resize2fs"
@@ -132,8 +154,26 @@ ice_cmdline() {
 	*) printf '%s pmos_rootfsopts=defaults,inlinecrypt' "$1" ;;
 	esac
 }
-# the last step: lk2nd v2 to the start of the boot partition
+# the last step: lk2nd v2 to the start of the boot partition; with
+# LineageOS (its kernel in the boot partition) to the recovery partition:
+# Samsung's recovery start (Power + Volume Up + Home, "reboot recovery")
+# then gives lk2nd's menu
+haslk2nd() { head -c 4194304 "$1" 2> /dev/null | grep -a -q lk2nd; }
 flashlk2nd() {
+	if [ -n "$HAS_LOS" ]; then
+		if ! haslk2nd "$RECOVERY_DEV"; then
+			# what was there first (a TWRP, Samsung's recovery), to the zip's folder
+			SN=$(cat /sys/block/${DISK##*/}/device/serial 2> /dev/null)
+			RB=gts3-recovery-before-${MODEL}-${SN:-0}.img.gz
+			gzip -c "$RECOVERY_DEV" > "$DIR/$RB" 2> /dev/null || { rm -f "$DIR/$RB"; RB=; }
+			[ -z "$RB" ] || ui "The recovery partition as it was: $DIR/$RB"
+		fi
+		ui "lk2nd v2 to the recovery partition..."
+		dd if="$W/$LK2ND" of="$RECOVERY_DEV" bs=4096 conv=notrunc,fsync 2> /dev/null || die "writing lk2nd"
+		ui "Done ($SETUP). Reboot: LineageOS"
+		ui "(Power + Volume Up + Home at power-on, or \"reboot recovery\": lk2nd's menu, with $([ -n "$1" ] && echo "nura and ")orangefox)."
+		return 0
+	fi
 	ui "lk2nd v2..."
 	dd if="$W/$LK2ND" of="$BOOT_DEV" bs=4096 conv=notrunc,fsync 2> /dev/null || die "writing lk2nd"
 	if [ -n "$1" ]; then
@@ -144,33 +184,76 @@ flashlk2nd() {
 	ui "(Volume Down at power-on: lk2nd's menu, with orangefox)."
 }
 
+# LineageOS's own installer from its zip, as a recovery runs it: it writes
+# Samsung's system and boot partitions by name. /cache (its stash) is
+# Samsung's cache partition, made ext4 if it isn't (LineageOS formats it
+# anyway). Then its /data goes on the layout's android_data.
+runlos() {	# <zip>
+	ui "LineageOS: $(basename "$1") (a few minutes)..."
+	unzip -p "$1" META-INF/com/google/android/update-binary > "$W/los-updater" && [ -s "$W/los-updater" ] ||
+		die "no installer in $(basename "$1")"
+	chmod 0755 "$W/los-updater"
+	mkdir -p /cache
+	umount /cache 2> /dev/null
+	if ! mount -t ext4 "$CACHE_DEV" /cache 2> /dev/null; then
+		$MKE2FS -q -F -t ext4 "$CACHE_DEV" > /dev/null 2>&1 && mount -t ext4 "$CACHE_DEV" /cache ||
+			die "mount the cache partition"
+	fi
+	(cd /tmp && PATH=$RPATH "$W/los-updater" 3 "$OUTFD" "$1")
+	rc=$?
+	umount /cache 2> /dev/null || umount -l /cache
+	[ $rc = 0 ] || die "LineageOS's installer failed (above)"
+	# its /data: a dm-linear device over android_data (scripts/dualboot/lineage)
+	ui "LineageOS: its /data on android_data..."
+	[ -s "$W/lineage/update-binary-data" ] || die "no lineage/update-binary-data in the zip"
+	DATA_DEV=$DATA_DEV sh "$W/lineage/update-binary-data" 3 "$OUTFD" "$ZIP" || die "LineageOS's /data add-on failed (above)"
+}
+los_device() {	# <zip>: for this model (LineageOS's installer checks it too)
+	unzip -p "$1" META-INF/com/google/android/updater-script 2> /dev/null > "$W/los-script"
+	grep -q 'by-name/system' "$W/los-script" || die "$(basename "$1") isn't a LineageOS zip for the Tab S3"
+	grep -q "\"$MODEL\"" "$W/los-script" || die "$(basename "$1") is for another model (this is $MODEL)"
+}
+lospath() {	# the zip as the PC sent it, on LineageOS's data (android_data)
+	mkdir -p "$W/los"
+	awk -v m="$W/los" '$2 == m { found = 1 } END { exit !found }' /proc/mounts ||
+		mount -t ext4 "$G/android_data" "$W/los" || die "mount LineageOS's data partition"
+	echo "$W/los/lineage.zip"
+}
+
 # after a layout stage userdata is changed, whatever fails
 [ -z "$KEEP" ] || [ ! -f stage.env ] || ERASED=1
 if [ "$STAGE" = recv ]; then
 	P=${GTS3_PART:-} F=${GTS3_FORMAT:-xz}
-	case "$P" in nura | android_system) ;; *) die "GTS3_PART: nura or android_system" ;; esac
+	case "$P" in nura | android_system | lineage) ;; *) die "GTS3_PART: nura, android_system or lineage" ;; esac
 	case "$F" in xz | raw) ;; *) die "GTS3_FORMAT: xz or raw" ;; esac
 	printf '%s' "${GTS3_SHA256:-}" | grep -Eq '^[0-9a-f]{64}$' || die "GTS3_SHA256: the sha256 of the image as sent"
-	[ -f stage.env ] && [ -b "$G/$P" ] || die "no $P partition: run the layout stage first"
+	OUT=$G/$P
+	if [ "$P" = lineage ]; then
+		[ -f stage.env ] && [ -b "$G/android_data" ] || die "no LineageOS layout: run the layout stage first"
+		[ "$F" = raw ] || die "the LineageOS zip goes as it is (GTS3_FORMAT=raw)"
+		OUT=$(lospath)
+	fi
+	[ -f stage.env ] && { [ "$P" = lineage ] || [ -b "$OUT" ]; } || die "no $P partition: run the layout stage first"
 	rm -f "got-$P" recv.fifo recv.sum
 	mkfifo recv.fifo || die "mkfifo"
 	# the sha256 of the stream as sent, for the PC to compare
 	sha256sum < recv.fifo > recv.sum &
 	set -o pipefail
 	if [ "$F" = xz ]; then
-		tee recv.fifo | xzcat > "$G/$P"
+		tee recv.fifo | unxz > "$OUT"
 	else
-		tee recv.fifo | dd of="$G/$P" bs=4M 2> /dev/null
+		tee recv.fifo | dd of="$OUT" bs=4M 2> /dev/null
 	fi
 	rc=$?
 	set +o pipefail
 	wait
 	sync
 	[ $rc = 0 ] || die "writing $P: a damaged image, or larger than its partition"
-	if [ "$P" = android_system ] && [ "$(od -An -tx1 -N4 "$G/$P" | tr -d ' ')" = 3aff26ed ]; then
+	if [ "$P" = android_system ] && [ "$(od -An -tx1 -N4 "$OUT" | tr -d ' ')" = 3aff26ed ]; then
 		die "the GSI is a sparse image: unpack it first (simg2img)"
 	fi
 	s=$(cut -d' ' -f1 recv.sum)
+	[ "$P" != lineage ] || umount "$W/los" || die "umount LineageOS's data partition"
 	[ "$s" = "$GTS3_SHA256" ] || die "$P arrived damaged (sha256 $s): send it again"
 	echo "$s" > "got-$P"
 	ui "$P: written, sha256 matches"
@@ -182,6 +265,7 @@ if [ "$STAGE" = finish ]; then
 	. ./stage.env
 	[ -z "$HAS_NURA" ] || [ -f got-nura ] || die "Nura's root wasn't sent"
 	[ -z "$HAS_GSI" ] || [ -f got-android_system ] || die "the GSI wasn't sent"
+	[ -z "$HAS_LOS" ] || [ -f got-lineage ] || die "the LineageOS zip wasn't sent"
 	if [ -n "$HAS_NURA" ]; then
 		fixroot
 		if [ -n "${GTS3_ANSWERS:-}" ]; then
@@ -197,6 +281,13 @@ if [ "$STAGE" = finish ]; then
 			umount "$W/nura" && umount "$W/mnt" || die "umount"
 		fi
 	fi
+	if [ -n "$HAS_LOS" ]; then
+		Z=$(lospath)
+		los_device "$Z"
+		runlos "$Z"
+		rm -f "$Z"
+		umount "$W/los" || die "umount LineageOS's data partition"
+	fi
 	KEEP=
 	cleanup
 	flashlk2nd "$HAS_NURA"
@@ -210,6 +301,7 @@ BIG="nura-boot.tar android/vendor.img"
 unzip -o -q "$ZIP" -x 'META-INF/*' $BIG || die "can't unpack the zip"
 grep -v -e ' nura-boot\.tar$' -e ' android/vendor\.img$' SHA256SUMS > sums.small
 sha256sum -c -s sums.small 2> /dev/null || die "the zip's files are damaged, download it again"
+chmod 0755 tools/* lineage/* 2> /dev/null
 zsum() {	# the sha256 of $1 in the zip is the listed one
 	[ "$(unzip -p "$ZIP" "$1" | sha256sum | cut -d' ' -f1)" = "$(awk -v f="$1" '$2 == f { print $1 }' SHA256SUMS)" ]
 }
@@ -231,25 +323,34 @@ RDTB=
 # the GSI: a system image by its name (other images may be in the folder);
 # staged: the PC has them, GTS3_SETUP says which
 if [ "$STAGE" = layout ]; then
+	LOS=
 	case "${GTS3_SETUP:-}" in
 	nura) ROOT=pc GSI= ;;
 	android) ROOT= GSI=pc ;;
 	both) ROOT=pc GSI=pc ;;
-	*) die "GTS3_SETUP: nura, android or both" ;;
+	lineage) ROOT= GSI= LOS=pc ;;
+	nura-lineage) ROOT=pc GSI= LOS=pc ;;
+	*) die "GTS3_SETUP: nura, android, both, lineage or nura-lineage" ;;
 	esac
-elif [ -z "${GSI:-}" ]; then
-	GSI=$(ls "$DIR"/*system*.img "$DIR"/*system*.img.xz "$DIR"/*gsi*.img "$DIR"/*gsi*.img.xz \
+else
+	[ -n "${GSI:-}" ] || GSI=$(ls "$DIR"/*system*.img "$DIR"/*system*.img.xz "$DIR"/*gsi*.img "$DIR"/*gsi*.img.xz \
 		"$DIR"/*system*.zip "$DIR"/*gsi*.zip 2> /dev/null | grep -v -e nura-root -e "$(basename "$ZIP")" | head -n 1)
+	[ -n "${LOS:-}" ] || LOS=$(ls "$DIR"/lineage-*.zip 2> /dev/null | head -n 1)
 fi
+[ -z "$GSI" ] || [ -z "$LOS" ] || die "one Android: a GSI or a LineageOS zip, not both"
 [ -z "$GSI" ] || [ -s "$ADTB" ] || die "this zip has no Android files for $MODEL"
-[ -n "$ROOT$GSI" ] || die "put nura-root.img.xz (Nura) and/or a GSI (Android) next to this zip"
-if [ -n "$ROOT" ] && [ -n "$GSI" ]; then SETUP="Nura and Android"
+[ -n "$ROOT$GSI$LOS" ] || die "put nura-root.img.xz (Nura) and/or a GSI or a LineageOS zip (Android) next to this zip"
+A="Android"
+[ -z "$LOS" ] || A="LineageOS"
+if [ -n "$ROOT" ] && [ -n "$GSI$LOS" ]; then SETUP="Nura and $A"
 elif [ -n "$ROOT" ]; then SETUP="Nura only"
-else SETUP="Android only"; fi
+else SETUP="$A only"; fi
 ui "Installing: $SETUP"
 if [ "$STAGE" = all ]; then
 	[ -z "$ROOT" ] || ui "Nura: $(basename "$ROOT")"
 	[ -z "$GSI" ] || ui "Android: $(basename "$GSI")"
+	[ -z "$LOS" ] || ui "LineageOS: $(basename "$LOS")"
+	[ -z "$LOS" ] || los_device "$LOS"
 fi
 ui "Checking the zip..."
 [ -z "$ROOT" ] || zsum nura-boot.tar || die "nura-boot.tar in the zip is damaged, download it again"
@@ -259,68 +360,86 @@ if [ "$STAGE" = all ] && [ -n "$ROOT" ] && [ -f "$ROOT.sha256" ]; then
 	[ "$(sha256sum "$ROOT" | cut -d' ' -f1)" = "$(cut -d' ' -f1 "$ROOT.sha256")" ] || die "$(basename "$ROOT") is damaged, download it again"
 fi
 
-# userdata free: the recovery may have it mounted, or (dual boot mode) loop
-# devices on it with /data on one of them
-UD=$(readlink -f "$DATA_DEV")
-LOOPS=$($LOSETUP -a 2> /dev/null | grep -F "($UD)" | cut -d: -f1)
-for d in "$UD" $LOOPS; do
-	for m in $(awk -v d="$d" '$1 == d { print $2 }' /proc/mounts); do umount "$m" 2> /dev/null || umount -l "$m"; done
+# Where the layout goes (docs/partitions.md). Samsung's partition table
+# can't be changed outside Download mode: its bootloader write-protects the
+# start of the eMMC. So ours is a GPT inside one of Samsung's partitions:
+#  - Nura, our Android: at the start of Samsung's system partition, the GPT
+#    spanning system, cache, hidden and userdata (contiguous to the end of
+#    the eMMC, as Samsung lays them out: 28.6 GiB);
+#  - LineageOS (it keeps Samsung's system, cache and hidden), another table,
+#    or GTS3_NESTED=1: at the start of userdata.
+# lk2nd reads a table inside a partition only as MBR: a hybrid MBR there
+# points it at gts3_boot. Nura's initramfs, OrangeFox and gsi-init look for
+# the GPT at the start of system, then of userdata.
+row() {	# <name>: number, first and last sector of that eMMC partition
+	awk -v n="$1" '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $NF == n { print $1, $2, $3 }' "$W/gpt-disk"
+}
+tail_check() {	# Samsung's last four, contiguous to the end: sets TSTART, TLAST
+	TLAST=$(sed -n 's/.*last usable sector is \([0-9]*\).*/\1/p' "$W/gpt-disk")
+	set -- $(row system)
+	[ $# = 3 ] || return 1
+	TSTART=$2 k=" $1 " l=$3
+	for p in cache hidden userdata; do
+		set -- $(row $p)
+		[ $# = 3 ] && [ "$2" = $((l + 1)) ] || return 1
+		k="$k$1 " l=$3
+	done
+	[ "$l" = "$TLAST" ] || return 1
+	# nothing else from system's start on
+	[ -z "$(awk -v b="$TSTART" -v k="$k" \
+		'$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $2 >= b && index(k, " " $1 " ") == 0' "$W/gpt-disk")" ] || return 1
+	# at least 10 GiB
+	[ $((TLAST - TSTART + 1)) -ge $((10240 * 2048)) ]
+}
+sectors() {	# <size with M or G>: in 512-byte sectors
+	case "$1" in
+	*G) echo $((${1%G} * 2097152)) ;;
+	*M) echo $((${1%M} * 2048)) ;;
+	*) echo "$1" ;;
+	esac
+}
+$SGDISK --print "$DISK" > "$W/gpt-disk" 2>&1 || die "can't read the eMMC's partition table"
+WHOLE=
+if [ -z "$LOS" ] && [ -z "${GTS3_NESTED:-}" ]; then
+	if tail_check; then
+		WHOLE=1
+		ui "On the whole internal storage (Samsung's system, cache, hidden, userdata)"
+	else
+		ui "Samsung's last partitions aren't as expected: the layout goes in userdata"
+	fi
+fi
+
+# Samsung's partitions free: the recovery may have them mounted, or (our
+# layout) loop devices on them with /data on one of them
+mounts() { awk '{ print $1, $2 }' /proc/mounts | while read -r s m; do [ "$(readlink -f "$s")" = "$1" ] && echo "$m"; done; }
+for m in /data /sdcard /cache /system_root /system; do umount "$m" 2> /dev/null; done
+WD=$(readlink -f "$DATA_DEV")
+for p in system cache hidden userdata; do
+	set -- $(row $p)
+	[ $# = 3 ] && [ -b "${DISK}p$1" ] && WD="$WD ${DISK}p$1"
 done
-for m in /data /sdcard; do umount "$m" 2> /dev/null; done
-for d in "$UD" $LOOPS; do
-	awk -v d="$d" '$1 == d { found = 1 } END { exit !found }' /proc/mounts && die "$d is still mounted"
+LOOPS=
+for l in $($LOSETUP -a 2> /dev/null | cut -d: -f1); do
+	case "$($LOSETUP -a 2> /dev/null | grep "^$l:")" in *"(${DISK})"* | *"(${DISK#/dev/block/})"* | *"($(readlink -f "$DATA_DEV"))"*) LOOPS="$LOOPS $l" ;; esac
+done
+for d in $WD $LOOPS; do
+	for m in $(mounts "$d"); do umount "$m" 2> /dev/null || umount -l "$m"; done
+done
+for d in $WD $LOOPS; do
+	[ -z "$(mounts "$d")" ] || die "$d is still mounted"
 done
 for l in $LOOPS; do $LOSETUP -d "$l" || die "can't free $l"; done
-
-ui "Making the layout in userdata..."
-ERASED=1
-# long options only: the recoveries' sgdisk (Android's build) has no short ones
-# Only what is installed. Nura only: android_data stays, small, for the
-# recovery's /data (it must not be userdata: that holds the layout). The
-# last partition gets the rest. Everything finds them by name.
-NP=1 PARTS="--new=1:2048:+512M --typecode=1:EF00 --change-name=1:gts3_boot"
-addpart() { NP=$((NP + 1)); PARTS="$PARTS --new=$NP:0:$2 --typecode=$NP:8300 --change-name=$NP:$1"; }
-if [ -n "$GSI" ]; then
-	addpart android_system "+$SYSTEM"
-	addpart android_vendor "+$VENDOR"
-fi
-if [ -z "$ROOT" ]; then
-	addpart android_data 0
-elif [ -z "$GSI" ]; then
-	addpart android_data +256M
-	addpart nura 0
-else
-	addpart android_data "+$DATA"
-	addpart nura 0
-fi
-$SGDISK --zap-all "$DATA_DEV" > /dev/null 2>&1
-# shellcheck disable=SC2086
-$SGDISK --clear $PARTS "$DATA_DEV" > "$W/sgdisk.log" 2>&1 || die "sgdisk: $(tail -n 1 "$W/sgdisk.log")"
-$SGDISK --print "$DATA_DEV" > "$W/gpt" 2>&1 || die "no GPT after sgdisk"
 
 # start and last sector of partition $1 (a number or a name)
 first() { awk -v n="$1" '$1 == n || $NF == n { print $2 }' "$W/gpt"; }
 last() { awk -v n="$1" '$1 == n || $NF == n { print $3 }' "$W/gpt"; }
-
-# Hybrid MBR (lk2nd reads only MBR): entry 0 = gts3_boot, entry 1 = 0xEE
-le32() { printf '\\%03o\\%03o\\%03o\\%03o' $(($1 & 255)) $((($1 >> 8) & 255)) $((($1 >> 16) & 255)) $((($1 >> 24) & 255)); }
-bs=$(first 1); bl=$(($(last 1) - bs + 1))
-chs='\376\377\377'
-{
-	printf "\\000$chs\\203$chs$(le32 "$bs")$(le32 "$bl")\\000$chs\\356$chs$(le32 1)$(le32 $((bs - 1)))"
-	dd if=/dev/zero bs=32 count=1 2> /dev/null
-	printf '\125\252'
-} > "$W/mbr"
-[ "$(stat -c %s "$W/mbr")" = 66 ] || die "hybrid MBR"
-dd if="$W/mbr" of="$DATA_DEV" bs=1 seek=446 conv=notrunc,fsync 2> /dev/null || die "writing the MBR"
-
-# A loop device for each partition, $G/<name>: toybox's losetup (the
-# recovery's) takes -S for the size, util-linux's --sizelimit
-attach() {	# <loop device> <offset> <size>, in bytes
+# loop devices: toybox's losetup (the recovery's) takes -S for the size,
+# util-linux's --sizelimit
+attach() {	# <loop device> <offset> <size>, in bytes, <file>
 	if $LOSETUP --help 2>&1 | grep -q -e --sizelimit; then
-		$LOSETUP -o "$2" --sizelimit "$3" "$1" "$DATA_DEV"
+		$LOSETUP -o "$2" --sizelimit "$3" "$1" "$4"
 	else
-		$LOSETUP -o "$2" -S "$3" "$1" "$DATA_DEV"
+		$LOSETUP -o "$2" -S "$3" "$1" "$4"
 	fi
 }
 # a free loop device. losetup -f may add one to the kernel and then fail to
@@ -341,12 +460,81 @@ newloop() {
 	done
 	return 1
 }
+# a GPT header at sector 1 of $1 (a file or device) from sector $2 on
+gpt_at() { [ "$(dd if="$1" bs=512 skip=$(($2 + 1)) count=1 2> /dev/null | head -c 8)" = "EFI PART" ]; }
+
+ERASED=1
+SYS=$(row system)
+if [ -n "$WHOLE" ]; then
+	ui "Making the layout in system, cache, hidden and userdata..."
+	# userdata's start: an older layout's table there would be found too
+	set -- $(row userdata)
+	dd if=/dev/zero of="$DISK" bs=512 seek="$2" count=2048 conv=notrunc,fsync 2> /dev/null || die "clearing userdata's start"
+	# the GPT on a loop device over the four, so it ends where userdata ends
+	CDEV=$(newloop) || die "no free loop device"
+	attach "$CDEV" $((TSTART * 512)) $(((TLAST - TSTART + 1) * 512)) "$DISK" || die "losetup for the layout"
+	SRC=$DISK PBASE=$((TSTART * 512))
+else
+	ui "Making the layout in userdata..."
+	# system's start: a whole-storage layout's table there would be found first
+	set -- $SYS
+	if [ $# = 3 ] && gpt_at "$DISK" "$2"; then
+		dd if=/dev/zero of="$DISK" bs=512 seek="$2" count=2048 conv=notrunc,fsync 2> /dev/null || die "clearing system's start"
+	fi
+	CDEV=$DATA_DEV SRC=$DATA_DEV PBASE=0
+fi
+# long options only: the recoveries' sgdisk (Android's build) has no short ones
+# Only what is installed; the last partition gets the rest. Nura only in
+# userdata: android_data stays, small, for the recovery's /data (it must not
+# be userdata: that holds the layout). Everything finds them by name.
+NP=1 PARTS="--new=1:2048:+512M --typecode=1:EF00 --change-name=1:gts3_boot"
+addpart() { NP=$((NP + 1)); PARTS="$PARTS --new=$NP:0:$2 --typecode=$NP:8300 --change-name=$NP:$1"; }
+if [ -n "$GSI" ]; then
+	addpart android_system "+$SYSTEM"
+	addpart android_vendor "+$VENDOR"
+fi
+if [ -z "$ROOT" ]; then
+	addpart android_data 0
+elif [ -n "$GSI" ]; then
+	addpart android_data "+$DATA"
+	addpart nura 0
+elif [ -n "$LOS" ]; then
+	addpart android_data "+$LOS_DATA"
+	addpart nura 0
+elif [ -n "$WHOLE" ]; then
+	addpart nura 0
+else
+	addpart android_data +256M
+	addpart nura 0
+fi
+$SGDISK --zap-all "$CDEV" > /dev/null 2>&1
+# shellcheck disable=SC2086
+$SGDISK --clear $PARTS "$CDEV" > "$W/sgdisk.log" 2>&1 || die "sgdisk: $(tail -n 1 "$W/sgdisk.log")"
+$SGDISK --print "$CDEV" > "$W/gpt" 2>&1 || die "no GPT after sgdisk"
+
+# Hybrid MBR (lk2nd reads only MBR): entry 0 = gts3_boot, entry 1 = 0xEE
+le32() { printf '\\%03o\\%03o\\%03o\\%03o' $(($1 & 255)) $((($1 >> 8) & 255)) $((($1 >> 16) & 255)) $((($1 >> 24) & 255)); }
+bs=$(first 1); bl=$(($(last 1) - bs + 1))
+chs='\376\377\377'
+{
+	printf "\\000$chs\\203$chs$(le32 "$bs")$(le32 "$bl")\\000$chs\\356$chs$(le32 1)$(le32 $((bs - 1)))"
+	dd if=/dev/zero bs=32 count=1 2> /dev/null
+	printf '\125\252'
+} > "$W/mbr"
+[ "$(stat -c %s "$W/mbr")" = 66 ] || die "hybrid MBR"
+dd if="$W/mbr" of="$CDEV" bs=1 seek=446 conv=notrunc,fsync 2> /dev/null || die "writing the MBR"
+sync
+[ -z "$WHOLE" ] || $LOSETUP -d "$CDEV" || die "can't free $CDEV"
+
+# A loop device for each partition, $G/<name>
+# links from an earlier run would point at loop devices now used otherwise
+rm -f "$G"/*
 : > "$W/loops"
 for n in $(awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { print $1 }' "$W/gpt"); do
 	f=$(first $n) l=$(last $n)
 	name=$(awk -v n="$n" '$1 == n { print $NF }' "$W/gpt")
 	dev=$(newloop) || die "no free loop device"
-	attach "$dev" $((f * 512)) $(((l - f + 1) * 512)) || die "losetup $name"
+	attach "$dev" $((PBASE + f * 512)) $(((l - f + 1) * 512)) "$SRC" || die "losetup $name"
 	echo "$dev" >> "$W/loops"
 	ln -sf "$dev" "$G/$name"
 done
@@ -379,6 +567,8 @@ mkdir -p "$W/mnt/extlinux"
 		echo "	initrd /initramfs"
 		echo "	fdt /$DTB"
 		echo "	append $(ice_cmdline "$NURA_CMDLINE")"
+	elif [ -n "$LOS" ]; then
+		echo "default orangefox"
 	else
 		echo "default android"
 	fi
@@ -388,7 +578,7 @@ mkdir -p "$W/mnt/extlinux"
 		echo "	linux /gts3/android/Image.gz"
 		echo "	initrd /gts3/android/initramfs"
 		echo "	fdt /gts3/android/gts3.dtb"
-		echo "	append $(cat android/cmdline) gsi.parts=1"
+		echo "	append $(cat android/cmdline) gsi.parts=1${WHOLE:+ gsi.disk=system}"
 	fi
 	if [ -n "$RDTB" ]; then
 		echo
@@ -409,14 +599,18 @@ if [ "$STAGE" = all ] && [ -n "$ROOT" ]; then
 		if [ -n "${ROOT_BYTES:-}" ]; then
 			[ "$ROOT_BYTES" -le $((($(last nura) - $(first nura) + 1) * 512)) ] || die "Nura's root is larger than its partition"
 		fi
-		xzcat "$ROOT" > "$G/nura" || die "unpacking $(basename "$ROOT")" ;;
+		unxz "$ROOT" > "$G/nura" || die "unpacking $(basename "$ROOT")" ;;
 	*) $SIMG2IMG "$ROOT" "$G/nura" || die "simg2img $(basename "$ROOT")" ;;
 	esac
 	fixroot
 fi
 
-[ -n "$GSI" ] && ui "Android: data..." || ui "The recovery's data partition..."
-$MKE2FS -q -F -t ext4 -L android_data "$G/android_data" > /dev/null 2>&1 || die "mke2fs android_data"
+if [ -e "$G/android_data" ]; then
+	if [ -n "$GSI" ]; then ui "Android: data..."
+	elif [ -n "$LOS" ]; then ui "LineageOS: data..."
+	else ui "The recovery's data partition..."; fi
+	$MKE2FS -q -F -t ext4 -L android_data "$G/android_data" > /dev/null 2>&1 || die "mke2fs android_data"
+fi
 if [ -n "$GSI" ]; then
 	ui "Android: vendor, system..."
 	unzip -p "$ZIP" android/vendor.img | dd of="$G/android_vendor" bs=4M conv=fsync 2> /dev/null || die "vendor image"
@@ -430,7 +624,7 @@ if [ "$STAGE" = all ] && [ -n "$GSI" ]; then
 		n=$($UNZIP -Z1 "$GSI" 2> /dev/null | grep -E '(^|/)system\.img$' | head -n 1)
 		[ -n "$n" ] || die "no system.img in $(basename "$GSI")"
 		$UNZIP -p "$GSI" "$n" > "$G/android_system" || die "system image" ;;
-	*.xz) xzcat "$GSI" > "$G/android_system" || die "system image" ;;
+	*.xz) unxz "$GSI" > "$G/android_system" || die "system image" ;;
 	*)
 		if [ "$(od -An -tx1 -N4 "$GSI" | tr -d ' ')" = 3aff26ed ]; then
 			$SIMG2IMG "$GSI" "$G/android_system" || die "system image"
@@ -440,20 +634,25 @@ if [ "$STAGE" = all ] && [ -n "$GSI" ]; then
 	esac
 fi
 sync
+HAS_LOS=${LOS:+1}
 if [ "$STAGE" = layout ]; then
 	# for the next stages; the partitions stay attached
 	{
 		echo "SETUP='$SETUP'"
 		echo "HAS_NURA=${ROOT:+1}"
 		echo "HAS_GSI=${GSI:+1}"
+		echo "HAS_LOS=$HAS_LOS"
 		echo "LK2ND=$LK2ND"
+		echo "WHOLE=$WHOLE"
 	} > stage.env
 	n=
 	[ -z "$ROOT" ] || n="Nura's root"
 	[ -z "$GSI" ] || n="${n:+$n and }the GSI"
+	[ -z "$LOS" ] || n="${n:+$n and }the LineageOS zip"
 	ui "Layout done. Next: the PC sends $n"
 	exit 0
 fi
+[ "$STAGE" != all ] || [ -z "$LOS" ] || runlos "$LOS"
 cleanup
 flashlk2nd "$ROOT"
 exit 0

@@ -1,33 +1,40 @@
 #!/usr/bin/env bash
-# Galaxy Tab S3 (SM-T820, SM-T825): installs Nura (postmarketOS), our Android
-# (a GSI on our open vendor), or both, from a Linux PC, and sets Nura up with
-# your account, Wi-Fi, time zone and keyboard. Needs only adb and fastboot.
+# Galaxy Tab S3 (SM-T820, SM-T825): installs Nura (postmarketOS), an Android
+# (a GSI on our open vendor, or LineageOS for the tablet: Awesometic's,
+# Jayden's), or Nura and one Android side by side, from a Linux PC, and sets
+# Nura up with your account, Wi-Fi, time zone and keyboard. Needs only adb and
+# fastboot (docs/partitions.md: what goes where).
 #
 # The tablet does the work: this script starts our OrangeFox on it from RAM
 # (nothing is flashed for that), hands it the release's installer zip and
 # streams Nura's root and the GSI to it over USB (docs/dual-boot.md, "Staged
 # install"). setup.ps1 does the same on Windows.
 #
-# usage: setup.sh [--gsi <GSI .img or .img.xz>] [--ssh-key <public key file>]
-#                 [<folder with the release files>]
+# usage: setup.sh [--gsi <GSI .img or .img.xz>] [--lineage <LineageOS zip>]
+#                 [--ssh-key <public key file>] [<folder with the release files>]
 #   --ssh-key: turn on Nura's SSH server with that key (key logins only);
 #   without it, setup asks whether to turn SSH on
 #   the folder (default: this script's): gts3-dualboot-*.zip,
 #   OrangeFox-mainline-<model>-fastboot-boot.img, and nura-root.img.xz (+ its
-#   .sha256) for Nura; a GSI (*system*.img(.xz) or *gsi*.img(.xz)) for Android
+#   .sha256) for Nura; a GSI (*system*.img(.xz) or *gsi*.img(.xz)) or a
+#   LineageOS zip (lineage-*.zip) for Android
 # The tablet: in lk2nd's fastboot mode (Volume Down at power-on, then
 # fastboot), or already in our OrangeFox.
-# ERASES the userdata partition (internal storage). The microSD card, the
-# tablet's firmware partitions and its recovery partition are not touched.
+# ERASES the internal storage: Samsung's system, cache, hidden and userdata
+# partitions get our layout inside them (with LineageOS: userdata only).
+# Samsung's partition table stays as it is. With LineageOS, lk2nd goes to the
+# recovery partition (what was there is copied to this PC first). The microSD
+# card and the tablet's firmware partitions are not touched.
 set -euo pipefail
 
 T=/tmp/gts3-setup
-DIR= GSI= SSHKEYFILE=
+DIR= GSI= LOS= SSHKEYFILE=
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--gsi) GSI=$2; shift 2 ;;
+	--lineage) LOS=$2; shift 2 ;;
 	--ssh-key) SSHKEYFILE=$2; shift 2 ;;
-	-h | --help) sed -n '2,23p' "$0"; exit 0 ;;
+	-h | --help) sed -n '2,27p' "$0"; exit 0 ;;
 	*) DIR=$1; shift ;;
 	esac
 done
@@ -61,26 +68,45 @@ if [ -z "$GSI" ]; then
 		grep -v nura-root | head -n 1) || true
 fi
 [ -z "$GSI" ] || [ -f "$GSI" ] || die "no such GSI: $GSI"
-[ -n "$ROOT$GSI" ] || die "put nura-root.img.xz (Nura) and/or a GSI (Android) in $DIR"
+[ -n "$LOS" ] || LOS=$(ls -t "$DIR"/lineage-*.zip 2> /dev/null | head -n 1) || true
+[ -z "$LOS" ] || [ -f "$LOS" ] || die "no such LineageOS zip: $LOS"
+[ -n "$ROOT$GSI$LOS" ] || die "put nura-root.img.xz (Nura) and/or a GSI or a LineageOS zip (Android) in $DIR"
 
 step "What to install"
-if [ -n "$ROOT" ] && [ -n "$GSI" ]; then
-	say "1) Nura only   2) Android only   3) both side by side"
-	case "$(ask "Choose" 3)" in
-	1) SETUP=nura GSI= ;;
-	2) SETUP=android ROOT= ;;
-	3) SETUP=both ;;
-	*) die "1, 2 or 3" ;;
-	esac
-elif [ -n "$ROOT" ]; then
-	SETUP=nura
-	say "Nura only (put a GSI in $DIR for Android too)"
-else
-	SETUP=android
-	say "Android only (no nura-root.img.xz in $DIR)"
-fi
+# all five; the ones whose files aren't in the folder say what they need
+NAMES=("" "Nura only" "Android only (our open vendor + a GSI)" "Nura and Android, side by side"
+	"LineageOS only (Awesometic's, Jayden's)" "Nura and LineageOS, side by side")
+miss() {	# <choice>: the files it still needs, empty if ready
+	local m=
+	case $1 in 1 | 3 | 5) [ -n "$ROOT" ] || m="nura-root.img.xz" ;; esac
+	case $1 in 2 | 3) [ -n "$GSI" ] || m="${m:+$m and }a GSI (*system*.img or *gsi*.img, or .img.xz)" ;; esac
+	case $1 in 4 | 5) [ -n "$LOS" ] || m="${m:+$m and }a LineageOS zip (lineage-*.zip)" ;; esac
+	printf '%s' "$m"
+}
+def=
+for c in 1 2 3 4 5; do
+	m=$(miss $c)
+	if [ -z "$m" ]; then st=ready; def=${def:-$c}; else st="needs $m"; fi
+	printf '  %s) %-42s %s\n' $c "${NAMES[$c]}" "$st"
+done
+while :; do
+	c=$(ask "Choose 1-5" "$def")
+	case "$c" in [1-5]) ;; *) say "  a number from 1 to 5"; continue ;; esac
+	m=$(miss "$c")
+	[ -z "$m" ] && break
+	say "  that needs $m in $DIR (or --gsi / --lineage): put it there and run setup again, or choose another"
+done
+case $c in
+1) SETUP=nura GSI= LOS= ;;
+2) SETUP=android ROOT= LOS= ;;
+3) SETUP=both LOS= ;;
+4) SETUP=lineage ROOT= GSI= ;;
+5) SETUP=nura-lineage GSI= ;;
+esac
+SETUPNAME=${NAMES[$c]}
 [ -z "$ROOT" ] || say "Nura: $(basename "$ROOT")"
 [ -z "$GSI" ] || say "Android: $(basename "$GSI")"
+[ -z "$LOS" ] || say "LineageOS: $(basename "$LOS")"
 
 # What the GSI is: xz (unpacked on the tablet) or a raw image
 GSIFMT=
@@ -132,7 +158,15 @@ if [ -n "$ROOT" ]; then
 	kb=$(localectl status 2> /dev/null | sed -n 's/.*X11 Layout: *//p' | head -n 1) || true
 	put keyboard "$(ask "Keyboard layout(s)" "${kb:-us}")"
 	cc=$(printf '%s' "$loc" | sed -n 's/^[a-z]*_\([A-Z][A-Z]\).*/\1/p')
-	put country "$(ask "Country, for Wi-Fi (two letters)" "${cc:-US}" | tr 'a-z' 'A-Z')"
+	say "Country, for Wi-Fi (which channels and power are allowed): the two-letter"
+	say "  ISO 3166-1 code, e.g. IN India, US, GB United Kingdom (not UK), DE Germany,"
+	say "  FR France, AE United Arab Emirates, AU Australia, JP Japan"
+	while :; do
+		v=$(ask "Country" "${cc:-US}" | tr 'a-z' 'A-Z')
+		printf '%s' "$v" | grep -Eq '^[A-Z]{2}$' && [ "$v" != UK ] && break
+		[ "$v" = UK ] && say "  United Kingdom is GB" || say "  two letters, e.g. IN or US"
+	done
+	put country "$v"
 	v=$(ask "Wi-Fi network to join (empty: none)" "")
 	if [ -n "$v" ]; then
 		put wifi_ssid "$v"
@@ -180,46 +214,64 @@ state() {
 	fastboot devices 2> /dev/null | grep -q . && { echo fastboot; return; }
 	echo none
 }
+fox_up() {	# the tablet in our OrangeFox, $MODEL set
+	until [ "$(state)" != none ]; do sleep 2; done
+	if [ "$(state)" = fastboot ]; then
+		gv() { fastboot getvar "$1" 2>&1 | sed -n "s/^$1:[[:space:]]*//p" | head -n 1; }
+		case "$(gv lk2nd:compatible)" in
+		samsung,gts3lwifi) MODEL=gts3lwifi ;;
+		samsung,gts3llte) MODEL=gts3llte ;;
+		*) die "not a Galaxy Tab S3 in lk2nd" ;;
+		esac
+		FOX=$DIR/OrangeFox-mainline-$MODEL-fastboot-boot.img
+		[ -f "$FOX" ] || die "no $(basename "$FOX") in $DIR"
+		say "SM-$([ $MODEL = gts3lwifi ] && echo T820 || echo T825) in lk2nd: starting our OrangeFox (from RAM)..."
+		fastboot boot "$FOX" > /dev/null 2>&1 || die "fastboot boot failed"
+		n=0
+		until [ "$(state)" = recovery ]; do
+			sleep 2; n=$((n + 1))
+			[ $n -lt 60 ] || die "OrangeFox didn't show up over adb"
+		done
+	fi
+	# OrangeFox restarts USB once while it starts (MTP, which our kernel doesn't
+	# have): wait until its main page is up, then a little more
+	n=0
+	until adb shell "grep -q \"Set page: 'main'\" /tmp/recovery.log" < /dev/null > /dev/null 2>&1; do
+		sleep 2; n=$((n + 1))
+		[ $n -lt 60 ] || die "OrangeFox didn't finish starting"
+	done
+	sleep 5
+	adb wait-for-recovery
+	MODEL=$(adb shell cat /proc/device-tree/compatible < /dev/null | tr '\0' ' ' | grep -o 'samsung,gts3l[a-z]*' | head -n 1) || true
+	case "$MODEL" in
+	samsung,gts3lwifi) say "SM-T820 in OrangeFox" ;;
+	samsung,gts3llte) say "SM-T825 in OrangeFox" ;;
+	*) die "the recovery isn't our OrangeFox on a Galaxy Tab S3 ($MODEL)" ;;
+	esac
+}
 say "Connect it by USB, in lk2nd's fastboot mode (Volume Down at power-on, then"
 say "fastboot) or in our OrangeFox. Waiting..."
-until [ "$(state)" != none ]; do sleep 2; done
-if [ "$(state)" = fastboot ]; then
-	gv() { fastboot getvar "$1" 2>&1 | sed -n "s/^$1:[[:space:]]*//p" | head -n 1; }
-	case "$(gv lk2nd:compatible)" in
-	samsung,gts3lwifi) MODEL=gts3lwifi ;;
-	samsung,gts3llte) MODEL=gts3llte ;;
-	*) die "not a Galaxy Tab S3 in lk2nd" ;;
-	esac
-	FOX=$DIR/OrangeFox-mainline-$MODEL-fastboot-boot.img
-	[ -f "$FOX" ] || die "no $(basename "$FOX") in $DIR"
-	say "SM-$([ $MODEL = gts3lwifi ] && echo T820 || echo T825) in lk2nd: starting our OrangeFox (from RAM)..."
-	fastboot boot "$FOX" > /dev/null 2>&1 || die "fastboot boot failed"
-	n=0
-	until [ "$(state)" = recovery ]; do
-		sleep 2; n=$((n + 1))
-		[ $n -lt 60 ] || die "OrangeFox didn't show up over adb"
-	done
+fox_up
+# the LineageOS zip is for this model (the tablet checks it again)
+if [ -n "$LOS" ]; then
+	us=
+	if command -v unzip > /dev/null; then
+		us=$(unzip -p "$LOS" META-INF/com/google/android/updater-script 2> /dev/null) || true
+	elif command -v python3 > /dev/null; then
+		us=$(python3 -c 'import sys, zipfile; sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read("META-INF/com/google/android/updater-script").decode())' "$LOS" 2> /dev/null) || true
+	fi
+	if [ -n "$us" ]; then
+		printf '%s' "$us" | grep -q 'by-name/system' || die "$(basename "$LOS") isn't a LineageOS zip for the Tab S3"
+		printf '%s' "$us" | grep -q "\"${MODEL#samsung,}\"" || die "$(basename "$LOS") is for another model (this tablet: ${MODEL#samsung,})"
+	fi
 fi
-# OrangeFox restarts USB once while it starts (MTP, which our kernel doesn't
-# have): wait until its main page is up, then a little more
-n=0
-until adb shell "grep -q \"Set page: 'main'\" /tmp/recovery.log" < /dev/null > /dev/null 2>&1; do
-	sleep 2; n=$((n + 1))
-	[ $n -lt 60 ] || die "OrangeFox didn't finish starting"
-done
-sleep 5
-adb wait-for-recovery
-MODEL=$(adb shell cat /proc/device-tree/compatible < /dev/null | tr '\0' ' ' | grep -o 'samsung,gts3l[a-z]*' | head -n 1) || true
-case "$MODEL" in
-samsung,gts3lwifi) say "SM-T820 in OrangeFox" ;;
-samsung,gts3llte) say "SM-T825 in OrangeFox" ;;
-*) die "the recovery isn't our OrangeFox on a Galaxy Tab S3 ($MODEL)" ;;
-esac
 
 step "Last check"
-say "This ERASES the tablet's internal storage (userdata): Android's apps and"
-say "data, a postmarketOS install. The microSD card is not touched."
-say "Installing: $SETUP"
+say "This ERASES the tablet's internal storage (Samsung's system, cache, hidden"
+say "and userdata): Android's apps and data, a postmarketOS install. The microSD"
+say "card is not touched."
+[ -z "$LOS" ] || say "lk2nd goes to the recovery partition (what is there now is copied to this PC)."
+say "Installing: $SETUPNAME"
 read -r -p "Type yes to go on: " a
 [ "$a" = yes ] || die "stopped, nothing changed"
 
@@ -234,18 +286,26 @@ stage() {	# <stage> [env...] [< stdin]: the installer's messages, its status
 		sed -n 's/^ui_print \(..*\)/  \1/p'
 	return "${PIPESTATUS[0]}"
 }
-step "Copying the installer"
-adb shell "rm -rf $T && mkdir -p $T" < /dev/null > /dev/null
 push() {	# <file or dir> <tablet path>: once more if the USB link drops
 	adb push "$1" "$2" > /dev/null 2>&1 && return 0
 	sleep 3
 	adb wait-for-recovery
 	adb push "$1" "$2" > /dev/null
 }
-push "$ZIP" "$T/installer.zip" || die "adb push of the installer"
-adb shell "cd $T && unzip -o -q installer.zip META-INF/com/google/android/update-binary && mv META-INF/com/google/android/update-binary ub" < /dev/null ||
-	die "can't unpack the installer on the tablet"
-
+copy_installer() {
+	step "Copying the installer"
+	adb shell "rm -rf $T && mkdir -p $T" < /dev/null > /dev/null
+	push "$ZIP" "$T/installer.zip" || die "adb push of the installer"
+	adb shell "cd $T && unzip -o -q installer.zip META-INF/com/google/android/update-binary && mv META-INF/com/google/android/update-binary ub" < /dev/null ||
+		die "can't unpack the installer on the tablet"
+}
+pull_saved() {	# <pattern> <what>: files the installer saved, to this PC
+	for g in $(adb shell "ls $T/$1 2> /dev/null" < /dev/null | tr -d '\r'); do
+		adb pull "$g" "$DIR/" > /dev/null || die "couldn't copy $2 to this PC"
+		say "  $2, saved: $DIR/$(basename "$g") (keep it: docs/partitions.md, going back)"
+	done
+}
+copy_installer
 step "Layout"
 stage layout "GTS3_SETUP=$SETUP" < /dev/null || die "the layout failed (see above)"
 
@@ -275,6 +335,11 @@ if [ -n "$GSI" ]; then
 	send android_system "$GSI" "$GSIFMT" "$(sha256sum "$GSI" | cut -d' ' -f1)" ||
 		die "sending the GSI failed: run setup again"
 fi
+if [ -n "$LOS" ]; then
+	say "Checking $(basename "$LOS")..."
+	send lineage "$LOS" raw "$(sha256sum "$LOS" | cut -d' ' -f1)" ||
+		die "sending the LineageOS zip failed: run setup again"
+fi
 
 step "Finishing"
 FENV=
@@ -285,12 +350,20 @@ fi
 rc=0
 stage finish $FENV < /dev/null || rc=$?
 adb shell "rm -rf $T/answers" < /dev/null > /dev/null 2>&1 || :
+pull_saved 'gts3-recovery-before-*.img.gz' "The recovery partition as it was"
 [ $rc = 0 ] || die "finishing failed (see above)"
 
 step "Done"
+if [ -n "$LOS" ]; then
+	FIRST=LineageOS
+	MENU="Power + Volume Up + Home at power-on (or \"reboot recovery\"): lk2nd's menu, with $([ -n "$ROOT" ] && echo "Nura and ")OrangeFox."
+else
+	FIRST=$([ -n "$ROOT" ] && echo Nura || echo Android)
+	MENU="Volume Down at power-on: lk2nd's menu."
+fi
 if yes_no "Restart the tablet now"; then
 	adb reboot > /dev/null 2>&1 || :
-	say "It restarts into $([ -n "$ROOT" ] && echo Nura || echo Android). Volume Down at power-on: lk2nd's menu."
+	say "It restarts into $FIRST. $MENU"
 else
-	say "Restart it when you like: it starts $([ -n "$ROOT" ] && echo Nura || echo Android)."
+	say "Restart it when you like: it starts $FIRST. $MENU"
 fi

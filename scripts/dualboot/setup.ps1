@@ -1,7 +1,8 @@
 <#
-Galaxy Tab S3 (SM-T820, SM-T825): installs Nura (postmarketOS), our Android
-(a GSI on our open vendor), or both, from a Windows PC, and sets Nura up with
-your account, Wi-Fi, time zone and keyboard. Needs only adb and fastboot
+Galaxy Tab S3 (SM-T820, SM-T825): installs Nura (postmarketOS), an Android
+(a GSI on our open vendor, or LineageOS for the tablet: Awesometic's,
+Jayden's), or Nura and one Android side by side, from a Windows PC, and sets
+Nura up with your account, Wi-Fi, time zone and keyboard. Needs only adb and fastboot
 (Android platform tools: next to this script, in .\platform-tools, or in
 PATH). setup.sh does the same on Linux.
 
@@ -9,19 +10,24 @@ The tablet does the work: this script starts our OrangeFox on it from RAM
 (nothing is flashed for that), hands it the release's installer zip and
 streams Nura's root and the GSI to it over USB.
 
-usage (PowerShell):  .\setup.ps1 [-Gsi <GSI .img or .img.xz>] [-SshKey <public key file>] [<folder>]
+usage (PowerShell):  .\setup.ps1 [-Gsi <GSI .img or .img.xz>] [-Lineage <LineageOS zip>]
+                       [-SshKey <public key file>] [<folder>]
   -SshKey: turn on Nura's SSH server with that key (key logins only);
   without it, setup asks whether to turn SSH on
   the folder (default: this script's): gts3-dualboot-*.zip,
   OrangeFox-mainline-<model>-fastboot-boot.img, and nura-root.img.xz (+ its
-  .sha256) for Nura; a GSI (*system*.img(.xz) or *gsi*.img(.xz)) for Android
+  .sha256) for Nura; a GSI (*system*.img(.xz) or *gsi*.img(.xz)) or a
+  LineageOS zip (lineage-*.zip) for Android
 If Windows refuses to run scripts: powershell -ExecutionPolicy Bypass -File .\setup.ps1
 The tablet: in lk2nd's fastboot mode (Volume Down at power-on, then
 fastboot), or already in our OrangeFox.
-ERASES the userdata partition (internal storage). The microSD card, the
-tablet's firmware partitions and its recovery partition are not touched.
+ERASES the internal storage: Samsung's system, cache, hidden and userdata
+partitions get our layout inside them (with LineageOS: userdata only,
+docs/partitions.md). Samsung's partition table stays as it is. With LineageOS,
+lk2nd goes to the recovery partition (what was there is copied to this PC
+first). The microSD card and the tablet's firmware partitions are not touched.
 #>
-param([string]$Folder = $PSScriptRoot, [string]$Gsi = "", [string]$SshKey = "")
+param([string]$Folder = $PSScriptRoot, [string]$Gsi = "", [string]$Lineage = "", [string]$SshKey = "")
 $ErrorActionPreference = "Stop"
 $T = "/tmp/gts3-setup"
 
@@ -86,21 +92,48 @@ if (-not $Gsi) {
 	if ($g) { $Gsi = $g.FullName }
 }
 if ($Gsi -and -not (Test-Path $Gsi)) { Die "no such GSI: $Gsi" }
-if (-not $root -and -not $Gsi) { Die "put nura-root.img.xz (Nura) and/or a GSI (Android) in $Folder" }
+if (-not $Lineage) {
+	$l = Get-ChildItem -Path $Folder -Filter "lineage-*.zip" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+	if ($l) { $Lineage = $l.FullName }
+}
+if ($Lineage -and -not (Test-Path $Lineage)) { Die "no such LineageOS zip: $Lineage" }
+if (-not $root -and -not $Gsi -and -not $Lineage) { Die "put nura-root.img.xz (Nura) and/or a GSI or a LineageOS zip (Android) in $Folder" }
 
 Step "What to install"
-if ($root -and $Gsi) {
-	Say "1) Nura only   2) Android only   3) both side by side"
-	switch (Ask "Choose" "3") {
-		"1" { $setup = "nura"; $Gsi = "" }
-		"2" { $setup = "android"; $root = "" }
-		"3" { $setup = "both" }
-		default { Die "1, 2 or 3" }
-	}
-} elseif ($root) { $setup = "nura"; Say "Nura only (put a GSI in $Folder for Android too)" }
-else { $setup = "android"; Say "Android only (no nura-root.img.xz in $Folder)" }
+# all five; the ones whose files aren't in the folder say what they need
+$names = @("", "Nura only", "Android only (our open vendor + a GSI)", "Nura and Android, side by side",
+	"LineageOS only (Awesometic's, Jayden's)", "Nura and LineageOS, side by side")
+function Miss($c) {
+	$m = @()
+	if (@("1", "3", "5") -contains $c -and -not $root) { $m += "nura-root.img.xz" }
+	if (@("2", "3") -contains $c -and -not $Gsi) { $m += "a GSI (*system*.img or *gsi*.img, or .img.xz)" }
+	if (@("4", "5") -contains $c -and -not $Lineage) { $m += "a LineageOS zip (lineage-*.zip)" }
+	return ($m -join " and ")
+}
+$def = ""
+foreach ($c in "1", "2", "3", "4", "5") {
+	$m = Miss $c
+	if (-not $m) { $st = "ready"; if (-not $def) { $def = $c } } else { $st = "needs $m" }
+	Say ("  {0}) {1,-42} {2}" -f $c, $names[[int]$c], $st)
+}
+while ($true) {
+	$c = Ask "Choose 1-5" $def
+	if ($c -notmatch "^[1-5]$") { Say "  a number from 1 to 5"; continue }
+	$m = Miss $c
+	if (-not $m) { break }
+	Say "  that needs $m in $Folder (or -Gsi / -Lineage): put it there and run setup again, or choose another"
+}
+switch ($c) {
+	"1" { $setup = "nura"; $Gsi = ""; $Lineage = "" }
+	"2" { $setup = "android"; $root = ""; $Lineage = "" }
+	"3" { $setup = "both"; $Lineage = "" }
+	"4" { $setup = "lineage"; $root = ""; $Gsi = "" }
+	"5" { $setup = "nura-lineage"; $Gsi = "" }
+}
+$setupName = $names[[int]$c]
 if ($root) { Say "Nura: $(Split-Path $root -Leaf)" }
 if ($Gsi) { Say "Android: $(Split-Path $Gsi -Leaf)" }
+if ($Lineage) { Say "LineageOS: $(Split-Path $Lineage -Leaf)" }
 
 $gsiFmt = ""
 if ($Gsi) {
@@ -169,7 +202,15 @@ if ($root) {
 	Put "keyboard" (Ask "Keyboard layout(s), XKB names like us or de" $kb)
 	$cc = "US"
 	try { $cc = [Globalization.RegionInfo]::CurrentRegion.TwoLetterISORegionName } catch { }
-	Put "country" ((Ask "Country, for Wi-Fi (two letters)" $cc).ToUpper())
+	Say "Country, for Wi-Fi (which channels and power are allowed): the two-letter"
+	Say "  ISO 3166-1 code, e.g. IN India, US, GB United Kingdom (not UK), DE Germany,"
+	Say "  FR France, AE United Arab Emirates, AU Australia, JP Japan"
+	while ($true) {
+		$v = (Ask "Country" $cc).ToUpper()
+		if ($v -match "^[A-Z]{2}$" -and $v -ne "UK") { break }
+		if ($v -eq "UK") { Say "  United Kingdom is GB" } else { Say "  two letters, e.g. IN or US" }
+	}
+	Put "country" $v
 	$v = Ask "Wi-Fi network to join (empty: none)" ""
 	if ($v) {
 		Put "wifi_ssid" $v
@@ -221,36 +262,57 @@ function State {
 }
 Say "Connect it by USB, in lk2nd's fastboot mode (Volume Down at power-on, then"
 Say "fastboot) or in our OrangeFox. Waiting..."
-while ((State) -eq "none") { Start-Sleep 2 }
-if ((State) -eq "fastboot") {
-	$compat = Run $fastboot "getvar lk2nd:compatible"
-	if ($compat -match "samsung,gts3lwifi") { $model = "gts3lwifi" }
-	elseif ($compat -match "samsung,gts3llte") { $model = "gts3llte" }
-	else { Die "not a Galaxy Tab S3 in lk2nd" }
-	$fox = Join-Path $Folder "OrangeFox-mainline-$model-fastboot-boot.img"
-	if (-not (Test-Path $fox)) { Die "no $(Split-Path $fox -Leaf) in $Folder" }
-	Say "In lk2nd: starting our OrangeFox (from RAM)..."
-	Run $fastboot "boot `"$fox`"" | Out-Null
+# the tablet in our OrangeFox, $model set
+function FoxUp {
+	while ((State) -eq "none") { Start-Sleep 2 }
+	if ((State) -eq "fastboot") {
+		$compat = Run $fastboot "getvar lk2nd:compatible"
+		if ($compat -match "samsung,gts3lwifi") { $model = "gts3lwifi" }
+		elseif ($compat -match "samsung,gts3llte") { $model = "gts3llte" }
+		else { Die "not a Galaxy Tab S3 in lk2nd" }
+		$fox = Join-Path $Folder "OrangeFox-mainline-$model-fastboot-boot.img"
+		if (-not (Test-Path $fox)) { Die "no $(Split-Path $fox -Leaf) in $Folder" }
+		Say "In lk2nd: starting our OrangeFox (from RAM)..."
+		Run $fastboot "boot `"$fox`"" | Out-Null
+		$n = 0
+		while ((State) -ne "recovery") { Start-Sleep 2; $n++; if ($n -ge 60) { Die "OrangeFox didn't show up over adb" } }
+	}
+	# OrangeFox restarts USB once while it starts (MTP, which our kernel doesn't
+	# have): wait until its main page is up, then a little more
 	$n = 0
-	while ((State) -ne "recovery") { Start-Sleep 2; $n++; if ($n -ge 60) { Die "OrangeFox didn't show up over adb" } }
+	while ((Run $adb "shell `"grep -c Set.page:..main. /tmp/recovery.log`"") -notmatch "^[1-9]") {
+		Start-Sleep 2; $n++; if ($n -ge 60) { Die "OrangeFox didn't finish starting" }
+	}
+	Start-Sleep 5
+	Run $adb "wait-for-recovery" | Out-Null
+	$compat = Run $adb "shell cat /proc/device-tree/compatible"
+	if ($compat -match "samsung,gts3lwifi") { $script:model = "gts3lwifi"; Say "SM-T820 in OrangeFox" }
+	elseif ($compat -match "samsung,gts3llte") { $script:model = "gts3llte"; Say "SM-T825 in OrangeFox" }
+	else { Die "the recovery isn't our OrangeFox on a Galaxy Tab S3" }
 }
-# OrangeFox restarts USB once while it starts (MTP, which our kernel doesn't
-# have): wait until its main page is up, then a little more
-$n = 0
-while ((Run $adb "shell `"grep -c Set.page:..main. /tmp/recovery.log`"") -notmatch "^[1-9]") {
-	Start-Sleep 2; $n++; if ($n -ge 60) { Die "OrangeFox didn't finish starting" }
+FoxUp
+# the LineageOS zip is for this model (the tablet checks it again)
+if ($Lineage) {
+	try {
+		Add-Type -AssemblyName System.IO.Compression.FileSystem
+		$z = [IO.Compression.ZipFile]::OpenRead($Lineage)
+		$e = $z.GetEntry("META-INF/com/google/android/updater-script")
+		$us = ""
+		if ($e) { $r = New-Object IO.StreamReader($e.Open()); $us = $r.ReadToEnd(); $r.Close() }
+		$z.Dispose()
+	} catch { $us = "" }
+	if ($us) {
+		if ($us -notmatch "by-name/system") { Die "$(Split-Path $Lineage -Leaf) isn't a LineageOS zip for the Tab S3" }
+		if ($us -notmatch "`"$model`"") { Die "$(Split-Path $Lineage -Leaf) is for another model (this tablet: $model)" }
+	}
 }
-Start-Sleep 5
-Run $adb "wait-for-recovery" | Out-Null
-$compat = Run $adb "shell cat /proc/device-tree/compatible"
-if ($compat -match "samsung,gts3lwifi") { Say "SM-T820 in OrangeFox" }
-elseif ($compat -match "samsung,gts3llte") { Say "SM-T825 in OrangeFox" }
-else { Die "the recovery isn't our OrangeFox on a Galaxy Tab S3" }
 
 Step "Last check"
-Say "This ERASES the tablet's internal storage (userdata): Android's apps and"
-Say "data, a postmarketOS install. The microSD card is not touched."
-Say "Installing: $setup"
+Say "This ERASES the tablet's internal storage (Samsung's system, cache, hidden"
+Say "and userdata): Android's apps and data, a postmarketOS install. The microSD"
+Say "card is not touched."
+if ($Lineage) { Say "lk2nd goes to the recovery partition (what is there now is copied to this PC)." }
+Say "Installing: $setupName"
 if ((Read-Host "Type yes to go on") -ne "yes") { Die "stopped, nothing changed" }
 
 $envs = "MODEL="
@@ -302,12 +364,24 @@ function Push($local, $remote) {
 	return ($script:Rc -eq 0)
 }
 
-Step "Copying the installer"
-Run $adb "shell `"rm -rf $T && mkdir -p $T`"" | Out-Null
-if (-not (Push $zip.FullName "$T/installer.zip")) { Die "adb push of the installer" }
-Run $adb "shell `"cd $T && unzip -o -q installer.zip META-INF/com/google/android/update-binary && mv META-INF/com/google/android/update-binary ub`"" | Out-Null
-if ($script:Rc -ne 0) { Die "can't unpack the installer on the tablet" }
-
+function CopyInstaller {
+	Step "Copying the installer"
+	Run $adb "shell `"rm -rf $T && mkdir -p $T`"" | Out-Null
+	if (-not (Push $zip.FullName "$T/installer.zip")) { Die "adb push of the installer" }
+	Run $adb "shell `"cd $T && unzip -o -q installer.zip META-INF/com/google/android/update-binary && mv META-INF/com/google/android/update-binary ub`"" | Out-Null
+	if ($script:Rc -ne 0) { Die "can't unpack the installer on the tablet" }
+}
+# files the installer saved, to this PC
+function PullSaved($pattern, $what) {
+	$files = (Run $adb "shell `"ls $T/$pattern 2> /dev/null`"") -split "`r?`n" | Where-Object { $_ -match "^/" }
+	foreach ($g in $files) {
+		$g = $g.Trim()
+		Run $adb "pull $g `"$Folder`"" | Out-Null
+		if ($script:Rc -ne 0) { Die "couldn't copy $what to this PC" }
+		Say "  $what, saved: $(Join-Path $Folder (Split-Path $g -Leaf)) (keep it: docs/partitions.md, going back)"
+	}
+}
+CopyInstaller
 Step "Layout"
 if ((Stage "layout" "GTS3_SETUP=$setup" $null) -ne 0) { Die "the layout failed (see above)" }
 
@@ -328,6 +402,10 @@ if ($Gsi) {
 	Say "Checking $(Split-Path $Gsi -Leaf)..."
 	if ((Send "android_system" $Gsi $gsiFmt (Sha $Gsi)) -ne 0) { Die "sending the GSI failed: run setup again" }
 }
+if ($Lineage) {
+	Say "Checking $(Split-Path $Lineage -Leaf)..."
+	if ((Send "lineage" $Lineage "raw" (Sha $Lineage)) -ne 0) { Die "sending the LineageOS zip failed: run setup again" }
+}
 
 Step "Finishing"
 $fvars = ""
@@ -337,15 +415,22 @@ if ($root) {
 }
 $rc = Stage "finish" $fvars $null
 Run $adb "shell `"rm -rf $T/answers`"" | Out-Null
+PullSaved "gts3-recovery-before-*.img.gz" "The recovery partition as it was"
 if ($rc -ne 0) { Die "finishing failed (see above)" }
 
 Step "Done"
-$os = if ($root) { "Nura" } else { "Android" }
+if ($Lineage) {
+	$os = "LineageOS"
+	$menu = "Power + Volume Up + Home at power-on (or `"reboot recovery`"): lk2nd's menu, with $(if ($root) { 'Nura and ' })OrangeFox."
+} else {
+	$os = if ($root) { "Nura" } else { "Android" }
+	$menu = "Volume Down at power-on: lk2nd's menu."
+}
 if ((Read-Host "Restart the tablet now? [y/N]") -match "^[yY]") {
 	Run $adb "reboot" | Out-Null
-	Say "It restarts into $os. Volume Down at power-on: lk2nd's menu."
+	Say "It restarts into $os. $menu"
 } else {
-	Say "Restart it when you like: it starts $os."
+	Say "Restart it when you like: it starts $os. $menu"
 }
 } finally {
 	Remove-Item -Recurse -Force $A -ErrorAction SilentlyContinue
