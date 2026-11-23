@@ -151,6 +151,7 @@ if ($Gsi) {
 $A = Join-Path ([IO.Path]::GetTempPath()) ("gts3-setup-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $A | Out-Null
 $utf8 = New-Object Text.UTF8Encoding $false
+$fde = $false
 function Put($name, $value) { [IO.File]::WriteAllText((Join-Path $A $name), $value, $utf8) }
 try {
 if ($root) {
@@ -222,8 +223,23 @@ if ($root) {
 		if ($p1) { Put "wifi_psk" $p1 }
 		$p1 = $null
 	}
+	# all of Nura encrypted, like a normal Linux install (LUKS2: a passphrase
+	# at every start), or else an encrypted folder
+	Say "Encrypt Nura? Like a normal Linux install: everything (apps, files, Wi-Fi"
+	Say "  passwords) stays unreadable without a passphrase you type at every start."
+	if ((Ask "Encrypt all of Nura? [y/N]" "") -match "^[yY]") {
+		while ($true) {
+			$p1 = AskSecret "Passphrase for Nura's encryption (8 characters or more)"
+			$p2 = AskSecret "Passphrase again"
+			if ($p1.Length -ge 8 -and $p1 -eq $p2) { break }
+			Say "  shorter than 8, or not the same; again"
+		}
+		Put "fde" $p1
+		$p1 = $null; $p2 = $null
+		$fde = $true
+		Say "  Keep it safe: without it, Nura's data can't be read, not even by us."
 	# an encrypted folder (fscrypt on the eMMC's inline crypto engine)
-	if ((Ask "Make an encrypted folder, ~/Private (unlocked with its own passphrase)? [y/N]" "") -match "^[yY]") {
+	} elseif ((Ask "Make an encrypted folder instead, ~/Private (unlocked with its own passphrase)? [y/N]" "") -match "^[yY]") {
 		while ($true) {
 			$p1 = AskSecret "Passphrase for ~/Private (8 characters or more)"
 			$p2 = AskSecret "Passphrase again"
@@ -383,7 +399,16 @@ function PullSaved($pattern, $what) {
 }
 CopyInstaller
 Step "Layout"
-if ((Stage "layout" "GTS3_SETUP=$setup" $null) -ne 0) { Die "the layout failed (see above)" }
+# the encryption passphrase: on the tablet (RAM) for the layout stage only
+$lvars = "GTS3_SETUP=$setup"
+if ($fde) {
+	if (-not (Push (Join-Path $A "fde") "$T/fde")) { Die "adb push of the encryption passphrase" }
+	Run $adb "shell `"chmod 600 $T/fde`"" | Out-Null
+	$lvars += " GTS3_FDE_KEY=$T/fde"
+}
+$rc = Stage "layout" $lvars $null
+Run $adb "shell `"rm -f $T/fde`"" | Out-Null
+if ($rc -ne 0) { Die "the layout failed (see above)" }
 
 function Sha($f) { (Get-FileHash -Algorithm SHA256 -Path $f).Hash.ToLower() }
 function Send($part, $file, $fmt, $sum) {
@@ -412,6 +437,7 @@ if ($Lineage) {
 Step "Finishing"
 $fvars = ""
 if ($root) {
+	Remove-Item -Force (Join-Path $A "fde") -ErrorAction SilentlyContinue
 	if (-not (Push $A "$T/answers")) { Die "adb push of the settings" }
 	$fvars = "GTS3_ANSWERS=$T/answers GTS3_UTC=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
 }
@@ -428,6 +454,7 @@ if ($Lineage) {
 	$os = if ($root) { "Nura" } else { "Android" }
 	$menu = "Volume Down at power-on: lk2nd's menu."
 }
+if ($fde) { Say "Nura is encrypted: at every start, type your passphrase on the screen (touch keyboard, or the keyboard cover)." }
 if ((Read-Host "Restart the tablet now? [y/N]") -match "^[yY]") {
 	Run $adb "reboot" | Out-Null
 	Say "It restarts into $os. $menu"

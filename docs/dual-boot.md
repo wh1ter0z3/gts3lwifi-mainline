@@ -460,8 +460,9 @@ from the device tree, and wrote:
    with `XZ_THREADS=2`), its UUIDs and size.
 3. lk2nd v2 for each model: `pack-lk2nd-from-v1.py` on that model's lk2nd-v1
    image, as `lk2nd-<gts3lwifi|gts3llte>.img` in one folder.
-4. `twrp/mkxz.sh <xz>` (once: a static aarch64 xz, about 2 minutes), then
-   `twrp/mkdualbootzip.sh <payload> <lk2nd folder> <busybox> <xz> <gsi-unzip>
-   <zip>`.
+4. `twrp/mkxz.sh <xz>` (once: a static aarch64 xz, about 2 minutes) and
+   `twrp/mkfde.sh <user@nura> <fde>` (cryptsetup and the unlock screen, from
+   a running Nura of the same image), then `twrp/mkdualbootzip.sh <payload>
+   <lk2nd folder> <busybox> <xz> <fde> <gsi-unzip> <zip>`.
 5. The release: the zip, `nura-root.img.xz` with its `.sha256`, the lk2nd
    images (and Odin tars of them, `boot.img` inside), and SHA256SUMS.

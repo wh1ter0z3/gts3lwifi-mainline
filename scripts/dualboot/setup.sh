@@ -178,8 +178,25 @@ if [ -n "$ROOT" ]; then
 		[ -z "$p1" ] || put wifi_psk "$p1"
 		unset p1
 	fi
+	# all of Nura encrypted, like a normal Linux install (LUKS2: a passphrase
+	# at every start, typed on the screen or the keyboard cover), or else an
+	# encrypted folder
+	FDE=
+	say "Encrypt Nura? Like a normal Linux install: everything (apps, files, Wi-Fi"
+	say "  passwords) stays unreadable without a passphrase you type at every start."
+	if yes_no "Encrypt all of Nura"; then
+		while :; do
+			read -r -s -p "Passphrase for Nura's encryption (8 characters or more): " p1; echo
+			read -r -s -p "Passphrase again: " p2; echo
+			[ ${#p1} -ge 8 ] && [ "$p1" = "$p2" ] && break
+			say "  shorter than 8, or not the same; again"
+		done
+		printf '%s' "$p1" > "$A/fde"
+		unset p1 p2
+		FDE=1
+		say "  Keep it safe: without it, Nura's data can't be read, not even by us."
 	# an encrypted folder (fscrypt on the eMMC's inline crypto engine)
-	if yes_no "Make an encrypted folder, ~/Private (unlocked with its own passphrase)?"; then
+	elif yes_no "Make an encrypted folder instead, ~/Private (unlocked with its own passphrase)?"; then
 		while :; do
 			read -r -s -p "Passphrase for ~/Private (8 characters or more): " p1; echo
 			read -r -s -p "Passphrase again: " p2; echo
@@ -307,7 +324,17 @@ pull_saved() {	# <pattern> <what>: files the installer saved, to this PC
 }
 copy_installer
 step "Layout"
-stage layout "GTS3_SETUP=$SETUP" < /dev/null || die "the layout failed (see above)"
+# the encryption passphrase: on the tablet (RAM) for the layout stage only
+LENV=
+if [ -n "${FDE:-}" ]; then
+	push "$A/fde" "$T/fde" || die "adb push of the encryption passphrase"
+	adb shell "chmod 600 $T/fde" < /dev/null > /dev/null
+	LENV="GTS3_FDE_KEY=$T/fde"
+fi
+rc=0
+stage layout "GTS3_SETUP=$SETUP" $LENV < /dev/null || rc=$?
+adb shell "rm -f $T/fde" < /dev/null > /dev/null 2>&1 || :
+[ $rc = 0 ] || die "the layout failed (see above)"
 
 send() {	# <partition> <file> <format> <sha256 of the file>
 	local sz
@@ -344,6 +371,7 @@ fi
 step "Finishing"
 FENV=
 if [ -n "$ROOT" ]; then
+	rm -f "$A/fde"
 	push "$A" "$T/answers" || die "adb push of the settings"
 	FENV="GTS3_ANSWERS=$T/answers GTS3_UTC=$(date -u +%s)"
 fi
@@ -361,6 +389,7 @@ else
 	FIRST=$([ -n "$ROOT" ] && echo Nura || echo Android)
 	MENU="Volume Down at power-on: lk2nd's menu."
 fi
+[ -z "${FDE:-}" ] || say "Nura is encrypted: at every start, type your passphrase on the screen (touch keyboard, or the keyboard cover)."
 if yes_no "Restart the tablet now"; then
 	adb reboot > /dev/null 2>&1 || :
 	say "It restarts into $FIRST. $MENU"

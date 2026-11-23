@@ -36,6 +36,9 @@
 #           its output). It fails if the stream's sha256 differs (busybox's
 #           xzcat, the fallback, doesn't check xz's CRC64). lineage: the zip, kept on
 #           LineageOS's data partition until finish installs it
+#           With GTS3_FDE_KEY=<file with the passphrase> (nura, both,
+#           nura-lineage): Nura's partition becomes LUKS2 (docs/encryption.md,
+#           "The whole of Nura"), opened for the next stages
 #   finish  Nura's root checked and grown; GTS3_ANSWERS=<dir> (optional):
 #           gts3-firstsetup with those answers and GTS3_UTC=<the PC's time>;
 #           the LineageOS zip; then lk2nd v2
@@ -82,8 +85,9 @@ die() {
 	exit 1
 }
 cleanup() {
-	umount "$W/nura/sys" "$W/nura/proc" "$W/nura/dev" "$W/nura" "$W/mnt" "$W/los" 2> /dev/null
+	umount "$W/nura/boot" "$W/nura/sys" "$W/nura/proc" "$W/nura/dev" "$W/nura" "$W/mnt" "$W/los" 2> /dev/null
 	[ -z "$KEEP" ] || return 0
+	[ ! -e "/dev/mapper/$CRYPT" ] || cs close "$CRYPT" 2> /dev/null
 	for l in $(cat "$W/loops" 2> /dev/null); do losetup -d "$l" 2> /dev/null; done
 	rm -f "$W/loops"
 }
@@ -144,6 +148,73 @@ fixroot() {
 	# ext4's encrypt feature, for fscrypt (existing files are unaffected)
 	[ -z "$TUNE2FS" ] || $TUNE2FS -O encrypt "$G/nura" > /dev/null 2>&1 ||
 		ui "Nura: couldn't turn on ext4's encrypt feature (encryption stays off)"
+}
+# Nura encrypted (LUKS2, like a normal Linux install): the zip's cryptsetup
+# (Alpine's, with its musl and libraries: tools/cs/), the device-mapper
+# nodes made by itself (no udev in a recovery)
+CRYPT=gts3-nura-crypt
+cs() {
+	# its lock directory, which a recovery hasn't got
+	mkdir -p /run/cryptsetup 2> /dev/null
+	DM_DISABLE_UDEV=1 "$W/tools/cs/ld-musl-aarch64.so.1" --library-path "$W/tools/cs" "$W/tools/cs/cryptsetup" "$@"
+}
+fde_format() {	# <key file>: Nura's partition becomes LUKS2, opened as $G/nura
+	ui "Nura: encrypting its partition (LUKS2, AES-XTS)..."
+	[ -x "$W/tools/cs/cryptsetup" ] || die "no cryptsetup in the zip (tools/cs)"
+	[ -s "$1" ] || die "no passphrase in $1"
+	d=$(readlink -f "$G/nura")
+	# Argon2id (1 s, 256 MiB: fits the tablet's RAM when unlocking), 4 KiB
+	# sectors; discards and no work queues (lower latency on flash) kept in
+	# the header, so every unlock uses them
+	cs luksFormat --batch-mode --type luks2 --cipher aes-xts-plain64 --key-size 512 \
+		--pbkdf argon2id --pbkdf-memory 262144 --iter-time 1000 --sector-size 4096 \
+		--key-file "$1" "$d" > "$W/cs.log" 2>&1 || die "cryptsetup luksFormat: $(tail -n 1 "$W/cs.log")"
+	cs open --persistent --allow-discards --perf-no_read_workqueue --perf-no_write_workqueue \
+		--key-file "$1" "$d" "$CRYPT" > "$W/cs.log" 2>&1 || die "cryptsetup open: $(tail -n 1 "$W/cs.log")"
+	[ -b "/dev/mapper/$CRYPT" ] || die "no /dev/mapper/$CRYPT"
+	FDE_UUID=$(cs luksUUID "$d") || die "cryptsetup luksUUID"
+	ln -sf "/dev/mapper/$CRYPT" "$G/nura"
+}
+# the unlock screen in Nura's initramfs: postmarketOS's own (unl0kr), from
+# the zip if Nura's root hasn't got it, then its initramfs made again inside
+# Nura's root. fde/ is an offline repository: postmarketOS's signed index
+# (aarch64/APKINDEX.tar.gz, which Nura's root trusts) and the two packages
+# it lists (postmarketOS signs the index, each package only with its
+# builder's own key: apk trusts them through the index)
+fde_unlock() {
+	ui "Nura: the passphrase screen at start..."
+	mkdir -p "$W/nura"
+	mount -t ext4 "$G/nura" "$W/nura" || die "mount Nura's root"
+	mount -t ext2 "$G/gts3_boot" "$W/nura/boot" 2> /dev/null || mount -t ext4 "$G/gts3_boot" "$W/nura/boot" ||
+		die "mount boot"
+	for d in dev proc sys; do mount --bind "/$d" "$W/nura/$d" || die "bind /$d"; done
+	ch() { chroot "$W/nura" /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root "$@"; }
+	# the initramfs is made from Nura's root: it must have this zip's layout
+	# hook (an older image's finds our layout in userdata only)
+	h=usr/share/mkinitfs/hooks/20-gts3-dualboot.sh
+	[ -s pc/20-gts3-dualboot.sh ] || die "no pc/20-gts3-dualboot.sh in the zip"
+	cmp -s pc/20-gts3-dualboot.sh "$W/nura/$h" || cp pc/20-gts3-dualboot.sh "$W/nura/$h" || die "the layout hook"
+	if ! ch apk info -e postmarketos-buffybox-unl0kr > /dev/null 2>&1; then
+		[ -s fde/aarch64/APKINDEX.tar.gz ] || die "no unlock screen packages in the zip (fde/)"
+		rm -rf "$W/nura/tmp/gts3-fde" && mkdir -p "$W/nura/tmp/gts3-fde" && cp -r fde/aarch64 "$W/nura/tmp/gts3-fde/" ||
+			die "copying the packages"
+		# its triggers make the initramfs again (mkinitfs, boot-deploy);
+		# postmarketos-base-nofde stands in for the unlock screen: it goes
+		ch apk add --no-network --no-interactive --repositories-file /dev/null --repository /tmp/gts3-fde \
+			postmarketos-buffybox-unl0kr '!postmarketos-base-nofde' > "$W/fde.log" 2>&1 ||
+			die "adding the unlock screen: $(grep -i error "$W/fde.log" | tail -n 1)"
+		rm -rf "$W/nura/tmp/gts3-fde"
+	else
+		ch mkinitfs > "$W/fde.log" 2>&1 || die "mkinitfs: $(tail -n 1 "$W/fde.log")"
+	fi
+	# the initramfs (all its archives) must have cryptsetup and the unlock
+	# screen now
+	ch sh -c 'zstd -dc /boot/initramfs 2>/dev/null || gzip -dc /boot/initramfs' > "$W/initramfs.cpio"
+	grep -a -q 'bin/cryptsetup' "$W/initramfs.cpio" && grep -a -q 'bin/fde-unlock' "$W/initramfs.cpio" ||
+		die "the new initramfs has no cryptsetup or no unlock screen"
+	rm -f "$W/initramfs.cpio"
+	sync
+	umount "$W/nura/sys" "$W/nura/proc" "$W/nura/dev" "$W/nura/boot" "$W/nura" || die "umount"
 }
 # Nura's root mount options with inlinecrypt, so fscrypt encrypts on the
 # eMMC's inline crypto engine (docs/encryption.md); harmless without fscrypt
@@ -270,7 +341,10 @@ if [ "$STAGE" = finish ]; then
 	[ -z "$HAS_GSI" ] || [ -f got-android_system ] || die "the GSI wasn't sent"
 	[ -z "$HAS_LOS" ] || [ -f got-lineage ] || die "the LineageOS zip wasn't sent"
 	if [ -n "$HAS_NURA" ]; then
+		[ -z "${FDE_UUID:-}" ] || [ -b "/dev/mapper/$CRYPT" ] ||
+			die "Nura's encrypted partition isn't open: run the layout stage again"
 		fixroot
+		[ -z "${FDE_UUID:-}" ] || fde_unlock
 		if [ -n "${GTS3_ANSWERS:-}" ]; then
 			ui "Nura: your settings..."
 			[ -d "$GTS3_ANSWERS" ] || die "no answers in $GTS3_ANSWERS"
@@ -421,6 +495,8 @@ for p in system cache hidden userdata; do
 	set -- $(row $p)
 	[ $# = 3 ] && [ -b "${DISK}p$1" ] && WD="$WD ${DISK}p$1"
 done
+# an encrypted Nura opened by an earlier run
+[ ! -e "/dev/mapper/$CRYPT" ] || cs close "$CRYPT" || die "can't close /dev/mapper/$CRYPT"
 LOOPS=
 for l in $($LOSETUP -a 2> /dev/null | cut -d: -f1); do
 	case "$($LOSETUP -a 2> /dev/null | grep "^$l:")" in *"(${DISK})"* | *"(${DISK#/dev/block/})"* | *"($(readlink -f "$DATA_DEV"))"*) LOOPS="$LOOPS $l" ;; esac
@@ -514,6 +590,15 @@ $SGDISK --zap-all "$CDEV" > /dev/null 2>&1
 # shellcheck disable=SC2086
 $SGDISK --clear $PARTS "$CDEV" > "$W/sgdisk.log" 2>&1 || die "sgdisk: $(tail -n 1 "$W/sgdisk.log")"
 $SGDISK --print "$CDEV" > "$W/gpt" 2>&1 || die "no GPT after sgdisk"
+# the last partition (the rest) a whole number of 4 KiB blocks, as the others
+# are: an encrypted Nura uses 4 KiB sectors
+lf=$(first $NP) ll=$(last $NP) ln=$(awk -v n="$NP" '$1 == n { print $NF }' "$W/gpt")
+le=$((lf + (ll - lf + 1) / 8 * 8 - 1))
+if [ "$le" != "$ll" ]; then
+	$SGDISK --delete=$NP --new=$NP:$lf:$le --typecode=$NP:8300 --change-name=$NP:$ln "$CDEV" > "$W/sgdisk.log" 2>&1 ||
+		die "sgdisk: $(tail -n 1 "$W/sgdisk.log")"
+	$SGDISK --print "$CDEV" > "$W/gpt" 2>&1 || die "no GPT after sgdisk"
+fi
 
 # Hybrid MBR (lk2nd reads only MBR): entry 0 = gts3_boot, entry 1 = 0xEE
 le32() { printf '\\%03o\\%03o\\%03o\\%03o' $(($1 & 255)) $((($1 >> 8) & 255)) $((($1 >> 16) & 255)) $((($1 >> 24) & 255)); }
@@ -541,6 +626,12 @@ for n in $(awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { print $1 }' "$W/gpt"); do
 	echo "$dev" >> "$W/loops"
 	ln -sf "$dev" "$G/$name"
 done
+FDE_UUID=
+if [ -n "${GTS3_FDE_KEY:-}" ]; then
+	[ -n "$ROOT" ] || die "GTS3_FDE_KEY: there is no Nura to encrypt"
+	[ "$STAGE" = layout ] || die "GTS3_FDE_KEY: from the PC only (setup.sh, setup.ps1)"
+	fde_format "$GTS3_FDE_KEY"
+fi
 
 ui "Boot partition: lk2nd's menu, kernels..."
 $MKE2FS -q -F -t ext2 -b 1024 -L pmOS_boot -U "$BOOT_UUID" "$G/gts3_boot" > /dev/null 2>&1 || die "mke2fs boot"
@@ -569,7 +660,13 @@ mkdir -p "$W/mnt/extlinux"
 		echo "	linux /vmlinuz"
 		echo "	initrd /initramfs"
 		echo "	fdt /$DTB"
-		echo "	append $(ice_cmdline "$NURA_CMDLINE")"
+		if [ -n "$FDE_UUID" ]; then
+			# the root is the LUKS container (the initramfs unlocks it); no
+			# inlinecrypt: dm-crypt encrypts, the eMMC's engine isn't reached
+			echo "	append $(printf '%s' "$NURA_CMDLINE" | sed "s/pmos_root_uuid=[^ ]*/pmos_root_uuid=$FDE_UUID/")"
+		else
+			echo "	append $(ice_cmdline "$NURA_CMDLINE")"
+		fi
 	elif [ -n "$LOS" ]; then
 		echo "default orangefox"
 	else
@@ -643,6 +740,7 @@ if [ "$STAGE" = layout ]; then
 	{
 		echo "SETUP='$SETUP'"
 		echo "HAS_NURA=${ROOT:+1}"
+		echo "FDE_UUID=$FDE_UUID"
 		echo "HAS_GSI=${GSI:+1}"
 		echo "HAS_LOS=$HAS_LOS"
 		echo "LK2ND=$LK2ND"

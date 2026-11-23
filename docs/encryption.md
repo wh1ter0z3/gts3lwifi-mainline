@@ -108,3 +108,51 @@ What a full setup still needs:
 
 - ICE 2.0 isn't covered (it needs one more workaround than 2.1).
 - Without CQE (command queueing), as the eMMC runs today.
+
+## The whole of Nura
+
+`setup.sh` / `setup.ps1` ask "Encrypt all of Nura?". It is the same as a
+normal Linux install that encrypts everything: Nura's partition becomes a
+LUKS2 container, and you type the passphrase at every start, on postmarketOS's
+own unlock screen (unl0kr, with the touch keyboard or the keyboard cover).
+Only the boot partition (kernel, lk2nd's menu) and Samsung's firmware stay
+unencrypted. Choosing it skips the ~/Private question, which then adds
+nothing.
+
+This is software encryption (dm-crypt): upstream Linux uses the eMMC's
+engine only for fscrypt (above); whole-disk encryption on it needs Android's
+dm-default-key, which isn't in upstream Linux. The CPU's AES instructions
+keep up with the eMMC (below).
+
+| | |
+|---|---|
+| Format | LUKS2, `aes-xts-plain64`, 512-bit key, 4096-byte sectors |
+| Passphrase | Argon2id, about 1 s, up to 256 MiB (fits the tablet's RAM) |
+| Flags in the header | `allow-discards`, `no-read-workqueue`, `no-write-workqueue` (lower latency on flash) |
+| File system | ext4, as without encryption |
+| Measured (SM-T820) | write 81.6 MB/s (600 MB, synced), read 104.9 MB/s |
+
+How the installer does it (`scripts/dualboot/twrp/update-binary`):
+
+1. Layout stage: the PC hands the passphrase over in the recovery's RAM
+   (`GTS3_FDE_KEY`, removed right after). The zip's cryptsetup (Alpine's, with
+   its musl and libraries, `tools/cs/`) formats Nura's partition and opens it;
+   Nura's root is then written into it.
+2. Finish stage: Nura's root gets the unlock screen from the zip's offline
+   repository (`fde/`: postmarketOS's signed index and the two packages:
+   Nura's root trusts the index, as it would online), in place of
+   `postmarketos-base-nofde`, and this zip's layout hook. Their triggers make
+   the initramfs again inside Nura's root.
+3. lk2nd's `nura` entry gets `pmos_root_uuid=` of the LUKS container; the
+   initramfs maps our layout (`20-gts3-dualboot.sh`), finds the container,
+   asks for the passphrase and mounts `/dev/mapper/root`.
+
+`twrp/mkfde.sh` collects `tools/cs/` and `fde/` for a release.
+
+Tested on the SM-T820 (2026-11-23), which has no screen: unlocked with
+postmarketOS's `cryptkey=` (a key file in the initramfs, test only, removed
+afterwards). The unlock screen itself still needs a test on a tablet with a
+screen.
+
+Changing the passphrase later, in Nura:
+`sudo cryptsetup luksChangeKey /dev/mapper/gts3-nura`.

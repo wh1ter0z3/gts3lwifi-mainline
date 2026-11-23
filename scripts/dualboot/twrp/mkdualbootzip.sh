@@ -5,20 +5,23 @@
 # of, a static aarch64 busybox (Alpine's busybox-static), a static aarch64
 # xz (mkxz.sh: unpacks Nura's root on all cores, 5x busybox's xzcat), for GSI
 # zips over 4 GB gsi-unzip (gsi branch, gsi/unzip64), gts3-firstsetup, and
-# LineageOS's /data add-on (lineage/, addon.d/: run after LineageOS). pc/
+# LineageOS's /data add-on (lineage/, addon.d/: run after LineageOS), and
+# for an encrypted Nura cryptsetup (tools/cs/) and the unlock screen's
+# packages (fde/), from mkfde.sh. pc/
 # holds the PC setup scripts (setup.sh, setup.ps1: everything over adb, Linux
 # and Windows) and the Linux installer that builds the image on the PC
 # (install-dualboot.sh --zip).
-# usage: mkdualbootzip.sh <payload dir> <lk2nd dir> <busybox> <xz> <gsi-unzip|-> <out.zip>
+# usage: mkdualbootzip.sh <payload dir> <lk2nd dir> <busybox> <xz> <fde dir> <gsi-unzip|-> <out.zip>
 #   lk2nd dir: lk2nd-gts3lwifi.img and/or lk2nd-gts3llte.img (v2)
 set -eu
-[ $# -eq 6 ] || { sed -n '2,12p' "$0" >&2; exit 1; }
-PAY=$1 LK=$2 BB=$3 XZ=$4 UNZ=$5 OUT=$6
+[ $# -eq 7 ] || { sed -n '2,14p' "$0" >&2; exit 1; }
+PAY=$1 LK=$2 BB=$3 XZ=$4 FDE=$5 UNZ=$6 OUT=$7
+[ -x "$FDE/cs/cryptsetup" ] && [ -s "$FDE/aarch64/APKINDEX.tar.gz" ] || { echo "no mkfde.sh output in $FDE" >&2; exit 1; }
 HERE=$(cd "$(dirname "$0")" && pwd)
 [ -f "$PAY/nura-boot.tar" ] && [ -f "$PAY/nura.env" ] || { echo "no payload in $PAY" >&2; exit 1; }
-python3 - "$PAY" "$LK" "$BB" "$XZ" "$UNZ" "$HERE/update-binary" "$OUT" "$HERE/.." <<'PY'
+python3 - "$PAY" "$LK" "$BB" "$XZ" "$FDE" "$UNZ" "$HERE/update-binary" "$OUT" "$HERE/.." <<'PY'
 import hashlib, os, sys, zipfile
-pay, lk, bb, xz, unz, ub, out, dualboot = sys.argv[1:]
+pay, lk, bb, xz, fde, unz, ub, out, dualboot = sys.argv[1:]
 files = [(os.path.join(pay, f), f) for f in ("nura-boot.tar", "nura.env")]
 # android/: our Android (vendor.img, Image.gz, initramfs, cmdline, dtb/) and
 # the recovery on its kernel (recovery/)
@@ -35,6 +38,9 @@ tools = [(bb, "tools/busybox"), (xz, "tools/xz")] + ([(unz, "tools/gsi-unzip")] 
 # LineageOS's /data on android_data, run by the installer after LineageOS
 tools += [(os.path.join(dualboot, "lineage", "update-binary-data"), "lineage/update-binary-data"),
           (os.path.join(dualboot, "lineage", "60-gts3-data.sh"), "addon.d/60-gts3-data.sh")]
+# an encrypted Nura: cryptsetup for the recovery, the unlock screen's packages
+tools += [(os.path.join(fde, "cs", f), "tools/cs/" + f) for f in sorted(os.listdir(os.path.join(fde, "cs")))]
+files += [(os.path.join(fde, "aarch64", f), "fde/aarch64/" + f) for f in sorted(os.listdir(os.path.join(fde, "aarch64")))]
 # Nura's one-time setup, for the staged install from a PC
 tools += [(os.path.join(dualboot, "gts3-firstsetup"), "tools/gts3-firstsetup")]
 hook = os.path.join(dualboot, "..", "..", "pmaports", "device-samsung-gts3lwifi", "20-gts3-dualboot.sh")
