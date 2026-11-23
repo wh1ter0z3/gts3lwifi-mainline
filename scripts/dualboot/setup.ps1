@@ -225,8 +225,11 @@ if ($root) {
 	}
 	# all of Nura encrypted, like a normal Linux install (LUKS2: a passphrase
 	# at every start), or else an encrypted folder
-	Say "Encrypt Nura? Like a normal Linux install: everything (apps, files, Wi-Fi"
-	Say "  passwords) stays unreadable without a passphrase you type at every start."
+	Write-Host ""
+	Write-Host "Full-disk encryption" -ForegroundColor Cyan -NoNewline
+	Write-Host "  LUKS2 | AES-XTS 512 | 4 KiB sectors | Argon2id | flash-tuned"
+	Say "  Like a normal Linux install: apps, files and Wi-Fi passwords stay unreadable"
+	Say "  without your passphrase, typed at every start."
 	if ((Ask "Encrypt all of Nura? [y/N]" "") -match "^[yY]") {
 		while ($true) {
 			$p1 = AskSecret "Passphrase for Nura's encryption (8 characters or more)"

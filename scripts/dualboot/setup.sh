@@ -182,8 +182,12 @@ if [ -n "$ROOT" ]; then
 	# at every start, typed on the screen or the keyboard cover), or else an
 	# encrypted folder
 	FDE=
-	say "Encrypt Nura? Like a normal Linux install: everything (apps, files, Wi-Fi"
-	say "  passwords) stays unreadable without a passphrase you type at every start."
+	b= n=
+	[ -t 1 ] && b=$(printf '\033[1;36m') n=$(printf '\033[0m')
+	say ""
+	say "${b}Full-disk encryption${n}  LUKS2 · AES-XTS 512 · 4 KiB sectors · Argon2id · flash-tuned"
+	say "  Like a normal Linux install: apps, files and Wi-Fi passwords stay unreadable"
+	say "  without your passphrase, typed at every start."
 	if yes_no "Encrypt all of Nura"; then
 		while :; do
 			read -r -s -p "Passphrase for Nura's encryption (8 characters or more): " p1; echo
