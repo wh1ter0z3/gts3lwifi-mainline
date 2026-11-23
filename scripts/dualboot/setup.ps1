@@ -387,7 +387,9 @@ if ((Stage "layout" "GTS3_SETUP=$setup" $null) -ne 0) { Die "the layout failed (
 
 function Sha($f) { (Get-FileHash -Algorithm SHA256 -Path $f).Hash.ToLower() }
 function Send($part, $file, $fmt, $sum) {
-	Step "Sending $(Split-Path $file -Leaf) ($([int]((Get-Item $file).Length / 1MB)) MiB)"
+	# the size through the file itself (a link's own size is 0)
+	$fs = [IO.File]::OpenRead($file); $len = $fs.Length; $fs.Close()
+	Step "Sending $(Split-Path $file -Leaf) ($([int]($len / 1MB)) MiB)"
 	return (Stage "recv" "GTS3_PART=$part GTS3_FORMAT=$fmt GTS3_SHA256=$sum" $file)
 }
 if ($root) {

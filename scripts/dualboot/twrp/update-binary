@@ -193,8 +193,11 @@ runlos() {	# <zip>
 	unzip -p "$1" META-INF/com/google/android/update-binary > "$W/los-updater" && [ -s "$W/los-updater" ] ||
 		die "no installer in $(basename "$1")"
 	chmod 0755 "$W/los-updater"
-	mkdir -p /cache
 	umount /cache 2> /dev/null
+	# a recovery without a cache partition in its list links /cache to
+	# /data/cache (in its RAM): a mount point of its own instead
+	[ ! -L /cache ] || rm -f /cache
+	mkdir -p /cache
 	if ! mount -t ext4 "$CACHE_DEV" /cache 2> /dev/null; then
 		$MKE2FS -q -F -t ext4 "$CACHE_DEV" > /dev/null 2>&1 && mount -t ext4 "$CACHE_DEV" /cache ||
 			die "mount the cache partition"

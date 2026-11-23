@@ -98,9 +98,19 @@ partition first, then of `userdata`:
 
 ## Tested (2026-11-23, SM-T820)
 
-Nura only, from setup.sh, on a tablet that had the dual boot layout in
-userdata: lk2nd finds gts3_boot, Nura's root is `/dev/mapper/gts3-nura`
-(27.1 GiB, `inlinecrypt`), efs mounts, Bluetooth gets its address, kernel r18
-and device r25 install on top (the initramfs keeps the hook).
+All five layouts from setup.sh, one after another on the same tablet
+(Jayden's LineageOS 24, the TrebleDroid Android 16 GSI on our vendor):
 
-Not yet on a tablet: the Android and LineageOS layouts, setup.ps1.
+| Install | Result |
+|---|---|
+| Nura only | lk2nd finds gts3_boot; Nura's root `/dev/mapper/gts3-nura`, 27.1 GiB, `inlinecrypt`; efs mounts, Bluetooth gets its address; kernel r18 and the device package install on top |
+| Android only | Android 16 boots to the system UI (`gsi.disk=system`, /data 23 GB) |
+| Nura and Android | both boot; `gts3-boot android reboot` and back |
+| LineageOS only | LineageOS boots on its own kernel, /data on android_data (`gts3_data`); "reboot recovery" reaches lk2nd in the recovery partition and our OrangeFox |
+| Nura and LineageOS | both boot; Nura's plain reboot starts LineageOS, LineageOS's "reboot recovery" starts Nura |
+
+Without a screen, getting out of LineageOS takes the keys: Power + Volume
+Down until it restarts, then at once Volume Up + Home + Power (Samsung's
+recovery path, so lk2nd). After a start through the recovery path, plain
+restarts stay on that side until one asks for a normal start (Nura's or
+LineageOS's own reboot does). Not yet run on a Windows PC: setup.ps1.

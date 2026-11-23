@@ -311,7 +311,7 @@ stage layout "GTS3_SETUP=$SETUP" < /dev/null || die "the layout failed (see abov
 
 send() {	# <partition> <file> <format> <sha256 of the file>
 	local sz
-	sz=$(($(stat -c %s "$2") / 1048576))
+	sz=$(($(stat -L -c %s "$2") / 1048576))
 	step "Sending $(basename "$2") ($sz MiB)"
 	if command -v pv > /dev/null; then
 		pv "$2" | stage recv "GTS3_PART=$1 GTS3_FORMAT=$3 GTS3_SHA256=$4"

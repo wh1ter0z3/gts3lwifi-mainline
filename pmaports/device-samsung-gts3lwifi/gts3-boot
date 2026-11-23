@@ -66,9 +66,19 @@ echo "lk2nd boots $1"
 if [ "${2:-}" = reboot ]; then
 	cleanup
 	mnt=
+	# With LineageOS lk2nd lives in the recovery partition (docs/partitions.md):
+	# a plain reboot would start LineageOS, so restart through the recovery path
+	how=
+	for b in /dev/disk/by-partlabel/boot /dev/block/by-name/boot /dev/block/bootdevice/by-name/boot; do
+		[ -b "$b" ] || continue
+		head -c 4194304 "$b" | grep -a -q lk2nd || how=recovery
+		break
+	done
 	if command -v setprop >/dev/null 2>&1 && [ -n "$(getprop sys.boot_completed 2>/dev/null)" ]; then
-		setprop sys.powerctl reboot
+		setprop sys.powerctl "reboot${how:+,$how}"
+	elif [ -n "$how" ] && command -v systemctl >/dev/null 2>&1; then
+		systemctl reboot --reboot-argument="$how"
 	else
-		reboot
+		reboot ${how:+"$how"}
 	fi
 fi
