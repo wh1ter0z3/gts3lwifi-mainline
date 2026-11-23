@@ -299,6 +299,19 @@ if [ $STANDALONE = 1 ]; then
 			else mount --bind /fw/$n $FP/$n; fi ;;
 		esac || log "$n partition not mounted"
 	done
+	# Our whole-storage layout takes Samsung's system partition: the Wi-Fi
+	# board data the installer kept on the boot partition (gts3/firmware/),
+	# where the vendor's board.bin link looks (system/etc/firmware/)
+	if [ ! -s $FP/system/etc/firmware/bdwlan30.bin ] && [ "$PARTS" = 1 ] && B=$(sub_dev gts3_boot); then
+		mkdir -p /fw/boot /fw/sysfw/etc/firmware
+		if mount -t ext2 -o ro "$B" /fw/boot && [ -s /fw/boot/gts3/firmware/bdwlan30.bin ] &&
+			cp /fw/boot/gts3/firmware/bdwlan30.bin /fw/sysfw/etc/firmware/ && mount --bind /fw/sysfw $FP/system; then
+			log "Wi-Fi board data from the boot partition"
+		else
+			log "no Wi-Fi board data: 5 GHz limited (docs/wifi.md)"
+		fi
+		umount /fw/boot 2>/dev/null
+	fi
 	# A small root for busybox's modprobe and mdev, with the modules and
 	# firmware where they look (/lib/modules, /lib/firmware), kept for the
 	# whole session (as /mnt/vendor/gsihost): Android's root has neither.
