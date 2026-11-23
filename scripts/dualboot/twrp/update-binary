@@ -542,6 +542,48 @@ newloop() {
 # a GPT header at sector 1 of $1 (a file or device) from sector $2 on
 gpt_at() { [ "$(dd if="$1" bs=512 skip=$(($2 + 1)) count=1 2> /dev/null | head -c 8)" = "EFI PART" ]; }
 
+# Samsung's Wi-Fi board data (etc/firmware/bdwlan30.bin: this tablet's
+# radio calibration and regulatory domain; without it 5 GHz is limited to the
+# world domain) is in its system partition, which the whole-storage layout
+# takes. Kept on our boot partition, gts3/firmware/ (Nura's gts3-firmware
+# reads it there): from Samsung's system or a ROM on it, else from the boot
+# partition of an earlier layout of ours.
+WB=$W/bdwlan30.bin
+rm -f "$WB"
+wb_from_fs() {	# <dir>: the board data in a mounted file system
+	for f in etc/firmware/bdwlan30.bin system/etc/firmware/bdwlan30.bin vendor/firmware/bdwlan30.bin \
+		system/vendor/firmware/bdwlan30.bin gts3/firmware/bdwlan30.bin; do
+		[ -s "$1/$f" ] && cp "$1/$f" "$WB" && return 0
+	done
+	return 1
+}
+wb_from() {	# <eMMC sector>: a file system there, or our layout's boot partition
+	[ -b "$DISK" ] || return 1
+	mkdir -p "$W/wb"
+	l=$(newloop) || return 1
+	$LOSETUP -r -o $(($1 * 512)) "$l" "$DISK" || return 1
+	if mount -t ext4 -o ro,noload "$l" "$W/wb" 2> /dev/null || mount -t ext2 -o ro "$l" "$W/wb" 2> /dev/null; then
+		wb_from_fs "$W/wb"; r=$?
+		umount "$W/wb"
+	elif gpt_at "$DISK" "$1"; then
+		# our layout: its gts3_boot (the first partition) through the hybrid MBR
+		$SGDISK --print "$l" > "$W/wb.gpt" 2>&1
+		set -- $(awk '$NF == "gts3_boot" { print $2 }' "$W/wb.gpt") "$1"
+		$LOSETUP -d "$l"
+		[ $# = 2 ] || return 1
+		$LOSETUP -r -o $((($2 + $1) * 512)) "$l" "$DISK" || return 1
+		mount -t ext2 -o ro "$l" "$W/wb" 2> /dev/null && { wb_from_fs "$W/wb"; r=$?; umount "$W/wb"; } || r=1
+	else
+		r=1
+	fi
+	$LOSETUP -d "$l" 2> /dev/null
+	return $r
+}
+set -- $(row system)
+[ $# = 3 ] && wb_from "$2" || { set -- $(row userdata); [ $# = 3 ] && wb_from "$2"; } || :
+[ -s "$WB" ] && ui "Wi-Fi board data: kept" ||
+	ui "No Wi-Fi board data found (Samsung's system was erased before): 5 GHz stays limited, see docs/wifi.md"
+
 ERASED=1
 SYS=$(row system)
 if [ -n "$WHOLE" ]; then
@@ -637,6 +679,9 @@ ui "Boot partition: lk2nd's menu, kernels..."
 $MKE2FS -q -F -t ext2 -b 1024 -L pmOS_boot -U "$BOOT_UUID" "$G/gts3_boot" > /dev/null 2>&1 || die "mke2fs boot"
 mount -t ext2 "$G/gts3_boot" "$W/mnt" 2> /dev/null || mount -t ext4 "$G/gts3_boot" "$W/mnt" || die "mount boot"
 [ -z "$ROOT" ] || unzip -p "$ZIP" nura-boot.tar | tar -x -C "$W/mnt" || die "Nura's boot files"
+if [ -s "$WB" ]; then
+	mkdir -p "$W/mnt/gts3/firmware" && cp "$WB" "$W/mnt/gts3/firmware/bdwlan30.bin" || die "the Wi-Fi board data"
+fi
 if [ -n "$GSI" ] || [ -n "$RDTB" ]; then
 	mkdir -p "$W/mnt/gts3/android"
 	cp android/Image.gz "$W/mnt/gts3/android/" || die "Android's kernel"

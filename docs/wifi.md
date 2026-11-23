@@ -90,10 +90,25 @@ The fix in `dts/test/test-wifi.dts`:
 - `linux-firmware-ath10k` (gives `ath10k/QCA6174/hw3.0/firmware-6.bin`
   and `board-2.bin`; the device package depends on it).
 - `board-2.bin` has no entry for this board (subsystem IDs are 0000:0000), so
-  ath10k falls back to `board.bin`. Use Samsung's board data from the tablet
-  (read-only, not in this repo): copy `/system/etc/firmware/bdwlan30.bin`
-  (8124 bytes) to `/lib/firmware/ath10k/QCA6174/hw3.0/board.bin`.
+  ath10k falls back to `board.bin`. Samsung's board data from the tablet
+  (read-only, not in this repo), `/system/etc/firmware/bdwlan30.bin` (8124
+  bytes), goes there: `gts3-firmware` (device package) copies it to
+  `/lib/firmware/updates/ath10k/QCA6174/hw3.0/board.bin` at every start.
   Calibration still comes from the chip's OTP (`cal otp` in the log).
+- **Without it 5 GHz is limited.** linux-firmware's generic `board.bin`
+  carries a world regulatory domain (`ath: EEPROM regdomain: 0x6c`, country
+  `00`), and the channels the access point uses may never show up in a scan
+  (seen on the SM-T820, 2026-11-23: a hotspot on channel 149 was invisible,
+  whatever country was set). Samsung's says `0x833a` (GB) and every 5 GHz
+  channel is usable. Check with `dmesg | grep -E "board_file|EEPROM regdomain"`.
+- Our whole-storage layout (docs/partitions.md) takes Samsung's system
+  partition, so the installer keeps the file on the boot partition first
+  (`/boot/gts3/firmware/bdwlan30.bin`, from Samsung's system, a ROM on it,
+  or an earlier layout's boot partition), and `gts3-firmware` reads it there.
+  A tablet installed with an older installer has lost it: copy it back from
+  a backup of the system partition (`debugfs -R "dump
+  /etc/firmware/bdwlan30.bin bdwlan30.bin" system.img`) to
+  `/boot/gts3/firmware/bdwlan30.bin`.
 - The postmarketOS kernel has `CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y`, so
   each optional file ath10k probes for (`cal-pci-0000:01:00.0.bin`,
   `board-pci-0000:01:00.0.bin`) waits 60 s for a helper that never answers.
@@ -113,10 +128,10 @@ suspend the link is down anyway. To turn it back on, put
 
 ## Regulatory domain
 
-The tablet doesn't set a country, so Wi-Fi starts in the world domain, which
-limits the 5 GHz channels (the chip's OTP says GB, EEPROM regdomain 0x833a).
-It depends on where the tablet is, so there is no default. Set your country's
-two-letter code once, for example Thailand:
+The chip's board data says GB (EEPROM regdomain 0x833a, see Firmware above;
+without Samsung's board data it is the world domain). The country belongs to
+where the tablet is: the PC setup asks for it. To change it later, for
+example to Thailand:
 
     echo "options cfg80211 ieee80211_regdom=TH" | sudo tee /etc/modprobe.d/cfg80211-regdom.conf
 

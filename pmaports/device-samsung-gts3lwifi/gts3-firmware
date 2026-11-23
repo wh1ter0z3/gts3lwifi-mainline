@@ -10,7 +10,9 @@
 #    only where the device tree enables the MSS (not on the SM-T825 yet)
 #  - system (Android): the Wi-Fi board data, etc/firmware/bdwlan30.bin ->
 #    ath10k board.bin. apnhlos has a bdwlan30.bin too, but a different one;
-#    Wi-Fi was brought up with this one (docs/wifi.md)
+#    Wi-Fi was brought up with this one (docs/wifi.md). The installer keeps
+#    a copy on the boot partition (gts3/firmware/), as our whole-storage
+#    layout takes Samsung's system
 #  - efs: the sensor registry with this unit's factory calibration
 #  - apnhlos: the Samsung-signed TrustZone apps that /dev/qseecom clients
 #    (keymaster, the fingerprint HAL, DRM) load by name from
@@ -84,7 +86,9 @@ if mount_part modem; then
 	fi
 fi
 
-if mount_part system; then
+# the installer's copy; Samsung's system, where it is still there, wins
+copy /boot/gts3/firmware/bdwlan30.bin "$DEST/ath10k/QCA6174/hw3.0/board.bin"
+if mount_part system 2> /dev/null; then
 	# Samsung's own system, and a ROM on that partition (LineageOS keeps
 	# it in its vendor directory; dual boot's LineageOS mode)
 	for f in "$tmp/system/etc/firmware/bdwlan30.bin" \
