@@ -33,9 +33,11 @@
 #   pmos_root_uuid=   the pmOS root filesystem (as pmOS's own boot image)
 #   gsi.dir=          image directory in it (default /android)
 #   gsi.parts=1       the partitions layout
-#   gsi.disk=         with gsi.parts=1: the eMMC partition (by label) whose
-#                     GPT has Android's partitions (default userdata), or a
-#                     whole disk by kernel name (mmcblk1: microSD, for tests)
+#   gsi.disk=         with gsi.parts=1: the eMMC partition (by label) where
+#                     the GPT with Android's partitions starts (default
+#                     userdata; system: the layout spanning Samsung's system,
+#                     cache, hidden and userdata), or a whole disk by kernel
+#                     name (mmcblk1: microSD, for tests)
 #   gsi.vkms=1        load vkms (a virtual display; for a board without panel)
 #   gsi.data=SIZE     pmOS: size of userdata.img: made at it, or grown to it
 #                     (default 8G)
@@ -174,7 +176,10 @@ if [ "$PARTS" = 1 ]; then
 		PB=${DISK}p
 	else
 		P=$(part_dev $DISK) || fail "no $DISK partition"
-		L=$(losetup -f) && losetup -P "$L" "$P" || fail "losetup $P"
+		# from the partition's start to the eMMC's end: the layout in
+		# system goes on past it (Samsung's table can't be changed)
+		O=$(($(cat /sys/class/block/${P#/dev/}/start) * 512))
+		L=$(losetup -f) && losetup -P -o "$O" "$L" /dev/mmcblk0 || fail "losetup $P"
 		PB=${L#/dev/}p
 	fi
 	# /dev/<partition> of a partition name there
