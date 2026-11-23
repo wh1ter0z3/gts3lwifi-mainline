@@ -1,0 +1,100 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sun, 22 Nov 2026 15:43:52 +0530
+Subject: [PATCH] Bluetooth: qca: Put the public address into ROME's NVM
+ configuration
+
+ROME answers the NVM write that changes its address within 2 ms but is
+busy applying it for a while longer (the next HCI reset takes about
+350 ms): a command sent right after the answer is dropped. The HCI init
+sends its reset right after set_bdaddr, so about every second power on
+with a public address set from user space failed with
+"Opcode 0x0c03 failed: -110".
+
+Do what Qualcomm's own ROME init does: put the public address into NVM
+tag 2 during the download. set_bdaddr then finds the address already in
+place, and writes it with a pause afterwards only if not.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/bluetooth/btqca.c   | 13 +++++++++++++
+ drivers/bluetooth/hci_qca.c | 35 ++++++++++++++++++++++++++++++++++-
+ 2 files changed, 47 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/bluetooth/btqca.c b/drivers/bluetooth/btqca.c
+index 22b08ab05..ebab51709 100644
+--- a/drivers/bluetooth/btqca.c
++++ b/drivers/bluetooth/btqca.c
+@@ -413,6 +413,19 @@ static int qca_tlv_check_data(struct hci_dev *hdev,
+ 
+ 				memcpy(&config->bdaddr, tlv_nvm->data, sizeof(bdaddr_t));
+ 
++				/*
++				 * ROME: put a known public address into the
++				 * configuration, as Qualcomm's own init does,
++				 * instead of changing it with a command after
++				 * the download. The controller is busy for a
++				 * while after that command and can drop the
++				 * next one.
++				 */
++				if (soc_type == QCA_ROME &&
++				    bacmp(&hdev->public_addr, BDADDR_ANY))
++					memcpy(tlv_nvm->data, &hdev->public_addr,
++					       sizeof(bdaddr_t));
++
+ 				break;
+ 
+ 			case EDL_TAG_ID_HCI:
+diff --git a/drivers/bluetooth/hci_qca.c b/drivers/bluetooth/hci_qca.c
+index fedf5f212..53b548039 100644
+--- a/drivers/bluetooth/hci_qca.c
++++ b/drivers/bluetooth/hci_qca.c
+@@ -1916,6 +1916,39 @@ static int qca_configure_hfp_offload(struct hci_dev *hdev)
+ 	return 0;
+ }
+ 
++/*
++ * btqca puts the public address into ROME's NVM configuration during the
++ * download, so the controller normally has it already. Change it with a
++ * command only if it doesn't: ROME answers that command before it is done
++ * with it and drops a command that follows right away, such as the reset
++ * the HCI init sends next.
++ */
++static int qca_set_bdaddr_rome_nvm(struct hci_dev *hdev,
++				   const bdaddr_t *bdaddr)
++{
++	struct hci_rp_read_bd_addr *rp;
++	struct sk_buff *skb;
++	int err;
++
++	skb = __hci_cmd_sync(hdev, HCI_OP_READ_BD_ADDR, 0, NULL,
++			     HCI_INIT_TIMEOUT);
++	if (!IS_ERR(skb)) {
++		rp = (struct hci_rp_read_bd_addr *)skb->data;
++		if (skb->len == sizeof(*rp) && !rp->status &&
++		    !bacmp(&rp->bdaddr, bdaddr)) {
++			kfree_skb(skb);
++			return 0;
++		}
++		kfree_skb(skb);
++	}
++
++	err = qca_set_bdaddr_rome(hdev, bdaddr);
++	if (!err)
++		msleep(50);
++
++	return err;
++}
++
+ static int qca_setup(struct hci_uart *hu)
+ {
+ 	struct hci_dev *hdev = hu->hdev;
+@@ -2083,7 +2116,7 @@ static int qca_setup(struct hci_uart *hu)
+ 
+ 	/* Setup bdaddr */
+ 	if (soc_type == QCA_ROME)
+-		hu->hdev->set_bdaddr = qca_set_bdaddr_rome;
++		hu->hdev->set_bdaddr = qca_set_bdaddr_rome_nvm;
+ 	else
+ 		hu->hdev->set_bdaddr = qca_set_bdaddr;
+ 

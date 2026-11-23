@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..ae735714a3 100644
+index 601fa9f44e..1ce0da07be 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -9,7 +9,7 @@ index 601fa9f44e..ae735714a3 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=17
++pkgrel=18
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -18,7 +18,7 @@ index 601fa9f44e..ae735714a3 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,16 +28,266 @@
+@@ -28,16 +28,271 @@ makedepends="
  "
  
  # Source
@@ -273,6 +273,11 @@ index 601fa9f44e..ae735714a3 100644
 +	0229-dt-bindings-crypto-qcom-inline-crypto-engine-Add-MSM.patch
 +	0230-arm64-dts-qcom-msm8996-The-eMMC-inline-crypto-engine.patch
 +	0231-media-v4l2-common-A-negative-tv_usec-counts-as-negat.patch
++	0232-Bluetooth-hci_qca-Hold-an-optional-vddpa-supply-for-.patch
++	0233-Bluetooth-hci_qca-Start-with-both-sides-asleep-after.patch
++	0234-Bluetooth-qca-Put-the-public-address-into-ROME-s-NVM.patch
++	0235-arm64-dts-qcom-gts3lwifi-Bluetooth-holds-the-Rome-3..patch
++	0236-arm64-dts-qcom-gts3lwifi-Wake-up-sources-in-deep-sle.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
@@ -288,7 +293,7 @@ index 601fa9f44e..ae735714a3 100644
  }
  
  build() {
-@@ -61,6 +311,252 @@
+@@ -61,6 +316,257 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -542,4 +547,9 @@ index 601fa9f44e..ae735714a3 100644
 +32d6864c264b6ac43f32f1b2372823bb4b90c7674595581ab8d6871a06fe54fbc9c8e6ed3b44f4d80b0883850c7a4be8670adb5594927a498d616b59223358a3  0229-dt-bindings-crypto-qcom-inline-crypto-engine-Add-MSM.patch
 +6e95f3c9edc17fa3250df1c5da197f42d7d5a384f9253064fc250d253c8350d1088d9d6f991847cb4190cf735b2eb0d444c1c451084658002870e33e9377989d  0230-arm64-dts-qcom-msm8996-The-eMMC-inline-crypto-engine.patch
 +a61d999388f575878d574d5838cd9f81d92b493573d77d340239cf6afdd197c30b361d7dd2f000cce4bbe9dbe66ac88cef86866a59b77d84651164cadf69840c  0231-media-v4l2-common-A-negative-tv_usec-counts-as-negat.patch
++fa1447925f3397085ce9766e4e4228812da7411de59735c25195136b5374bab061f34694a90c62700ac328f85f8dbe7c95ebd6b609d01c2da6ead453ee226021  0232-Bluetooth-hci_qca-Hold-an-optional-vddpa-supply-for-.patch
++5e44f5f4b7924efdb5879ad5efd58b62b08ce5e0df37fe8a5b8caa57d5cf3a4b089a20b6a008ee6b461a47f8c13563655368b1aaea1b4365006fbfff222b052e  0233-Bluetooth-hci_qca-Start-with-both-sides-asleep-after.patch
++968838a18f21f347d4bd11b8cce663b31f94c12d5e59599536c8bddfcd06bbf9481578af463dd767ea10bf0132c94c661872622da365bd1fd54f57e28954a0dd  0234-Bluetooth-qca-Put-the-public-address-into-ROME-s-NVM.patch
++d8341bbb957710ec756518296a9806fafe5d351ef8c9e34f99d73c949b525bb9e3195bcacf31f782d323a486874980e69faa1a64f105eeef51f515928834ba73  0235-arm64-dts-qcom-gts3lwifi-Bluetooth-holds-the-Rome-3..patch
++254446c7d30b3d8b123007ee8bf2584670c8392a990cd48267416d1d5bbb9bdfceb202bb0470e4ebeb1f826867edc4fa79a50c601cabcd9cd64a6c1b8427a15a  0236-arm64-dts-qcom-gts3lwifi-Wake-up-sources-in-deep-sle.patch
  "

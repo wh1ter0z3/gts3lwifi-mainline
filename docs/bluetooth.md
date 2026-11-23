@@ -69,3 +69,11 @@ if audio or range turns out poor.
 
 `Frame reassembly failed (-84)` shows once per power-up, right after the
 patch download, when the UART changes speed. Setup completes regardless.
+
+## Power and suspend (kernel r18)
+
+Bluetooth holds the QCA6174's 3.3 V rail (`vddpa-supply`, stock's `qca,bt-vdd-pa-supply`): the PCIe
+host powers Wi-Fi off in suspend, and with it the rail Bluetooth needs. The efs address goes into the
+NVM during the firmware download instead of a command afterwards, which the controller sometimes
+dropped the next command after. Details and test results in [suspend](suspend.md).
+

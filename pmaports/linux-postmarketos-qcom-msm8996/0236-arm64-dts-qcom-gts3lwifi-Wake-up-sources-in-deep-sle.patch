@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sun, 22 Nov 2026 10:33:35 +0000
+Subject: [PATCH] arm64: dts: qcom: gts3lwifi: Wake-up sources in deep sleep
+
+In RPM vmin only the MPM can wake the SoC, and TLMM interrupts reach it
+only through the TLMM wakeup-parent: the cover keyboard, a wakeup-source
+already, could not wake the tablet from deep sleep. Add the MPM as the
+TLMM wakeup parent (pinctrl-msm8996 has stock's GPIO to MPM pin map), and
+make the MUIC (PM8994 GPIO 4, through the PMIC arbiter on MPM pin 87) and
+the USB-C controller wake-up sources, so that plugging something in wakes
+the tablet as on stock.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../boot/dts/qcom/apq8096-samsung-gts3lwifi.dts      | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+index 9cc148eaf..bd1fdb614 100644
+--- a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
++++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+@@ -309,6 +309,8 @@ muic: extcon@25 {
+ 			interrupts-extended = <&pm8994_gpios 4 IRQ_TYPE_LEVEL_LOW>;
+ 			pinctrl-names = "default";
+ 			pinctrl-0 = <&muic_int_default>;
++			/* plugging in a charger or cable wakes the tablet */
++			wakeup-source;
+ 		};
+ 
+ 		/*
+@@ -743,6 +745,8 @@ typec: typec@33 {
+ 			interrupts-extended = <&tlmm 73 IRQ_TYPE_LEVEL_LOW>;
+ 			pinctrl-0 = <&s2mm005_int_default>;
+ 			pinctrl-names = "default";
++			/* so does a USB-C device or a PD charger */
++			wakeup-source;
+ 
+ 			connector {
+ 				compatible = "usb-c-connector";
+@@ -2034,6 +2038,14 @@ fp_ctrl_default: fp-ctrl-default-state {
+ };
+ 
+ &tlmm {
++	/*
++	 * In deep sleep (RPM vmin) only the MPM can wake the SoC: this lets
++	 * a TLMM interrupt that is a wake-up source (PCIe WAKE#, the cover
++	 * keyboard, the USB-C controller) arm its MPM pin
++	 * (pinctrl-msm8996 has the map).
++	 */
++	wakeup-parent = <&mpm>;
++
+ 	/*
+ 	 * Pins owned by Samsung's TrustZone. If Linux reads them, the firmware
+ 	 * resets the tablet about 9 s into boot (confirmed on hardware).

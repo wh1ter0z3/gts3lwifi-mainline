@@ -91,3 +91,33 @@ domain the bootloader left on, are gone from the device package since 2026-11-20
 on lk2nd's framebuffer, before the msm driver ran the panel). The power key and the RTC alarm wake
 the tablet from vmin.
 
+## Bluetooth and wake-up sources (2026-11-23, kernel r18)
+
+**Bluetooth kept the tablet awake.** Since kernel r14 the PCIe host powers the Wi-Fi endpoint off in
+suspend (D3cold), and its `vddpe-3v3` supply (WLAN_EN) was the only consumer of `vreg_rome_3p3`, the
+3.3 V rail of the whole QCA6174. So Bluetooth lost power in every suspend, came back in its ROM state,
+ignored the in-band wake after resume (`command 0x0c01 tx timeout`), and its recovery (memory dump,
+SSR) never finished. With `QCA_IBS_DISABLED` stuck, every later `qca_suspend` failed after 10 s
+(`SSR or FW download time out`), so no suspend completed: one night went from 100% to 66% in 7.8 h.
+
+| Fix | |
+|---|---|
+| 0232 + 0235 | `hci_qca` takes an optional `vddpa-supply` for ROME and holds it while the controller is on; the DT gives it `vreg_rome_3p3` (stock does the same: `qca,bt-vdd-pa-supply` is that rail) |
+| 0233 | A power-off resets both in-band sleep states to asleep: a stale "awake" made the next power-on send commands without waking the controller |
+| 0234 | The public address (set from efs by `gts3-bdaddr`) goes into NVM tag 2 during the firmware download, as Qualcomm's own ROME init does. Changing it with the NVM command afterwards left the controller busy for ~350 ms after its answer, and the HCI reset that followed was lost on about every second boot (`Opcode 0x0c03 failed: -110`, Bluetooth off until a reboot) |
+| 0236 | Wake-up sources: the MPM is the TLMM's wakeup parent (pinctrl-msm8996 has stock's GPIO to MPM pin map), and the MUIC and the USB-C controller are wake-up sources, so plugging in a charger wakes the tablet; the cover keyboard, already a wake-up source, can now wake it from vmin too |
+
+Tested on an SM-T820 (no panel), battery only, Wi-Fi and Bluetooth on, suspended through
+`systemctl suspend` with no timed wake-ups:
+
+| | Result |
+|---|---|
+| One night | one suspend of 9 h, 99.98% of it in RPM vmin, battery 100% -> 100% |
+| Wake-ups during the night | none |
+| Plugging USB in | woke the tablet; Bluetooth on, Wi-Fi back within seconds |
+| Reboots | 10 of 10 with Bluetooth on and the efs address; 10 of 10 Bluetooth off/on |
+| 4.6 h test with an RTC wake every 30 min | 99% -> 99% |
+
+Not done yet: Bluetooth as a wake-up source (RX as a wake GPIO, like stock's `wakeup_irq`, needs
+`msm_serial` support), and Wi-Fi staying associated in suspend (wake-on-WLAN through PCIe WAKE#, GPIO 37).
+

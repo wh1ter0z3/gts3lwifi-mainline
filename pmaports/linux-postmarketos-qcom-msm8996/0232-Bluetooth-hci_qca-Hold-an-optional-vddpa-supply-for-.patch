@@ -1,0 +1,80 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sun, 22 Nov 2026 15:43:51 +0530
+Subject: [PATCH] Bluetooth: hci_qca: Hold an optional vddpa supply for ROME
+
+On a Wi-Fi/Bluetooth combo chip, the host may switch a rail the
+Bluetooth part also needs. The Galaxy Tab S3's QCA6174 gets its 3.3 V
+through the PCIe host's vddpe-3v3 supply, which pcie-qcom switches off
+in system suspend: Bluetooth then lost power in every suspend, ignored
+the in-band wake after resume, and the recovery that followed kept the
+next suspends from completing.
+
+Take an optional vddpa supply for ROME and keep it enabled while the
+controller is powered.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/bluetooth/hci_qca.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/drivers/bluetooth/hci_qca.c b/drivers/bluetooth/hci_qca.c
+index 7089e9b63..bd9f68bdb 100644
+--- a/drivers/bluetooth/hci_qca.c
++++ b/drivers/bluetooth/hci_qca.c
+@@ -223,6 +223,8 @@ struct qca_serdev {
+ 	struct gpio_desc *bt_en;
+ 	struct gpio_desc *sw_ctrl;
+ 	struct clk	 *susclk;
++	struct regulator *vddpa;
++	bool vddpa_on;
+ 	enum qca_btsoc_type btsoc_type;
+ 	struct qca_power *bt_power;
+ 	u32 init_speed;
+@@ -1869,6 +1871,12 @@ static int qca_power_on(struct hci_dev *hdev)
+ 
+ 	default:
+ 		qcadev = serdev_device_get_drvdata(hu->serdev);
++		if (qcadev->vddpa && !qcadev->vddpa_on) {
++			ret = regulator_enable(qcadev->vddpa);
++			if (ret)
++				return ret;
++			qcadev->vddpa_on = true;
++		}
+ 		if (qcadev->bt_en) {
+ 			gpiod_set_value_cansleep(qcadev->bt_en, 1);
+ 			/* Controller needs time to bootup. */
+@@ -2291,6 +2299,10 @@ static void qca_power_off(struct hci_uart *hu)
+ 
+ 	default:
+ 		gpiod_set_value_cansleep(qcadev->bt_en, 0);
++		if (qcadev->vddpa_on) {
++			regulator_disable(qcadev->vddpa);
++			qcadev->vddpa_on = false;
++		}
+ 	}
+ 
+ 	set_bit(QCA_BT_OFF, &qca->flags);
+@@ -2537,6 +2549,22 @@ static int qca_serdev_probe(struct serdev_device *serdev)
+ 		if (!qcadev->bt_en)
+ 			power_ctrl_enabled = false;
+ 
++		/*
++		 * A supply the controller shares with another function, such as
++		 * the 3.3 V rail of a Wi-Fi/Bluetooth combo chip that the PCIe
++		 * host also switches. Holding it keeps Bluetooth powered while
++		 * the other function is off, e.g. the PCIe link in system
++		 * suspend.
++		 */
++		qcadev->vddpa = devm_regulator_get_optional(&serdev->dev, "vddpa");
++		if (IS_ERR(qcadev->vddpa)) {
++			if (PTR_ERR(qcadev->vddpa) != -ENODEV)
++				return dev_err_probe(&serdev->dev,
++						     PTR_ERR(qcadev->vddpa),
++						     "failed to get vddpa supply\n");
++			qcadev->vddpa = NULL;
++		}
++
+ 		qcadev->susclk = devm_clk_get_optional_enabled_with_rate(
+ 					&serdev->dev, NULL, SUSCLK_RATE_32KHZ);
+ 		if (IS_ERR(qcadev->susclk)) {

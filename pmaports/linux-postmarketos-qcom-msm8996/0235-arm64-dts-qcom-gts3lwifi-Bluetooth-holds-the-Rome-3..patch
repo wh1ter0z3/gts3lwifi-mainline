@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Sun, 22 Nov 2026 10:33:35 +0000
+Subject: [PATCH] arm64: dts: qcom: gts3lwifi: Bluetooth holds the Rome 3.3 V
+ rail
+
+The QCA6174 is powered from vreg_rome_3p3, which the PCIe host also
+switches through WLAN_EN. In system suspend pcie-qcom powers the
+endpoint off, which took Bluetooth down too: it came back in its ROM
+state, missed the in-band wake, and its recovery kept the following
+suspends from completing. Stock gives Bluetooth the same rail as its
+qca,bt-vdd-pa-supply.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+index b4e723b31..9cc148eaf 100644
+--- a/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
++++ b/arch/arm64/boot/dts/qcom/apq8096-samsung-gts3lwifi.dts
+@@ -1346,6 +1346,11 @@ bluetooth {
+ 		compatible = "qcom,qca6174-bt";
+ 		enable-gpios = <&pm8994_gpios 19 GPIO_ACTIVE_HIGH>;
+ 		clocks = <&rome_sleep_clk>;
++		/*
++		 * Rome's 3.3 V rail, which also feeds WLAN_EN: the PCIe host
++		 * drops its vote in suspend (stock: qca,bt-vdd-pa-supply).
++		 */
++		vddpa-supply = <&vreg_rome_3p3>;
+ 	};
+ };
+ 
