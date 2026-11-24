@@ -1,0 +1,10 @@
+[Unit]
+Description=Sleep at the login screen when nobody is logged in
+After=systemd-logind.service display-manager.service
+
+[Service]
+ExecStart=/usr/sbin/gts3-greeter-sleep
+Restart=on-failure
+
+[Install]
+WantedBy=graphical.target

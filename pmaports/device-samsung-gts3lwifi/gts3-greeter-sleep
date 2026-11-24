@@ -1,0 +1,43 @@
+#!/bin/sh
+# Sleep at the login screen. Plasma's power management (PowerDevil) runs in a
+# logged-in session only, and the login screen asks for no sleep at all: a
+# tablet left there stayed awake all night. This suspends to RAM when nobody
+# is logged in (no user session: graphical, console or SSH) for as long as
+# a session would wait, from powerdevilrc: 5 minutes on battery, 10 on the
+# charger. The power key, a charger plugged in or the keyboard cover wake it.
+set -eu
+
+ON_BATTERY=${GTS3_GREETER_BATTERY:-300}
+ON_AC=${GTS3_GREETER_AC:-600}
+STEP=30
+
+# a user session: any class "user" session (Plasma, a console, SSH)
+logged_in() {
+	for s in $(loginctl list-sessions --no-legend 2>/dev/null | awk '{ print $1 }'); do
+		[ "$(loginctl show-session "$s" -p Class --value 2>/dev/null)" = user ] && return 0
+	done
+	return 1
+}
+# on a charger: a power supply that is online and not the battery
+on_ac() {
+	for p in /sys/class/power_supply/*; do
+		[ "$(cat "$p/type" 2>/dev/null)" = Battery ] && continue
+		[ "$(cat "$p/online" 2>/dev/null)" = 1 ] && return 0
+	done
+	return 1
+}
+
+idle=0
+while sleep $STEP; do
+	if logged_in; then
+		idle=0
+		continue
+	fi
+	idle=$((idle + STEP))
+	if on_ac; then limit=$ON_AC; else limit=$ON_BATTERY; fi
+	[ "$idle" -ge "$limit" ] || continue
+	echo "gts3-greeter-sleep: nobody logged in for $idle s: suspending"
+	systemctl suspend || :
+	# a fresh start of the count after waking
+	idle=0
+done

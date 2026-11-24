@@ -121,3 +121,19 @@ Tested on an SM-T820 (no panel), battery only, Wi-Fi and Bluetooth on, suspended
 Not done yet: Bluetooth as a wake-up source (RX as a wake GPIO, like stock's `wakeup_irq`, needs
 `msm_serial` support), and Wi-Fi staying associated in suspend (wake-on-WLAN through PCIe WAKE#, GPIO 37).
 
+
+## When it sleeps (2026-11-24, device r28)
+
+- **Logged in:** Plasma's power management (PowerDevil) suspends after 5
+  minutes idle on battery, 10 on the charger (`powerdevilrc`, given to new
+  users from `/etc/skel`).
+- **At the login screen**, nobody logged in: PowerDevil doesn't run there, and
+  the login screen asks for no sleep, so a tablet left at it stayed awake all
+  night (100 % to 78 % in 8.7 hours on an SM-T820). `gts3-greeter-sleep` (a
+  service in the device package) now suspends it after the same 5 or 10
+  minutes. Any user session (Plasma, a console, SSH) counts as logged in.
+  Tested: it suspended a minute after the last session ended (test limit),
+  and the tablet stayed asleep until the power key, 16 minutes later.
+- **An SSH session blocks sleep** (`systemd-inhibit --list`: sshd, "Active
+  PAM session", block), from systemd and OpenSSH themselves. `sudo systemctl
+  suspend -i` suspends anyway.

@@ -3,7 +3,7 @@
 How to put **Nura** (a full Linux desktop, postmarketOS with Plasma) and/or
 **Android** on a Samsung Galaxy Tab S3, with a Windows or Linux PC. No
 command line knowledge needed: one script asks you a few questions and does
-the rest. It takes about 30 to 45 minutes, most of it waiting.
+the rest. It takes about 15 minutes, plus the downloads.
 
 This is for the setup scripts that come with **dual boot test 4 and later**.
 The technical details, and the other ways to install, are in
@@ -15,15 +15,20 @@ and please [report](#report) how it went.
 
 ## What you get
 
-You choose one of three setups:
+You choose one of five setups:
 
 | Setup | What's on the tablet |
 |---|---|
-| **Nura only** | Linux with the Plasma desktop: a browser, files, settings, Wi-Fi, Bluetooth, sound, cameras, the S-Pen |
-| **Android only** | an Android of your choice (a "GSI", see [Downloads](#2-download-the-files)), on our open source drivers |
-| **Both** | both, side by side; you pick one at every start, and switch without a PC |
+| **1. Nura only** | Linux with the Plasma desktop: a browser, files, settings, Wi-Fi, Bluetooth, sound, cameras, the S-Pen. It gets the whole internal storage (about 28 GB) |
+| **2. Android only** | an Android of your choice (a "GSI", see [Downloads](#2-download-the-files)), on our open source drivers |
+| **3. Nura and Android** | both, side by side; you pick one at every start, and switch without a PC |
+| **4. LineageOS only** | a LineageOS build for the Tab S3 (Awesometic's, Jayden's), installed from its own zip, plus our recovery |
+| **5. Nura and LineageOS** | both: a normal start is LineageOS, the recovery keys start Nura |
 
 A recovery (OrangeFox) comes with every setup, for backups and repairs.
+Samsung's partition table is never changed (the layouts are inside its
+partitions, [details](partitions.md)), so going back to stock is just
+flashing Samsung's firmware.
 
 ## What works
 
@@ -32,8 +37,10 @@ A recovery (OrangeFox) comes with every setup, for backups and repairs.
   about 1 % of battery), charging.
 - **Android:** the same drivers; tested on a board without a screen so far,
   so its display is the least tested part.
+- **Encryption:** all of Nura (like a normal Linux install: a passphrase at
+  every start), or one encrypted folder.
 - **Not yet:** the fingerprint sensor, Netflix-style HD video (Widevine L1),
-  mobile data on the SM-T825 (LTE), encryption.
+  mobile data on the SM-T825 (LTE).
 
 ## 1. Before you start
 
@@ -63,11 +70,17 @@ put these in **one folder** on your PC:
 | `lk2nd-gts3lwifi-odin.tar` (SM-T820) or `lk2nd-gts3llte-odin.tar` (SM-T825) | only if your tablet doesn't have lk2nd yet (step 3) |
 
 **For Android**, also download a GSI into the same folder: an "arm64 A/B"
-system image of Android 15, 16 or 17. We test with TrebleDroid's AOSP 16,
-`system-td-arm64-vanilla.img.xz`, from
+system image of Android 15, 16 or 17, at most 4 GB unpacked. We test with
+TrebleDroid's AOSP 16, `system-td-arm64-vanilla.img.xz`, from
 [TrebleDroid's releases](https://github.com/TrebleDroid/treble_experimentations/releases).
-Leave the `.xz` packed. Without a GSI you get Nura only; without
-`nura-root.img.xz`, Android only.
+Leave the `.xz` packed.
+
+**For LineageOS**, download a LineageOS zip **for your model** into the same
+folder (`lineage-*.zip`: for the SM-T820 it says `gts3lwifi`, for the
+SM-T825 `gts3llte`). Leave it zipped.
+
+The script lists all five setups and says, for each, which file it still
+needs.
 
 **adb and fastboot**, the tools the script uses to talk to the tablet:
 
@@ -129,20 +142,24 @@ bash setup.sh
 
 The script asks:
 
-1. **What to install**, if it finds both Nura and a GSI: 1 Nura, 2 Android,
-   3 both.
+1. **What to install**: the five setups, each marked *ready* or with the file
+   it still needs. Type its number.
 2. **For Nura:**
    - your **user name** (lowercase, like `anna`) and **password**: you log in
      with these;
    - the tablet's **name** on your network;
-   - **time zone**, **language**, **keyboard layout** and **country**: it
-     suggests your PC's own; press Enter to take a suggestion;
+   - **time zone**, **language**, **keyboard layout** and **country** (two
+     letters, like `IN`, `US` or `GB`: it sets which Wi-Fi channels are
+     allowed): it suggests your PC's own; press Enter to take a suggestion;
    - a **Wi-Fi network** and its password, so Nura is online at its first
      start (press Enter to skip).
-   - whether to make an **encrypted folder**, `~/Private`, and its
-     passphrase: the tablet's storage chip encrypts its files in hardware;
-     after logging in, `fscrypt unlock ~/Private` opens it
-     ([encryption](encryption.md));
+   - whether to **encrypt all of Nura** (LUKS2, like a normal Linux
+     install): everything stays unreadable without a passphrase you type at
+     every start, on the screen or the keyboard cover. **Don't lose it**:
+     nobody can recover the data without it. If you say no, it offers an
+     **encrypted folder**, `~/Private`, instead: the tablet's storage chip
+     encrypts its files in hardware, and `fscrypt unlock ~/Private` opens it
+     after logging in ([encryption](encryption.md));
    - whether to turn on **SSH**, to log in to the tablet from your PC (over
      the USB cable at `172.16.42.1`, or over Wi-Fi). It offers your PC's
      SSH key if you have one; with a key, the tablet only accepts that key.
@@ -151,10 +168,13 @@ The script asks:
    tablet's internal storage is erased after it.
 
 Now leave it alone, with the cable connected. The script shows each step:
-the layout, sending Nura (about 1.4 GB, which currently takes around 15-20
-minutes over USB) and the GSI, then your settings. Every file is checked on the tablet after it arrives; a damaged
-one is refused, and the script tells you to run it again. At the end it
-offers to restart the tablet.
+the layout, sending Nura (about 1.4 GB, about a minute) and the GSI or the
+LineageOS zip, then your settings. Every file is checked on the tablet after
+it arrives; a damaged one is refused, and the script tells you to run it
+again. At the end it offers to restart the tablet.
+
+With LineageOS, the script also copies the tablet's old recovery (from the
+recovery partition, which now gets lk2nd) to your PC first.
 
 ## 6. First start
 
@@ -163,8 +183,11 @@ offers to restart the tablet.
   user name and password you gave the script. If you skipped the script
   (installed another way), the user is `user` and the password `147147`,
   and Plasma asks you to change it.
+- **Encrypted Nura:** the unlock screen comes up first: type your passphrase.
 - **Android's** first start takes several minutes: the Samsung logo, a black
   screen for a while, then Android's own setup.
+- **LineageOS** starts on a normal power-on. For Nura or the recovery, turn the
+  tablet on holding **Power + Volume Up + Home**: lk2nd's menu appears.
 
 ## Switching between Nura and Android
 
@@ -174,6 +197,8 @@ offers to restart the tablet.
 - **Change the default** from Nura: open *Konsole* and type
   `sudo gts3-boot android reboot` (or `nura`). `sudo gts3-boot` alone lists
   the choices.
+- **With LineageOS:** LineageOS's *Restart to recovery* starts lk2nd's menu
+  (Nura by default); a normal restart in Nura goes back to LineageOS.
 
 ## The recovery (OrangeFox)
 
@@ -206,7 +231,9 @@ erases Nura and Android together.
   start on that board. Go to Download mode (step 3) and flash your old lk2nd
   or a stock firmware, and please report it.
 - **Back to stock Android (Samsung's):** flash Samsung's firmware for your
-  model with Odin or heimdall. That removes lk2nd, Nura and our Android.
+  model with Odin or heimdall. That removes lk2nd, Nura and our Android, and
+  brings back Samsung's system. With LineageOS, the old recovery is in the
+  file the script saved on your PC (`gts3-recovery-before-...img.gz`).
 
 ## Report
 

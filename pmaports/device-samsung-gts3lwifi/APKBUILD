@@ -3,7 +3,7 @@ maintainer="psigod <psigod@example.com>"
 pkgname=device-samsung-gts3lwifi
 pkgdesc="Samsung Galaxy Tab S3 (SM-T820, SM-T825)"
 pkgver=1
-pkgrel=27
+pkgrel=28
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -62,6 +62,8 @@ source="
 	gts3-speaker.c
 	gts3-speaker-tables.h
 	52-gts3-speaker.conf
+	gts3-greeter-sleep
+	gts3-greeter-sleep.service
 	"
 
 build() {
@@ -120,6 +122,15 @@ package() {
 		"$pkgdir"/usr/lib/udev/rules.d/61-gts3-keys.rules
 	install -Dm644 "$srcdir"/gts3-kglobalshortcutsrc \
 		"$pkgdir"/etc/skel/.config/kglobalshortcutsrc
+
+	# Sleep at the login screen too, where PowerDevil doesn't run (see the
+	# script): the same 5 minutes on battery, 10 on the charger
+	install -Dm755 "$srcdir"/gts3-greeter-sleep "$pkgdir"/usr/sbin/gts3-greeter-sleep
+	install -Dm644 "$srcdir"/gts3-greeter-sleep.service \
+		"$pkgdir"/usr/lib/systemd/system/gts3-greeter-sleep.service
+	mkdir -p "$pkgdir"/usr/lib/systemd/system/graphical.target.wants
+	ln -s ../gts3-greeter-sleep.service \
+		"$pkgdir"/usr/lib/systemd/system/graphical.target.wants/gts3-greeter-sleep.service
 
 	# Five-minute idle auto-suspend (suspend to RAM). etc/skel, so it reaches
 	# users created after this is installed.
@@ -254,4 +265,6 @@ cb46230911abd0b00e7b28d4a13710df9fe175c290887a77928a299fb4434e2ae9fb3afc4e979ade
 fab0831901d23b438af4802b00979f4b7e878c7bada3b0cdb91dc45e4485cd198a1f57d2a9c8b3b17eba948aa85f9d9a2ad63e56b23e7aa2240144733c519519  gts3-speaker.c
 32e526498033c06dd84df48c906c4d07bf342b41a8dd632486039eac0d87bd2929d36cda2f5327ae3dde4fc13d4a674774e1cf442e28669830851240ef9d724f  gts3-speaker-tables.h
 a5d88075058cb30187f53b742c39dc9bcaba8c218e2769d6d10e247f6041c7b4ea815f10e3682c779c412bef8082ce6091a918fb58c53f1d232682deb749f8d5  52-gts3-speaker.conf
+34c5116027fd326921695d8255dab47bab219a9214e6566fcb0d985626786c59367641b9812fe391c0611759ae9f18abed0a3250f814e689305a3d9a6c97c469  gts3-greeter-sleep
+a508a5a5384d9b48b68b5fc171030635166c7fee2cb84aba107cb445c98ae6b6c44514c67ae1bfe85ead13097ccf100cbe66794fa16a30e6b383158efb6ebfec  gts3-greeter-sleep.service
 "
