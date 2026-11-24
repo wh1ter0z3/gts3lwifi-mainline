@@ -1,8 +1,8 @@
 # Maintainer: psigod <psigod@example.com>
 pkgname=smedio
-pkgver=3.4.2
+pkgver=3.5
 pkgrel=0
-_commit="54c73381508c62532f22245c6ca21e67839a1047"
+_commit="a4d44a420267d59b11301cb2da3c6466b6d8d5b5"
 pkgdesc="YouTube and live TV, ad-free and hardware-decoded (VA-API, V4L2 video decoders)"
 url="https://github.com/wh1ter0z3/smedio"
 arch="noarch"
@@ -39,5 +39,5 @@ package() {
 	install -Dm644 LICENSE -t "$pkgdir"/usr/share/licenses/$pkgname
 }
 sha512sums="
-873d0727f82ca3694c46b9b69a17378da0d257ad359b9162645080a357305109edd9df8cc70b43ceab9baed89e9b242118e6703003b35d9defa0ec34d3b94a49  smedio-54c73381508c62532f22245c6ca21e67839a1047.tar.gz
+a21c8800c912ce2510e80e16ef600073abc7bc52004c2126b9e4a5dddbc31f644c718ec333da3e3c509dd2ba92b83d698715a9687e218e94bcbebb0e6e9ea41e  smedio-a4d44a420267d59b11301cb2da3c6466b6d8d5b5.tar.gz
 "
