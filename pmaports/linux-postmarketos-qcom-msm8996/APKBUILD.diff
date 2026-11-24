@@ -1,5 +1,5 @@
 diff --git a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
-index 601fa9f44e..c55d22c6c7 100644
+index 601fa9f44e..c3fab3909a 100644
 --- a/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 +++ b/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD
 @@ -2,12 +2,12 @@
@@ -9,7 +9,7 @@ index 601fa9f44e..c55d22c6c7 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=19
++pkgrel=20
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -18,7 +18,7 @@ index 601fa9f44e..c55d22c6c7 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,16 +28,272 @@ makedepends="
+@@ -28,16 +28,273 @@ makedepends="
  "
  
  # Source
@@ -279,6 +279,7 @@ index 601fa9f44e..c55d22c6c7 100644
 +	0235-arm64-dts-qcom-gts3lwifi-Bluetooth-holds-the-Rome-3..patch
 +	0236-arm64-dts-qcom-gts3lwifi-Wake-up-sources-in-deep-sle.patch
 +	0237-usb-gadget-configfs-android_usb-class-and-USB-state-uevents.patch
++	0238-selinux-don-t-check-firmware-loads.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
@@ -294,7 +295,7 @@ index 601fa9f44e..c55d22c6c7 100644
  }
  
  build() {
-@@ -61,6 +317,258 @@ package() {
+@@ -61,6 +318,259 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -554,4 +555,5 @@ index 601fa9f44e..c55d22c6c7 100644
 +d8341bbb957710ec756518296a9806fafe5d351ef8c9e34f99d73c949b525bb9e3195bcacf31f782d323a486874980e69faa1a64f105eeef51f515928834ba73  0235-arm64-dts-qcom-gts3lwifi-Bluetooth-holds-the-Rome-3..patch
 +254446c7d30b3d8b123007ee8bf2584670c8392a990cd48267416d1d5bbb9bdfceb202bb0470e4ebeb1f826867edc4fa79a50c601cabcd9cd64a6c1b8427a15a  0236-arm64-dts-qcom-gts3lwifi-Wake-up-sources-in-deep-sle.patch
 +f209ca349509263d9a192a18e04d900dfbf89655eeea0385aba1e06f967116f631a7aec78d64e0172a0c5196e1a0bb6a7db6b58dab02333579ace61ef5dff394  0237-usb-gadget-configfs-android_usb-class-and-USB-state-uevents.patch
++4504932a4a7f6f2cca57db5a020e44bc94a77f6f7d589b0b31d40ac117c6c95cdb3876b91ac610b70736f6b9c8e92bcd0ccf1fec2d477e1107184bc69f390484  0238-selinux-don-t-check-firmware-loads.patch
  "

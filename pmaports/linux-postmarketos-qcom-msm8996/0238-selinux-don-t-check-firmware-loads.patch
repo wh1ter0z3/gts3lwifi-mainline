@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Tue, 24 Nov 2026 15:11:36 +0000
+Subject: [PATCH] selinux: don't check firmware loads (Android's policy lacks
+ firmware_load)
+
+Linux checks direct firmware reads against system:firmware_load. Android's
+policy (Android 16 included) has no such permission and is built with
+handle_unknown=deny, so under an enforcing policy every firmware load was
+refused: GPU microcode and zap shader, Venus, the DSPs, Wi-Fi and
+Bluetooth. Skip the check for firmware, as before the permission existed;
+modules, kexec, policy and certificate loads are still checked. Linux
+userspace without SELinux (postmarketOS) is not affected.
+---
+ security/selinux/hooks.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/security/selinux/hooks.c b/security/selinux/hooks.c
+index 30776b0..decdf1a 100644
+--- a/security/selinux/hooks.c
++++ b/security/selinux/hooks.c
+@@ -4539,8 +4539,12 @@ static int selinux_kernel_read_file(struct file *file,
+ 			 "New kernel_read_file_id introduced; update SELinux!");
+ 
+ 	switch (id) {
++	/*
++	 * Firmware loads are not checked: Android's policy (up to Android 16 at
++	 * least) has no system:firmware_load and denies unknown permissions,
++	 * so every firmware load failed under an enforcing policy.
++	 */
+ 	case READING_FIRMWARE:
+-		rc = selinux_kernel_load_from_file(file, SYSTEM__FIRMWARE_LOAD);
+ 		break;
+ 	case READING_MODULE:
+ 	case READING_MODULE_COMPRESSED:
+@@ -4576,8 +4580,7 @@ static int selinux_kernel_load_data(enum kernel_load_data_id id, bool contents)
+ 			 "New kernel_load_data_id introduced; update SELinux!");
+ 
+ 	switch (id) {
+-	case LOADING_FIRMWARE:
+-		rc = selinux_kernel_load_from_file(NULL, SYSTEM__FIRMWARE_LOAD);
++	case LOADING_FIRMWARE:	/* not checked, see selinux_kernel_read_file() */
+ 		break;
+ 	case LOADING_MODULE:
+ 		rc = selinux_kernel_load_from_file(NULL, SYSTEM__MODULE_LOAD);
+-- 
+2.34.1
+
