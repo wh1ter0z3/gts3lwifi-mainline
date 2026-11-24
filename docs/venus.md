@@ -154,7 +154,7 @@ Apps don't use the hardware decoder by themselves:
   do (Raspberry Pi's FFmpeg fork does), and it only tries H.264 and AV1.
   Browser video decodes on the CPU.
 - **YouTube**: [Smedio](https://github.com/wh1ter0z3/smedio) (package
-  `pmaports/smedio`) plays YouTube and live TV in an embedded mpv with
+  recipe in its repo, `packaging/postmarketos`) plays YouTube and live TV in an embedded mpv with
   `v4l2m2m-copy`, and asks YouTube for VP9 when the decoder takes it: VP9
   1080p decodes on Venus at about 1.4 load.
 
