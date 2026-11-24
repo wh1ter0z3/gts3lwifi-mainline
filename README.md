@@ -8,7 +8,7 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 
 **Latest:** [dual boot test 4](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test4) — one setup script, five setups (Nura, Android, LineageOS, alone or side by side), all of the internal storage, full-disk encryption, a 20 times faster install.
 
-**Community:** [Telegram group](https://t.me/+J_vEuef2Xk1iZGE9) for chat, quick help and testing. Bugs and test results go to [GitHub issues](https://github.com/wh1ter0z3/gts3lwifi-mainline/issues), so they don't get lost in the chat.
+**Community:** [XDA thread](https://xdaforums.com/t/os-kernel-linux-7-3-t820-t825-mainline-linux-nura-postmarketos-plasma-android-lineageos-dual-boot.4809979/), [Telegram group](https://t.me/+J_vEuef2Xk1iZGE9) for chat, quick help and testing. Bugs and test results go to [GitHub issues](https://github.com/wh1ter0z3/gts3lwifi-mainline/issues), so they don't get lost in the chat.
 
 - SoC: Qualcomm APQ8096 (SM-T820) / MSM8996 (SM-T825), Snapdragon 820; PMICs PM8994 + PM8004
 - Storage: eMMC (not UFS)
