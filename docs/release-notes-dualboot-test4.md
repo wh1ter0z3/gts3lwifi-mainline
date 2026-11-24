@@ -32,7 +32,18 @@ LineageOS, alone or next to Nura, with OrangeFox and lk2nd v2. A PC script
   too, knows every layout (Wipe can't reach Nura), and reports itself as an
   SM-T825 on one, for T825 ROM zips.
 - **Android and OrangeFox** stay on kernel r14 (as in test 3); gsi-init finds
-  its partitions in the new layout.
+  its partitions in the new layout. The OrangeFox the setup script starts from
+  RAM (the two `OrangeFox-mainline-*-fastboot-boot.img`) is on kernel r18 since
+  the fix below.
+
+**Fixed on 2026-11-24:** OrangeFox showed no battery level and no charger
+(three modules were missing from its ramdisk: `sm5705_fuel_gauge`,
+`i2c-gpio`, `i2c-algo-bit`). New `gts3-dualboot-test4.zip` (only its OrangeFox
+ramdisk changed) and both `OrangeFox-mainline-*-fastboot-boot.img`; tested on
+the SM-T820, battery 100% in OrangeFox. Downloaded before? Get those three
+files again (and `SHA256SUMS`); `nura-root.img.xz` and the rest are unchanged.
+A tablet that is already installed only lacks the battery in OrangeFox:
+reinstalling isn't needed.
 
 **This is a test build. It erases the tablet's internal storage.** All five
 setups were installed and started on an SM-T820 board without a screen.
