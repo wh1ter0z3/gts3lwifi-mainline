@@ -6,7 +6,7 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 
 **Install it:** [the install guide](docs/install.md), with one setup script for Windows or Linux (from dual boot test 4).
 
-**Latest:** [dual boot test 3](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test3) — Nura and an Android side by side; Nura now sleeps deeply.
+**Latest:** [dual boot test 4](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test4) — one setup script, five setups (Nura, Android, LineageOS, alone or side by side), all of the internal storage, full-disk encryption, a 20 times faster install.
 
 **Community:** [Telegram group](https://t.me/+J_vEuef2Xk1iZGE9) for chat, quick help and testing. Bugs and test results go to [GitHub issues](https://github.com/wh1ter0z3/gts3lwifi-mainline/issues), so they don't get lost in the chat.
 
@@ -22,7 +22,8 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 Nura (postmarketOS with Plasma) and an Android side by side on internal
 storage, plus OrangeFox on our kernel. lk2nd picks one at every start, and
 they switch without a PC. [How it works](docs/dual-boot.md),
-[release notes](docs/release-notes-dualboot-test3.md).
+[what goes where](docs/partitions.md),
+[release notes](docs/release-notes-dualboot-test4.md).
 
 Both Androids keep Nura, so the choice is only which Android:
 

@@ -70,6 +70,7 @@ SYSTEM=${SYSTEM:-4G} VENDOR=${VENDOR:-1G} DATA=${DATA:-4G} LOS_DATA=${LOS_DATA:-
 RPATH=${PATH#"$GTS3_BB":}
 W=${WORK:-/tmp/gts3-install}
 G=$W/dev
+WB=$W/bdwlan30.bin
 DIR=$(dirname "$ZIP")
 STAGE=${GTS3_STAGE:-all}
 # the stages after the layout keep its partitions attached, also on errors
@@ -216,6 +217,17 @@ fde_unlock() {
 	sync
 	umount "$W/nura/sys" "$W/nura/proc" "$W/nura/dev" "$W/nura/boot" "$W/nura" || die "umount"
 }
+# The Wi-Fi board data in Nura's root too: the driver loads before
+# gts3-firmware copies it from the boot partition, so without this Nura's
+# first start has the world regulatory domain (5 GHz limited)
+wb_root() {
+	[ -s "$WB" ] || return 0
+	mkdir -p "$W/nura"
+	mount -t ext4 "$G/nura" "$W/nura" || die "mount Nura's root"
+	mkdir -p "$W/nura/lib/firmware/updates/ath10k/QCA6174/hw3.0" &&
+		cp "$WB" "$W/nura/lib/firmware/updates/ath10k/QCA6174/hw3.0/board.bin" || die "the Wi-Fi board data"
+	umount "$W/nura" || die "umount Nura's root"
+}
 # Nura's root mount options with inlinecrypt, so fscrypt encrypts on the
 # eMMC's inline crypto engine (docs/encryption.md); harmless without fscrypt
 ice_cmdline() {
@@ -344,6 +356,7 @@ if [ "$STAGE" = finish ]; then
 		[ -z "${FDE_UUID:-}" ] || [ -b "/dev/mapper/$CRYPT" ] ||
 			die "Nura's encrypted partition isn't open: run the layout stage again"
 		fixroot
+		wb_root
 		[ -z "${FDE_UUID:-}" ] || fde_unlock
 		if [ -n "${GTS3_ANSWERS:-}" ]; then
 			ui "Nura: your settings..."
@@ -548,7 +561,6 @@ gpt_at() { [ "$(dd if="$1" bs=512 skip=$(($2 + 1)) count=1 2> /dev/null | head -
 # takes. Kept on our boot partition, gts3/firmware/ (Nura's gts3-firmware
 # reads it there): from Samsung's system or a ROM on it, else from the boot
 # partition of an earlier layout of ours.
-WB=$W/bdwlan30.bin
 rm -f "$WB"
 wb_from_fs() {	# <dir>: the board data in a mounted file system
 	for f in etc/firmware/bdwlan30.bin system/etc/firmware/bdwlan30.bin vendor/firmware/bdwlan30.bin \
@@ -748,6 +760,7 @@ if [ "$STAGE" = all ] && [ -n "$ROOT" ]; then
 	*) $SIMG2IMG "$ROOT" "$G/nura" || die "simg2img $(basename "$ROOT")" ;;
 	esac
 	fixroot
+	wb_root
 fi
 
 if [ -e "$G/android_data" ]; then
