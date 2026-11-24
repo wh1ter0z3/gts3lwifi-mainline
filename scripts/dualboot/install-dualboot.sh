@@ -276,7 +276,9 @@ if [ -n "$ANDROID" ]; then
 	if [ -n "$GSI" ]; then
 		cp "$ADTB" "$B/gts3/android/gts3.dtb"
 		cp "$ANDROID/initramfs" "$B/gts3/android/initramfs"
-		ANDROID_CMDLINE="$(cat "$ANDROID/cmdline") gsi.parts=1"
+		# USB is Android's (adb, MTP) and Android sleeps; GTS3_GSI_USB=net
+		# keeps gsi-init's debug network link instead (headless boards)
+		ANDROID_CMDLINE="$(cat "$ANDROID/cmdline") gsi.parts=1 gsi.usb=${GTS3_GSI_USB:-android}"
 	fi
 	if [ -n "$RDTB" ]; then
 		mkdir -p "$B/gts3/recovery"

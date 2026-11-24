@@ -43,6 +43,8 @@
 #           gts3-firstsetup with those answers and GTS3_UTC=<the PC's time>;
 #           the LineageOS zip; then lk2nd v2
 # Without GTS3_STAGE, all of it in one go from the files next to the zip.
+# GTS3_GSI_USB=net (optional): our Android's boot entry keeps gsi-init's debug
+# network link on USB (a board without screen) instead of Android's adb/MTP.
 OUTFD=$2
 ZIP=$3
 case "$0" in /*) SELF=$0 ;; *) SELF=$PWD/$0 ;; esac
@@ -735,7 +737,9 @@ mkdir -p "$W/mnt/extlinux"
 		echo "	linux /gts3/android/Image.gz"
 		echo "	initrd /gts3/android/initramfs"
 		echo "	fdt /gts3/android/gts3.dtb"
-		echo "	append $(cat android/cmdline) gsi.parts=1${WHOLE:+ gsi.disk=system}"
+		# USB is Android's (adb, MTP) and Android sleeps; GTS3_GSI_USB=net
+		# keeps gsi-init's debug network link instead (headless boards)
+		echo "	append $(cat android/cmdline) gsi.parts=1${WHOLE:+ gsi.disk=system} gsi.usb=${GTS3_GSI_USB:-android}"
 	fi
 	if [ -n "$RDTB" ]; then
 		echo
