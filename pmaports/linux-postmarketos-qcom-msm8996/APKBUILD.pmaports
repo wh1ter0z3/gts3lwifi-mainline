@@ -3,7 +3,7 @@ maintainer="Yassine Oudjana (Tooniis) <y.oudjana@protonmail.com>"
 _flavor="postmarketos-qcom-msm8996"
 pkgname=linux-$_flavor
 pkgver=7.3.1
-pkgrel=18
+pkgrel=19
 pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
 arch="aarch64"
 _carch="arm64"
@@ -282,6 +282,7 @@ source="
 	0234-Bluetooth-qca-Put-the-public-address-into-ROME-s-NVM.patch
 	0235-arm64-dts-qcom-gts3lwifi-Bluetooth-holds-the-Rome-3..patch
 	0236-arm64-dts-qcom-gts3lwifi-Wake-up-sources-in-deep-sle.patch
+	0237-usb-gadget-configfs-android_usb-class-and-USB-state-uevents.patch
 "
 builddir="$srcdir/linux-$pkgver"
 
@@ -317,7 +318,7 @@ package() {
 }
 sha512sums="
 eac8912be329999150a71257adc513e6a52891d122641943c3a440f775267705eff0b275b4d90d5298518ca638ab48fc2b7c3ee109d82f0bb34a1ac081e9c3a2  linux-7.3.1.tar.xz
-010494c1a18fcf12ee69f7f9007eed569b440cb978a9035bc9e96dc611b6ba10b67cf4f08bd90b082ef4b72e8884392fd8273e9af103ac486e0acdf67c3b728f  config-postmarketos-qcom-msm8996.aarch64
+0fab460b2dc0fc6f82d1ea38cb46bde6c9be78488781445eac63b2bf3b7a08a186cc03e866494334f19ab6e91868ec7a994fc3747a3ca5805647542573cb3a5c  config-postmarketos-qcom-msm8996.aarch64
 0c629e3643e12f339c357ea0d393d39080aef8675fe7ab3b1f49ec711f8bb9bf8d0f6ea5ab1bb2b722bb8b9480798ecf3d589ad9c4c9fe59452dc6c7fa2befda  m001-media-qcom-camss-make-ispif-reset-go-though-vfe-user-countin.patch
 af43f2310312af3b470a7989e707100097a1e1593eb3e6fcad3c542ffb4c29910e268e8be092c523d141bc9182b5a71e9b9266f015da867e62e329ad3c5fb2d4  m002-dt-bindings-media-camss-qcom-msm8996-camss-add-camss-power-d.patch
 21dbaeb5d598852ccefd6963530acdcde70a3b84caf0580a6b4dd2932e1e3e629c2bb7aa6c208864ed74fa3f2b8cc1cccabc1345ac023200ab338fd5fcdbaf66  m003-arm64-dts-qcom-msm8996-add-camss-power-domain-and-power-doma.patch
@@ -569,4 +570,5 @@ fa1447925f3397085ce9766e4e4228812da7411de59735c25195136b5374bab061f34694a90c6270
 968838a18f21f347d4bd11b8cce663b31f94c12d5e59599536c8bddfcd06bbf9481578af463dd767ea10bf0132c94c661872622da365bd1fd54f57e28954a0dd  0234-Bluetooth-qca-Put-the-public-address-into-ROME-s-NVM.patch
 d8341bbb957710ec756518296a9806fafe5d351ef8c9e34f99d73c949b525bb9e3195bcacf31f782d323a486874980e69faa1a64f105eeef51f515928834ba73  0235-arm64-dts-qcom-gts3lwifi-Bluetooth-holds-the-Rome-3..patch
 254446c7d30b3d8b123007ee8bf2584670c8392a990cd48267416d1d5bbb9bdfceb202bb0470e4ebeb1f826867edc4fa79a50c601cabcd9cd64a6c1b8427a15a  0236-arm64-dts-qcom-gts3lwifi-Wake-up-sources-in-deep-sle.patch
+f209ca349509263d9a192a18e04d900dfbf89655eeea0385aba1e06f967116f631a7aec78d64e0172a0c5196e1a0bb6a7db6b58dab02333579ace61ef5dff394  0237-usb-gadget-configfs-android_usb-class-and-USB-state-uevents.patch
 "
