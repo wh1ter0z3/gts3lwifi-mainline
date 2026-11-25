@@ -36,6 +36,18 @@ LineageOS, alone or next to Nura, with OrangeFox and lk2nd v2. A PC script
   RAM (the two `OrangeFox-mainline-*-fastboot-boot.img`) is on kernel r18 since
   the fix below.
 
+**Fixed on 2026-11-25:** OrangeFox's touch didn't match its screen (taps
+landed elsewhere, the lock screen couldn't be swiped open) and its battery
+showed "!" with no percentage. New `gts3-dualboot-test4.zip` (only its
+OrangeFox ramdisk changed) and both `OrangeFox-mainline-*-fastboot-boot.img`;
+tested on the SM-T820 with a simulated touchscreen: the lock screen opens,
+buttons respond, battery 100% and charging. Downloaded before? Get those three
+files again (and `SHA256SUMS`); `nura-root.img.xz` and the rest are unchanged.
+An installed tablet keeps its old OrangeFox; to use the fixed one now, start
+it from the PC in lk2nd's fastboot:
+`fastboot boot OrangeFox-mainline-gts3lwifi-fastboot-boot.img` (`gts3llte`
+for the SM-T825).
+
 **Fixed on 2026-11-24:** OrangeFox showed no battery level and no charger
 (three modules were missing from its ramdisk: `sm5705_fuel_gauge`,
 `i2c-gpio`, `i2c-algo-bit`). New `gts3-dualboot-test4.zip` (only its OrangeFox
