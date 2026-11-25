@@ -340,10 +340,12 @@ if ($env:GTS3_BOOT_DEV) { $envs += " BOOT_DEV=$($env:GTS3_BOOT_DEV)" }
 
 # A stage of the installer on the tablet, with a file on its stdin or none;
 # prints the installer's messages, returns adb's (the installer's) status
-function Stage($stage, $vars, $inFile) {
+function Stage($stage, $vars, $inFile, $pre, $redir, $during) {
+	# $pre, $redir: tablet shell before the installer and its stdin there;
+	# $during: run here (given the adb process) while the stage runs
 	$psi = New-Object Diagnostics.ProcessStartInfo
 	$psi.FileName = $adb
-	$psi.Arguments = "shell -T `"cd $T && env $envs GTS3_STAGE=$stage $vars sh $T/ub 3 1 $T/installer.zip`""
+	$psi.Arguments = "shell -T `"cd $T && $pre env $envs GTS3_STAGE=$stage $vars sh $T/ub 3 1 $T/installer.zip$redir`""
 	$psi.UseShellExecute = $false
 	$psi.RedirectStandardInput = $true
 	$psi.RedirectStandardOutput = $true
@@ -367,6 +369,7 @@ function Stage($stage, $vars, $inFile) {
 		Write-Progress -Activity "Sending" -Completed
 	}
 	try { $p.StandardInput.Close() } catch { }
+	if ($during) { & $during $p }
 	$p.WaitForExit()
 	foreach ($l in ($outTask.Result -split "`r?`n")) {
 		if ($l -match "^ui_print (.+)") { Say "  $($Matches[1])" }
@@ -418,7 +421,62 @@ function Send($part, $file, $fmt, $sum) {
 	# the size through the file itself (a link's own size is 0)
 	$fs = [IO.File]::OpenRead($file); $len = $fs.Length; $fs.Close()
 	Step "Sending $(Split-Path $file -Leaf) ($([int]($len / 1MB)) MiB)"
-	return (Stage "recv" "GTS3_PART=$part GTS3_FORMAT=$fmt GTS3_SHA256=$sum" $file)
+	$vars = "GTS3_PART=$part GTS3_FORMAT=$fmt GTS3_SHA256=$sum"
+	# Windows' adb drops a long stream on adb shell's stdin (issue #25), while
+	# adb push holds. So the file goes by adb push, in pieces into the tablet's
+	# RAM, at most two there at a time; feed.sh, on the tablet, hands them to
+	# the installer in order through a fifo and deletes each once it's read
+	$chunk = 128MB
+	$n = [int][Math]::Ceiling($len / $chunk)
+	$B = Join-Path ([IO.Path]::GetTempPath()) ("gts3-send-" + [Guid]::NewGuid().ToString("N"))
+	New-Item -ItemType Directory -Path $B | Out-Null
+	try {
+		$feed = "i=0`nwhile [ `$i -lt `$1 ]; do`n`twhile [ ! -f p`$i ]; do [ -f p.abort ] && exit 1; sleep 1; done`n`tcat p`$i || exit 1`n`trm -f p`$i`n`ti=`$((i+1))`ndone`n"
+		[IO.File]::WriteAllText((Join-Path $B "feed.sh"), $feed, $utf8)
+		Run $adb "shell `"cd $T && rm -f in.fifo p.abort p[0-9]*`"" | Out-Null
+		if (-not (Push (Join-Path $B "feed.sh") "$T/feed.sh")) { Say "  adb push of feed.sh failed"; return 1 }
+		# feed.sh keeps none of adb's streams, or adb would wait for it
+		$pre = "mkfifo in.fifo && (sh feed.sh $n > in.fifo 2> /dev/null < /dev/null &) &&"
+		$during = {
+			param($p)
+			$in = [IO.File]::OpenRead($file)
+			$buf = New-Object byte[] (4MB)
+			$piece = Join-Path $B "piece"
+			try {
+				for ($i = 0; $i -lt $n; $i++) {
+					# the tablet still has two pieces to read: wait
+					while ($i -ge 2 -and -not $p.HasExited -and
+						((Run $adb "shell `"[ -f $T/p$($i - 2) ] && echo waiting`"") -match "waiting")) { Start-Sleep 1 }
+					if ($p.HasExited) { return }
+					$out = [IO.File]::Create($piece)
+					$left = [Math]::Min($chunk, $len - [long]$i * $chunk)
+					while ($left -gt 0) {
+						$r = $in.Read($buf, 0, [int][Math]::Min($buf.Length, $left))
+						if ($r -le 0) { break }
+						$out.Write($buf, 0, $r); $left -= $r
+					}
+					$out.Close()
+					Write-Progress -Activity "Sending $(Split-Path $file -Leaf)" -Status "piece $($i + 1) of $n" -PercentComplete ([int](100 * $i / $n))
+					if (-not (Push $piece "$T/p$i.part")) {
+						Say "  adb push of piece $($i + 1) of $n failed"
+						Run $adb "shell `"touch $T/p.abort`"" | Out-Null
+						return
+					}
+					# whole, then visible to feed.sh
+					Run $adb "shell `"mv $T/p$i.part $T/p$i`"" | Out-Null
+				}
+			} finally {
+				$in.Close()
+				Write-Progress -Activity "Sending" -Completed
+			}
+		}
+		$rc = Stage "recv" $vars $null $pre " < in.fifo" $during
+		if ($rc -ne 0) { Run $adb "shell `"touch $T/p.abort`"" | Out-Null }
+		Run $adb "shell `"cd $T && rm -f in.fifo feed.sh p[0-9]*`"" | Out-Null
+		return $rc
+	} finally {
+		Remove-Item -Recurse -Force $B -ErrorAction SilentlyContinue
+	}
 }
 if ($root) {
 	Say "Checking $(Split-Path $root -Leaf)..."
