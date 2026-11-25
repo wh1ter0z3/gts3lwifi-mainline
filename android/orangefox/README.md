@@ -31,7 +31,8 @@ common/     BoardConfigCommon.mk, recovery.fstab (Android format: /misc),
             recovery/root (init; system/etc/twrp.flags: the partition list)
 gts3lwifi/  SM-T820: product, board config, prebuilt kernel
 gts3llte/   SM-T825: the same
-tools/      screen.sh: the recovery's screen on the PC over adb
+tools/      screen.sh: the recovery's screen on the PC over adb;
+            faketap.c: a touchscreen and keys for a board without a panel
 patches/    for the OrangeFox source tree (bootable_recovery: bootable/recovery)
 ```
 
@@ -57,7 +58,10 @@ The image: `out/target/product/gts3lwifi/OrangeFox-*.img`.
 The patches let the GUI's DRM backend (minuitwrp) drive mainline msm, for
 OrangeFox on our mainline kernel: it was written for Qualcomm's SDE driver,
 split the screen across two planes and set a zpos mainline doesn't take, so
-the kernel refused every commit and only the kernel console showed.
+the kernel refused every commit and only the kernel console showed. The third
+turns touches with the picture: TW_ROTATION rotates only what is drawn, and
+the touchscreen reports in the panel's landscape frame, so taps landed
+elsewhere and the lock screen couldn't be swiped open.
 
 An incremental build doesn't always refresh the ramdisk: libraries are
 copied into `recovery/root` only when it is made, and OrangeFox's own
@@ -82,8 +86,20 @@ After changing a library, copy it from `system/lib64` to
 There is no scrcpy in a recovery: scrcpy streams from Android's own screen
 and encoder, which a recovery doesn't run. `tools/screen.sh` takes a
 screenshot about once a second over adb (`fb2png`) and keeps it in a PNG that
-an image viewer reloads. Commands work without a screen too: `adb shell twrp
-help` (install, wipe, backup, restore, mount, print).
+an image viewer reloads; on our mainline kernel (DRM, no /dev/graphics/fb0)
+fb2png gives a black picture. The recovery's own screenshot (Power + Volume
+Down) works: it saves what is drawn to /sdcard/Fox/screenshots, in the
+panel's landscape frame (turn it 90° clockwise to see it upright). Commands
+work without a screen too: `adb shell twrp help` (install, wipe, backup,
+restore, mount, print).
+
+Touch without a panel: `tools/faketap.c` (build it static with the NDK's
+`aarch64-linux-android30-clang -static`, push it to /tmp) makes a uinput
+touchscreen with the real one's frame (2048 x 1536, the panel's) and keys:
+`faketap 1000 50 swipe 2000 767 1000 767 1800 593 shot` wakes the screen,
+swipes the lock screen open, taps Wipe and takes a screenshot. Portrait
+(x, y) is panel (y, 1535 - x). The first event after the screen has blanked
+only wakes it.
 
 ## Testing order
 

@@ -87,6 +87,10 @@ TW_DEFAULT_BRIGHTNESS := 127
 TW_SCREEN_BLANK_ON_BOOT := true
 TW_INPUT_BLACKLIST := "hbtp_vm"
 TW_CUSTOM_CPU_TEMP_PATH := "/sys/devices/virtual/thermal/thermal_zone1/temp"
+# The battery straight from the fuel gauge's sysfs: no health HAL runs in this
+# recovery (without one the GUI's battery stays blank: "!" and no percentage)
+TW_USE_LEGACY_BATTERY_SERVICES := true
+TW_CUSTOM_BATTERY_PATH := "/sys/class/power_supply/sm5705-battery"
 # No TW_EXTRA_LANGUAGES: its CJK font alone is 5 MB, and the ramdisk has a
 # hard size limit (see OrangeFox below)
 TW_INCLUDE_NTFS_3G := true

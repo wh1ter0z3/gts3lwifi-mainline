@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: psigod <psigod@example.com>
+Date: Wed, 25 Nov 2026 04:31:41 +0000
+Subject: [PATCH] minuitwrp: turn touches as TW_ROTATION turns the picture
+
+TW_ROTATION rotates only what is drawn: a touchscreen reports in the
+panel's own frame (a landscape panel in a portrait tablet: 2048 x 1536),
+so touches were scaled straight onto the turned picture and landed
+elsewhere (no swipe to unlock, buttons not hit). Scale them to the panel,
+then turn them with the inverse of ROTATION_X_DISP / ROTATION_Y_DISP.
+---
+ minuitwrp/events.cpp | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/minuitwrp/events.cpp b/minuitwrp/events.cpp
+index e497df62f..5b0f37ead 100644
+--- a/minuitwrp/events.cpp
++++ b/minuitwrp/events.cpp
+@@ -434,6 +434,8 @@ void ev_exit(void)
+     return (screen_pos >= 0 && screen_pos < screen_size);
+ }*/
+ 
++extern unsigned int gr_rotation;
++
+ static int vk_tp_to_screen(struct position *p, int *x, int *y)
+ {
+     if (p->xi.minimum == p->xi.maximum || p->yi.minimum == p->yi.maximum)
+@@ -457,9 +459,31 @@ static int vk_tp_to_screen(struct position *p, int *x, int *y)
+     int fb_height = gr_fb_width();
+ #endif
+ 
++    // TW_ROTATION turns the picture, not the touchscreen: its touches are in
++    // the panel's own frame. Scale them to the panel, then turn them as the
++    // picture is turned (the inverse of ROTATION_X_DISP / ROTATION_Y_DISP).
++    const bool turned = gr_rotation == 90 || gr_rotation == 270;
++    const int panel_w = turned ? fb_height : fb_width;
++    const int panel_h = turned ? fb_width : fb_height;
++    if (gr_rotation != 0) {
++        fb_width = panel_w;
++        fb_height = panel_h;
++    }
++
+     *x = (p->x - p->xi.minimum) * (fb_width - 1) / (p->xi.maximum - p->xi.minimum);
+     *y = (p->y - p->yi.minimum) * (fb_height - 1) / (p->yi.maximum - p->yi.minimum);
+ 
++    if (gr_rotation != 0) {
++        const int px = *x, py = *y;
++        switch (gr_rotation) {
++        case 90:  *x = py;               *y = panel_w - px - 1; break;
++        case 180: *x = panel_w - px - 1; *y = panel_h - py - 1; break;
++        case 270: *x = panel_h - py - 1; *y = px;               break;
++        }
++        fb_width = turned ? panel_h : panel_w;
++        fb_height = turned ? panel_w : panel_h;
++    }
++
+     if (*x >= 0 && *x < fb_width &&
+         *y >= 0 && *y < fb_height)
+     {
+-- 
+2.34.1
+
