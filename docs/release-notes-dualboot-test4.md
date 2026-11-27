@@ -36,6 +36,8 @@ LineageOS, alone or next to Nura, with OrangeFox and lk2nd v2. A PC script
   RAM (the two `OrangeFox-mainline-*-fastboot-boot.img`) is on kernel r18 since
   the fix below.
 
+**Fixed on 2026-11-27:** Windows: `setup.ps1` failed every time while sending Nura's root or the GSI ("the USB link dropped while sending"): Windows' adb drops a long stream, so the images now go by `adb push` in pieces (#25). It also reported "finishing failed" after a successful install (#26), and the time zone defaulted to UTC on Windows PowerShell 5.1 (#27). New `setup.ps1` (also inside `gts3-dualboot-test4.zip`, only its `pc/setup.ps1` changed) and `SHA256SUMS`. Thanks to the tester who found and fixed all three. Linux's `setup.sh` is unchanged.
+
 **Fixed on 2026-11-25:** OrangeFox's touch didn't match its screen (taps
 landed elsewhere, the lock screen couldn't be swiped open) and its battery
 showed "!" with no percentage. New `gts3-dualboot-test4.zip` (only its
