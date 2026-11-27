@@ -8,7 +8,7 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 
 **Latest:** [dual boot test 4](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test4) — one setup script, five setups (Nura, Android, LineageOS, alone or side by side), all of the internal storage, full-disk encryption, a 20 times faster install.
 
-> **Android: use LineageOS 24.** Our open Android (our open vendor plus a GSI) is a work in progress, paused, and **not ready for daily use**: on real tablets touch doesn't follow the screen's rotation, among other problems. For Android, install [LineageOS 24](docs/lineage-dual-boot-install.md), alone or next to Nura.
+> **Android: use LineageOS 24.** Our open Android (our open vendor plus a GSI) is a work in progress, paused, and **not ready for daily use**
 
 **Community:** [XDA thread](https://xdaforums.com/t/os-kernel-linux-7-3-t820-t825-mainline-linux-nura-postmarketos-plasma-android-lineageos-dual-boot.4809979/), [Telegram group](https://t.me/+J_vEuef2Xk1iZGE9) for chat, quick help and testing. Bugs and test results go to [GitHub issues](https://github.com/wh1ter0z3/gts3lwifi-mainline/issues), so they don't get lost in the chat.
 
