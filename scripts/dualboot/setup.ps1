@@ -60,7 +60,7 @@ function FindTool($name) {
 $adb = FindTool "adb"
 $fastboot = FindTool "fastboot"
 # A native tool's output, stderr included, as text (fastboot prints to
-# stderr); its status in $script:Rc. The argument line goes to the tool as
+# stderr); its status in $script:Rc (names ignore case: no other script variable may be $rc). The argument line goes to the tool as
 # it is: adb shell gets one quoted argument, run by the tablet's shell.
 $script:Rc = 0
 function Run($exe, $argline) {
@@ -409,9 +409,9 @@ if ($fde) {
 	Run $adb "shell `"chmod 600 $T/fde`"" | Out-Null
 	$lvars += " GTS3_FDE_KEY=$T/fde"
 }
-$rc = Stage "layout" $lvars $null
+$stageRc = Stage "layout" $lvars $null
 Run $adb "shell `"rm -f $T/fde`"" | Out-Null
-if ($rc -ne 0) { Die "the layout failed (see above)" }
+if ($stageRc -ne 0) { Die "the layout failed (see above)" }
 
 function Sha($f) { (Get-FileHash -Algorithm SHA256 -Path $f).Hash.ToLower() }
 function Send($part, $file, $fmt, $sum) {
@@ -444,10 +444,10 @@ if ($root) {
 	if (-not (Push $A "$T/answers")) { Die "adb push of the settings" }
 	$fvars = "GTS3_ANSWERS=$T/answers GTS3_UTC=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
 }
-$rc = Stage "finish" $fvars $null
+$stageRc = Stage "finish" $fvars $null
 Run $adb "shell `"rm -rf $T/answers`"" | Out-Null
 PullSaved "gts3-recovery-before-*.img.gz" "The recovery partition as it was"
-if ($rc -ne 0) { Die "finishing failed (see above)" }
+if ($stageRc -ne 0) { Die "finishing failed (see above)" }
 
 Step "Done"
 if ($Lineage) {
