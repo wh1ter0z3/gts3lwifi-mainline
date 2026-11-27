@@ -8,6 +8,8 @@ Mainline Linux / postmarketOS on the Galaxy Tab S3. One build runs on both model
 
 **Latest:** [dual boot test 4](https://github.com/wh1ter0z3/gts3lwifi-mainline/releases/tag/dualboot-test4) — one setup script, five setups (Nura, Android, LineageOS, alone or side by side), all of the internal storage, full-disk encryption, a 20 times faster install.
 
+> **Android: use LineageOS 24.** Our open Android (our open vendor plus a GSI) is a work in progress, paused, and **not ready for daily use**: on real tablets touch doesn't follow the screen's rotation, among other problems. For Android, install [LineageOS 24](docs/lineage-dual-boot-install.md), alone or next to Nura.
+
 **Community:** [XDA thread](https://xdaforums.com/t/os-kernel-linux-7-3-t820-t825-mainline-linux-nura-postmarketos-plasma-android-lineageos-dual-boot.4809979/), [Telegram group](https://t.me/+J_vEuef2Xk1iZGE9) for chat, quick help and testing. Bugs and test results go to [GitHub issues](https://github.com/wh1ter0z3/gts3lwifi-mainline/issues), so they don't get lost in the chat.
 
 - SoC: Qualcomm APQ8096 (SM-T820) / MSM8996 (SM-T825), Snapdragon 820; PMICs PM8994 + PM8004
@@ -38,9 +40,9 @@ Both Androids keep Nura, so the choice is only which Android:
 | Hardware | GPU, hardware video, audio, Wi-Fi, Bluetooth, sensors, cameras, GPS; **tested on a board without a screen**, so the display is unproven | a finished ROM developed on a working tablet, so its display and hardware are known to work; only the dual boot part is new |
 | Switching | `gts3-boot` from either system, or lk2nd's menu | lk2nd's menu through the recovery path |
 
-Take LineageOS 24 if you want an Android to use every day, our open
-Android if you want the open vendor, the newest Android, or the same kernel
-as Nura.
+**Take LineageOS 24.** Our open Android is unfinished and its work is paused:
+on real tablets touch doesn't follow the screen's rotation, among other
+problems. Try it only to test the open vendor, not as an Android to use.
 
 ## Models
 
