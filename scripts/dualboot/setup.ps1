@@ -186,6 +186,22 @@ if ($root) {
 		if ($id -match "^[A-Za-z_]+/[A-Za-z_/+-]+$") { $tz = $id }	# already IANA (not Windows)
 		elseif ([TimeZoneInfo]::TryConvertWindowsIdToIanaId($id, [ref]$iana)) { $tz = $iana }
 	} catch { }
+	# Windows PowerShell 5.1 (.NET Framework): Windows' own ICU (Windows 10 1903+)
+	if (-not $tz) {
+		try {
+			Add-Type -Namespace Gts3 -Name Icu -MemberDefinition @'
+[DllImport("icu.dll", CharSet = CharSet.Unicode)]
+public static extern int ucal_getTimeZoneIDForWindowsID(string winid, int len, [MarshalAs(UnmanagedType.LPStr)] string region, System.Text.StringBuilder id, int cap, ref int status);
+'@
+			$sb = New-Object Text.StringBuilder 64; $st = 0
+			$n = [Gts3.Icu]::ucal_getTimeZoneIDForWindowsID([TimeZoneInfo]::Local.Id, -1, $null, $sb, 64, [ref]$st)
+			if ($st -le 0 -and $n -gt 0) { $tz = $sb.ToString().Substring(0, $n) }
+			# ICU keeps some old names: today's
+			$old = @{ "Asia/Calcutta" = "Asia/Kolkata"; "Asia/Katmandu" = "Asia/Kathmandu"; "Asia/Saigon" = "Asia/Ho_Chi_Minh"
+				"Asia/Rangoon" = "Asia/Yangon"; "Atlantic/Faeroe" = "Atlantic/Faroe"; "Europe/Kiev" = "Europe/Kyiv"; "America/Godthab" = "America/Nuuk" }
+			if ($old.ContainsKey($tz)) { $tz = $old[$tz] }
+		} catch { $tz = "" }
+	}
 	if (-not $tz) { Say "  Time zone as Region/City, e.g. Asia/Kolkata, Europe/Berlin, America/New_York" }
 	Put "timezone" (Ask "Time zone" $(if ($tz) { $tz } else { "UTC" }))
 	$c = Get-Culture
