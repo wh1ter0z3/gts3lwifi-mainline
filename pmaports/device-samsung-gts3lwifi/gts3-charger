@@ -4,7 +4,7 @@
 When plugging in the charger switches the tablet on, S-Boot starts the boot
 image with androidboot.mode=charger and stock Android only charges: no
 system, a battery on the screen, and holding the power key starts Android.
-lk2nd passes the mode on and gts3-charger-generator boots to
+lk2nd passes that on as lk2nd.mode=charger and gts3-charger-generator boots to
 gts3-charger.target, the basic system only, so the battery charges instead of
 draining while the desktop starts (on a 500 mA port it drained for 20 s, and
 with an empty battery UPower powered the tablet off on every boot).

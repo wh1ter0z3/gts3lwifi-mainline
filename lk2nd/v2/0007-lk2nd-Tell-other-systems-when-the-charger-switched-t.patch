@@ -1,7 +1,8 @@
-From c39bbf246b5ec2244edca9515533b4d72c7f94d9 Mon Sep 17 00:00:00 2001
+From 741d966546907629820636d269570ae5669d47bc Mon Sep 17 00:00:00 2001
 From: psigod <psigod@example.com>
 Date: Sat, 28 Nov 2026 10:38:06 +0530
-Subject: [PATCH] lk2nd: Pass on the charging-only boot mode to other systems
+Subject: [PATCH] lk2nd: Tell other systems when the charger switched the
+ device on
 
 When the charger switches a Samsung Galaxy Tab S3 on, S-Boot starts the boot
 image with androidboot.mode=charger, and stock Android then only charges
@@ -9,15 +10,16 @@ image with androidboot.mode=charger, and stock Android then only charges
 Android boot images, so a Linux started from an extlinux label booted fully
 and, with an empty battery on a 500 mA port, drained it during the boot.
 
-Pass on androidboot.mode=charger alone to the other boots, so they can do the
-same as the stock firmware.
+Add lk2nd.mode=charger to the other boots, so they can do the same as the
+stock firmware. Not androidboot.mode=charger: a recovery or Android that an
+extlinux label starts would then run only its charger mode.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  app/aboot/aboot.c            |  4 ++++
- lk2nd/device/device.c        | 22 ++++++++++++++++++++++
+ lk2nd/device/device.c        | 24 ++++++++++++++++++++++++
  lk2nd/include/lk2nd/device.h |  1 +
- 3 files changed, 27 insertions(+)
+ 3 files changed, 29 insertions(+)
 
 diff --git a/app/aboot/aboot.c b/app/aboot/aboot.c
 index b44a5c26d..91e4496ce 100644
@@ -37,7 +39,7 @@ index b44a5c26d..91e4496ce 100644
  	return lk2nd_device_update_cmdline(cmdline, boot_type);
  #else
 diff --git a/lk2nd/device/device.c b/lk2nd/device/device.c
-index b5611b0d0..c66fdc672 100644
+index b5611b0d0..19bcc0e5f 100644
 --- a/lk2nd/device/device.c
 +++ b/lk2nd/device/device.c
 @@ -10,6 +10,7 @@
@@ -48,14 +50,16 @@ index b5611b0d0..c66fdc672 100644
  #include <lk2nd/util/lkfdt.h>
  
  #include "device.h"
-@@ -226,6 +227,27 @@ unsigned char *lk2nd_device_update_cmdline(const char *cmdline, enum boot_type b
+@@ -226,6 +227,29 @@ unsigned char *lk2nd_device_update_cmdline(const char *cmdline, enum boot_type b
  	return update_cmdline(cmdline);
  }
  
 +/*
 + * The original bootloader starts Android in its charging-only mode when the
 + * charger switched the device on, with androidboot.mode=charger. Other
-+ * systems get only their own cmdline: pass this on, so they can do the same.
++ * systems get only their own cmdline: tell them as lk2nd.mode=charger, so
++ * they can do the same. Not as androidboot.mode: a recovery or Android that
++ * an extlinux label starts would then only run its charger mode.
 + */
 +unsigned char *lk2nd_device_update_cmdline_other(const char *cmdline)
 +{
@@ -66,8 +70,8 @@ index b5611b0d0..c66fdc672 100644
 +	    lk2nd_cmdline_scan_arg(lk2nd_dev.cmdline, "androidboot.mode",
 +				   mode, sizeof(mode)) &&
 +	    !strcmp(mode, "charger")) {
-+		dprintf(INFO, "Started by the charger: passing on androidboot.mode=charger\n");
-+		return concat_cmdline(cmdline, "androidboot.mode=charger");
++		dprintf(INFO, "Started by the charger: lk2nd.mode=charger\n");
++		return concat_cmdline(cmdline, "lk2nd.mode=charger");
 +	}
 +#endif
 +	return (unsigned char *)strdup(cmdline);

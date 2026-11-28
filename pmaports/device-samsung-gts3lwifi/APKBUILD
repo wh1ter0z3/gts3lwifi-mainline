@@ -3,7 +3,7 @@ maintainer="psigod <psigod@example.com>"
 pkgname=device-samsung-gts3lwifi
 pkgdesc="Samsung Galaxy Tab S3 (SM-T820, SM-T825)"
 pkgver=1
-pkgrel=29
+pkgrel=30
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -138,7 +138,7 @@ package() {
 		"$pkgdir"/usr/lib/systemd/system/graphical.target.wants/gts3-greeter-sleep.service
 
 	# Switched on by the charger: only charge, like Samsung's lpm (see
-	# gts3-charger); lk2nd passes S-Boot's androidboot.mode=charger on
+	# gts3-charger); lk2nd passes S-Boot's charger mode on as lk2nd.mode=charger
 	install -Dm755 "$srcdir"/gts3-charger "$pkgdir"/usr/sbin/gts3-charger
 	install -Dm644 "$srcdir"/gts3-charger.service \
 		"$pkgdir"/usr/lib/systemd/system/gts3-charger.service
@@ -282,8 +282,8 @@ fab0831901d23b438af4802b00979f4b7e878c7bada3b0cdb91dc45e4485cd198a1f57d2a9c8b3b1
 a5d88075058cb30187f53b742c39dc9bcaba8c218e2769d6d10e247f6041c7b4ea815f10e3682c779c412bef8082ce6091a918fb58c53f1d232682deb749f8d5  52-gts3-speaker.conf
 34c5116027fd326921695d8255dab47bab219a9214e6566fcb0d985626786c59367641b9812fe391c0611759ae9f18abed0a3250f814e689305a3d9a6c97c469  gts3-greeter-sleep
 a508a5a5384d9b48b68b5fc171030635166c7fee2cb84aba107cb445c98ae6b6c44514c67ae1bfe85ead13097ccf100cbe66794fa16a30e6b383158efb6ebfec  gts3-greeter-sleep.service
-078f44c56d96814c1bf2cd04172c2c32a07569a6b7466caec23dffc502a16d2fcbe953984d828bd1886772457fd49eb889d1771d875d7b34ff19e148067d0f41  gts3-charger
+c5bfb1a8fb9296aaf188edcfb991ebf1474518f0b1bc0d8ea3ca244ccec3300de5454f88ddc46ad6e2d08c7f3245ea477b71342600d11882cda23fd4ff6d9aa5  gts3-charger
 6408434d43637026c13882d3e4182417e1567440fa4237020fd6e69cd2b671685ffad4b977dd89026d276f088e9f8505abbfbbe12bf1a5c8c8fbea4cf6a2c5ad  gts3-charger.service
 1139517b4c1e592a20e0bae165a9afc5aefff374e60f115d9d42d435773d1881a22236d2016c56d54924b5d8141681e23bd92fabc3133fc91c96aefb82cf1dc9  gts3-charger.target
-7b30dd5e1f918dbf27c67ae3f9b11de8b0eb151d40557381095f8f72169c1d8531d734c43194fabc37684e5806e55c3fab150e77a86b60ac6b7fa4d77e117c28  gts3-charger-generator
+f76b26e98d12d1517bca87725633a19c9b2e3bc892732525ab4da3b4b3f398ef7e4988e500fa9fb0f0b2d8f3e6fc5dc0f03a595ae18ac77474a4d69e992d5042  gts3-charger-generator
 "

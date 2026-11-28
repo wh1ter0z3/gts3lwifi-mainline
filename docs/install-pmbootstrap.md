@@ -69,7 +69,7 @@ mv "$P/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD.pmaports" "$P/dev
 rm "$P/device/testing/linux-postmarketos-qcom-msm8996/APKBUILD.diff"
 # our versions of these replace pmaports' own, wherever pmaports keeps them;
 # ocellus (the camera app) isn't in pmaports at all: it goes to temp/
-for p in kwin libcamera iio-sensor-proxy gnss-share ocellus; do
+for p in kwin libcamera iio-sensor-proxy gnss-share ocellus upower; do
   d=$(dirname "$(find "$P" -path "*/$p/APKBUILD" | head -1)")
   [ "$d" = . ] && d="$P/temp/$p"
   rm -rf "$d" && mkdir -p "$(dirname "$d")" && cp -r "$R/$p" "$d"
@@ -77,7 +77,9 @@ done
 ```
 
 `kwin` here is postmarketOS's systemd KWin with our rotation fixes; it must replace the
-one in `extra-repos/systemd/kwin`, which the loop finds.
+one in `extra-repos/systemd/kwin`, which the loop finds. `upower` (likewise in
+`extra-repos/systemd`) keeps a charging battery charging when its current dips below
+zero, as Android shows it ([battery](battery.md)).
 
 ## 3. Configure
 
@@ -96,7 +98,7 @@ iio-sensor-proxy, ocellus) are built for the PC, and `pmbootstrap install` then 
 postmarketOS's own builds and fails (`breaks: device-samsung-gts3lwifi-gnss`, issue #19):
 
 ```sh
-pmbootstrap build --arch aarch64 linux-postmarketos-qcom-msm8996 device-samsung-gts3lwifi kwin libcamera iio-sensor-proxy gnss-share ocellus
+pmbootstrap build --arch aarch64 linux-postmarketos-qcom-msm8996 device-samsung-gts3lwifi kwin libcamera iio-sensor-proxy gnss-share ocellus upower
 ```
 
 `kwin` is for Plasma only: leave it out for another user interface (GNOME works too), and

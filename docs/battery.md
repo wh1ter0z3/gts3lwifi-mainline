@@ -379,8 +379,10 @@ Stock, read from the firmware (S-Boot in the aboot partition, Samsung's
   powers off.
 
 We do the same. lk2nd passes the original cmdline to Android boot images
-only; its patch 0007 ([lk2nd/v2](../lk2nd/v2)) passes on
-`androidboot.mode=charger` alone to the extlinux labels. Then
+only; its patch 0007 ([lk2nd/v2](../lk2nd/v2)) tells the extlinux labels with
+`lk2nd.mode=charger`, a name Android's init ignores (with
+`androidboot.mode=charger` an OrangeFox or Android label would only run its
+charger mode, as init then skips `late-init`). Then
 `gts3-charger-generator` (device package) boots `gts3-charger.target`, the
 basic system without the desktop, network or UPower, and `gts3-charger`
 shows "Charging NN% - hold the power key to start" on the boot splash. The

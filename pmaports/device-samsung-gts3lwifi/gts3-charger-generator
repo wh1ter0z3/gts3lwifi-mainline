@@ -1,6 +1,6 @@
 #!/bin/sh
 # Started by the charger alone: boot to the charging screen. S-Boot starts the
 # boot image with androidboot.mode=charger when plugging in switched the
-# tablet on, and lk2nd passes that on (see gts3-charger).
-grep -qw 'androidboot.mode=charger' /proc/cmdline || exit 0
+# tablet on, and lk2nd tells us with lk2nd.mode=charger (see gts3-charger).
+grep -qw 'lk2nd.mode=charger' /proc/cmdline || exit 0
 ln -sf /usr/lib/systemd/system/gts3-charger.target "$2/default.target"
