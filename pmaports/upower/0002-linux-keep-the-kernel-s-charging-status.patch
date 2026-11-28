@@ -1,0 +1,30 @@
+From: psigod <psigod@example.com>
+Date: Sat, 28 Nov 2026 21:00:00 +0530
+Subject: [PATCH] linux: keep the kernel's charging status
+
+A negative current_now turned a charging battery into a discharging one.
+On a tablet booting from a 500 mA USB port the battery drains for about
+20 s while the system starts, so with an empty battery UPower took the
+critical action on every boot. Android shows the charger's status there;
+do the same and keep the guess for the other states.
+---
+--- a/src/linux/up-device-supply-battery.c
++++ b/src/linux/up-device-supply-battery.c
+@@ -519,10 +519,16 @@
+ 	/* For some battery solutions, for example axp20x-battery, the kernel reports
+ 	 * status = charging but the battery actually discharges when connecting a
+ 	 * charger. Upower reports the battery is "discharging" when current_now is
+-	 * found and is a negative value as long as the battery isn't fully charged.*/
++	 * found and is a negative value as long as the battery isn't fully charged.
++	 *
++	 * Not when the kernel says charging: like Android, show what the charger
++	 * does. A system that draws more than a weak charger gives (booting from
++	 * a 500 mA port) drains the battery for a while, and taking that as
++	 * discharging powered an empty tablet off on every boot.*/
+ 	values.state = up_device_supply_get_state (native);
+ 
+ 	if (values.state != UP_DEVICE_STATE_FULLY_CHARGED &&
++	    values.state != UP_DEVICE_STATE_CHARGING &&
+ 	    g_udev_device_get_sysfs_attr_as_double_uncached (native, "current_now") < 0.0)
+ 		values.state = UP_DEVICE_STATE_DISCHARGING;
+ 

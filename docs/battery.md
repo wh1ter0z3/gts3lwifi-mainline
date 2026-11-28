@@ -396,6 +396,16 @@ minutes). Kernel patch 0239 helps too: the gauge tells user space when the
 current crosses zero (every 2 s on a charger), so UPower sees charging again
 within a second or two instead of at its own 30 s poll.
 
+Stock reports the raw current too (Samsung's sm5705_fuelgauge.c, negative
+while the load is above what the charger gives), but Android never takes
+the battery's state from it: the status comes from the charger (sec_battery),
+and it powers off for a low battery only without a charger. UPower turned a
+negative current into discharging even when the kernel said charging (a
+workaround for chargers like axp20x that misreport), so near full or at boot
+a dip below zero showed "discharging". Our upower fork (pmaports/upower,
+pmOS extra-repos/systemd/upower plus 0002) keeps the kernel's charging status,
+as Android shows it; the guess stays for the other states.
+
 Tested on the SM-T820 (2026-11-28, lk2nd 0007 from RAM): S-Boot passed the
 mode on each cable start, the charging screen charged 79 -> 83% in 32 min on
 the laptop port, holding the key started the desktop, and unplugging
