@@ -361,6 +361,49 @@ by about 235 mA at 180 mA), and USB plugged in while lit (mode 0x06 ->
 0x05, LED stays on). The 1.2 A camera flash strobe is not used; mainline
 has no camera driver for this tablet.
 
+## Switched on by the charger: the charging screen (like stock)
+
+Stock, read from the firmware (S-Boot in the aboot partition, Samsung's
+`/system/bin/lpm`):
+
+- S-Boot's `check_low_battery`, at every start: at 3449 mV or less with no
+  cable (and no reboot or factory jig) it powers off; with a cable it stays
+  in the bootloader and charges, a second at a time, until the battery is
+  above 3499 mV, and powers off if the cable is pulled meanwhile. This runs
+  before lk2nd, so it already applies to us.
+- When plugging in switched the tablet on, S-Boot starts the boot image with
+  `androidboot.mode=charger` (and `charging_mode=0x3030`); Android then runs
+  only `lpm`: a battery on the screen, the screen dark after a while, a
+  short press of the power key lights it, holding the key boots Android
+  (`is_bootable()` checks the battery health, not its level), unplugging
+  powers off.
+
+We do the same. lk2nd passes the original cmdline to Android boot images
+only; its patch 0007 ([lk2nd/v2](../lk2nd/v2)) passes on
+`androidboot.mode=charger` alone to the extlinux labels. Then
+`gts3-charger-generator` (device package) boots `gts3-charger.target`, the
+basic system without the desktop, network or UPower, and `gts3-charger`
+shows "Charging NN% - hold the power key to start" on the boot splash. The
+screen goes dark after 20 s and a press lights it; holding the power key
+1.5 s continues to the full system (`graphical.target`, about 4 s);
+unplugging switches the tablet off after 3 s.
+
+Why: on a 500 mA USB port the battery drains for about 20 s while the
+desktop starts (-1.2 A at worst, measured), and UPower takes a negative
+current as discharging, so with an empty battery it powered the tablet off
+on every boot, and the charger switched it on again (four boots in three
+minutes). Kernel patch 0239 helps too: the gauge tells user space when the
+current crosses zero (every 2 s on a charger), so UPower sees charging again
+within a second or two instead of at its own 30 s poll.
+
+Tested on the SM-T820 (2026-11-28, lk2nd 0007 from RAM): S-Boot passed the
+mode on each cable start, the charging screen charged 79 -> 83% in 32 min on
+the laptop port, holding the key started the desktop, and unplugging
+switched the tablet off. The board has no panel, and there plymouth's
+display stalls ("pp done time out"): the screen and splash are written in
+the background so the power key is never missed (it was, in the first
+test). Not tested with a screen yet.
+
 ## Fuel gauge registers
 
 All registers are 16 bit, read with an SMBus word read (low byte first).

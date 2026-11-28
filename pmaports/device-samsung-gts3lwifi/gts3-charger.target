@@ -1,0 +1,6 @@
+[Unit]
+Description=Charging screen (the charger switched the tablet on)
+Requires=basic.target
+Wants=gts3-charger.service
+After=basic.target
+AllowIsolate=yes

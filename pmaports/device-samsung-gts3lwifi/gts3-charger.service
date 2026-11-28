@@ -1,0 +1,5 @@
+[Unit]
+Description=Charging screen: battery level, power key starts the system
+
+[Service]
+ExecStart=/usr/sbin/gts3-charger

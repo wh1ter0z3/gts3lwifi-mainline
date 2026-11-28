@@ -9,7 +9,7 @@ index 601fa9f44e..c3fab3909a 100644
 -pkgver=6.19.5
 -pkgrel=0
 +pkgver=7.3.1
-+pkgrel=20
++pkgrel=21
  pkgdesc="Kernel close to mainline with extra patches for Qualcomm MSM8996 devices"
  arch="aarch64"
  _carch="arm64"
@@ -18,7 +18,7 @@ index 601fa9f44e..c3fab3909a 100644
  license="GPL-2.0-only"
  options="!strip !check !tracedeps
  	pmb:cross-native
-@@ -28,16 +28,273 @@ makedepends="
+@@ -28,16 +28,274 @@ makedepends="
  "
  
  # Source
@@ -280,6 +280,7 @@ index 601fa9f44e..c3fab3909a 100644
 +	0236-arm64-dts-qcom-gts3lwifi-Wake-up-sources-in-deep-sle.patch
 +	0237-usb-gadget-configfs-android_usb-class-and-USB-state-uevents.patch
 +	0238-selinux-don-t-check-firmware-loads.patch
++	0239-power-supply-sm5705-fuel-gauge-report-draining-changes.patch
  "
 -builddir="$srcdir/linux-$_tag"
 +builddir="$srcdir/linux-$pkgver"
@@ -295,7 +296,7 @@ index 601fa9f44e..c3fab3909a 100644
  }
  
  build() {
-@@ -61,6 +318,259 @@ package() {
+@@ -61,6 +319,260 @@ package() {
  		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
  }
  sha512sums="
@@ -556,4 +557,5 @@ index 601fa9f44e..c3fab3909a 100644
 +254446c7d30b3d8b123007ee8bf2584670c8392a990cd48267416d1d5bbb9bdfceb202bb0470e4ebeb1f826867edc4fa79a50c601cabcd9cd64a6c1b8427a15a  0236-arm64-dts-qcom-gts3lwifi-Wake-up-sources-in-deep-sle.patch
 +f209ca349509263d9a192a18e04d900dfbf89655eeea0385aba1e06f967116f631a7aec78d64e0172a0c5196e1a0bb6a7db6b58dab02333579ace61ef5dff394  0237-usb-gadget-configfs-android_usb-class-and-USB-state-uevents.patch
 +4504932a4a7f6f2cca57db5a020e44bc94a77f6f7d589b0b31d40ac117c6c95cdb3876b91ac610b70736f6b9c8e92bcd0ccf1fec2d477e1107184bc69f390484  0238-selinux-don-t-check-firmware-loads.patch
++0ec34141cb88154250d544e455c0bd97f118a6ac8827d1aa32aba23731ad76c50e2f143a091af00a5086fc2d35f020fce1e96005ecbb59e5b61d995695c4f0b7  0239-power-supply-sm5705-fuel-gauge-report-draining-changes.patch
  "

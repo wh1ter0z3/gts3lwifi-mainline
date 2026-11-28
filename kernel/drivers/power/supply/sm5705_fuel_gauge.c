@@ -38,6 +38,8 @@
 /* |current| below this counts as idle when guessing the status */
 #define SM5705_IDLE_CURRENT_UA		20000
 #define SM5705_POLL_INTERVAL		(30 * HZ)
+/* with a charger: well inside UPower's 20 s before its critical action */
+#define SM5705_CHARGER_POLL_INTERVAL	(2 * HZ)
 
 struct sm5705_fg {
 	struct i2c_client *client;
@@ -45,6 +47,7 @@ struct sm5705_fg {
 	struct delayed_work work;
 	int last_capacity;
 	int last_status;
+	bool last_draining;
 	struct iio_channel *therm;
 	s32 *therm_table;	/* pairs of millidegrees and ADC code, code rising */
 	int therm_points;
@@ -210,20 +213,45 @@ static const struct power_supply_desc sm5705_fg_desc = {
 	.external_power_changed = power_supply_changed,
 };
 
-/* The alert interrupt is not used: poll and notify user space */
+/*
+ * The alert interrupt is not used: poll and notify user space.
+ *
+ * UPower takes a negative current as discharging even when the status says
+ * charging, and at its critical level it powers off 20 s after it saw that.
+ * While the system boots from a 500 mA port the battery does drain for a
+ * while, so with an empty battery the tablet powered off on every boot.
+ * With a charger, poll often and say when the battery starts or stops
+ * draining, so the critical action is cancelled once the load drops.
+ */
 static void sm5705_fg_work(struct work_struct *work)
 {
 	struct sm5705_fg *fg = container_of(work, struct sm5705_fg, work.work);
-	int cap, status;
+	int cap, status, curr;
+	bool draining, changed = false;
 
 	if (!sm5705_fg_capacity(fg, &cap) && !sm5705_fg_status(fg, &status) &&
 	    (cap != fg->last_capacity || status != fg->last_status)) {
 		fg->last_capacity = cap;
 		fg->last_status = status;
-		power_supply_changed(fg->psy);
+		changed = true;
 	}
 
-	schedule_delayed_work(&fg->work, SM5705_POLL_INTERVAL);
+	/* a few mA either way near idle shouldn't flip the state */
+	if (!sm5705_fg_current(fg, &curr)) {
+		draining = curr < 0 && (fg->last_draining ||
+					curr < -SM5705_IDLE_CURRENT_UA);
+		if (draining != fg->last_draining) {
+			fg->last_draining = draining;
+			changed = true;
+		}
+	}
+
+	if (changed)
+		power_supply_changed(fg->psy);
+
+	schedule_delayed_work(&fg->work,
+			      fg->last_status == POWER_SUPPLY_STATUS_DISCHARGING ?
+			      SM5705_POLL_INTERVAL : SM5705_CHARGER_POLL_INTERVAL);
 }
 
 static void sm5705_fg_cancel_work(void *data)

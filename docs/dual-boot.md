@@ -68,6 +68,7 @@ and add the switching:
 | 0004 | USB through the MUIC at high speed only, as in v1 |
 | 0005 | 70 MiB boot window for msm8996, 0x80000000 to 0x84600000. Linux reserves nothing below 0x84700000 here, and lk2nd maps 88 MiB from the start of DDR |
 | 0006 | Labels in the menu, and `fastboot oem boot-label` |
+| 0007 | Pass on `androidboot.mode=charger` (switched on by the charger) to extlinux labels, for the charging screen ([battery](battery.md#switched-on-by-the-charger-the-charging-screen-like-stock)). Tested from RAM, not in the test4 release |
 
 Upstream lk2nd also places the DTB and initramfs after the kernel instead
 of at fixed offsets.

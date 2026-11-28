@@ -90,7 +90,7 @@ Works = tested on hardware. Details and test notes are in `docs/`.
 | LTE modem, SIM (SM-T825) | WIP | its stock LTE modem image fits the memory layout both models share; branch `t825-modem` boots it, untested. SIM, registration and SMS should work over QMI/ModemManager; no mobile data: the modem's data path (IPA v2.5) has no mainline driver ([lte](https://github.com/wh1ter0z3/gts3lwifi-mainline/blob/t825-modem/docs/lte.md)) |
 | **Power** | | |
 | Battery gauge | Works | [battery](docs/battery.md) |
-| Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0 |
+| Charging | Works | Samsung's 4.30 V and temperature limits, up to 2.7 A; opt-in 9 V AFC / QC 2.0; switched on by the charger, it only charges like stock, and holding the power key starts the system (needs lk2nd patch 0007) ([battery](docs/battery.md#switched-on-by-the-charger-the-charging-screen-like-stock)) |
 | Flash LED | Works | as a torch |
 | **Multimedia** | | |
 | Speakers (4), headphones, microphones, headset mic | Works | jack detection and centre button tested on the T820; the speakers sound like stock (the stock speaker processing re-created from measurements) ([audio](docs/audio.md)) |

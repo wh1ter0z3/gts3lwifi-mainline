@@ -1,0 +1,179 @@
+#!/usr/bin/python3
+"""Charging screen, like Samsung's lpm.
+
+When plugging in the charger switches the tablet on, S-Boot starts the boot
+image with androidboot.mode=charger and stock Android only charges: no
+system, a battery on the screen, and holding the power key starts Android.
+lk2nd passes the mode on and gts3-charger-generator boots to
+gts3-charger.target, the basic system only, so the battery charges instead of
+draining while the desktop starts (on a 500 mA port it drained for 20 s, and
+with an empty battery UPower powered the tablet off on every boot).
+
+As in lpm: the level shows on the boot splash and the screen goes dark after
+a while, a short press of the power key lights it, holding it starts the
+system, and unplugging switches the tablet off.
+
+The screen and the splash are handled in the background, as a write to the
+backlight can stall (it did on a board without its panel) and must not keep
+the power key from being seen; the hold time comes from the key events'
+own timestamps.
+"""
+import glob
+import os
+import select
+import struct
+import subprocess
+import threading
+import time
+
+BATTERY = "/sys/class/power_supply/sm5705-battery"
+KEY_POWER = 116
+EV_KEY = 1
+HOLD = 1.5		# s on the power key to start the system
+SCREEN_ON = 20		# s the screen stays lit
+UNPLUGGED = 3		# s without a charger before switching off
+EVENT = struct.Struct("llHHi")
+
+
+def read(path, default=""):
+	try:
+		with open(path) as f:
+			return f.read().strip()
+	except OSError:
+		return default
+
+
+def on_charger():
+	for p in glob.glob("/sys/class/power_supply/*"):
+		if read(p + "/type") != "Battery" and read(p + "/online") == "1":
+			return True
+	return False
+
+
+def background(func, *args):
+	threading.Thread(target=func, args=args, daemon=True).start()
+
+
+def splash(text):
+	try:
+		subprocess.run(["plymouth", "display-message", "--text=" + text],
+			       stderr=subprocess.DEVNULL, check=False, timeout=5)
+	except (OSError, subprocess.TimeoutExpired):
+		pass
+
+
+def message(text):
+	print(text, flush=True)
+	background(splash, text)
+
+
+class Screen:
+	"""The backlight: dark after SCREEN_ON seconds, lit by the power key."""
+
+	def __init__(self):
+		self.lights = [(p, read(p + "/brightness"))
+			       for p in glob.glob("/sys/class/backlight/*")]
+		self.until = time.monotonic() + SCREEN_ON
+		self.lit = True
+
+	def write(self, lit):
+		for p, level in self.lights:
+			try:
+				with open(p + "/brightness", "w") as f:
+					f.write(level if lit else "0")
+			except OSError:
+				pass
+
+	def set(self, lit):
+		self.lit = lit
+		background(self.write, lit)
+
+	def wake(self):
+		self.until = time.monotonic() + SCREEN_ON
+		if not self.lit:
+			self.set(True)
+
+	def tick(self):
+		if self.lit and time.monotonic() > self.until:
+			self.set(False)
+
+
+def power_key():
+	for _ in range(60):
+		for p in glob.glob("/dev/input/by-path/*pwrkey-event"):
+			return os.open(p, os.O_RDONLY | os.O_NONBLOCK)
+		time.sleep(0.5)
+	return None
+
+
+def start_system(screen):
+	screen.set(True)
+	message("Starting...")
+	subprocess.run(["systemctl", "--no-block", "isolate", "graphical.target"], check=False)
+
+
+def main():
+	for _ in range(60):
+		if os.path.exists(BATTERY + "/capacity"):
+			break
+		time.sleep(0.5)
+	screen = Screen()
+	key = power_key()
+	pressed = down = None
+	unplugged = None
+	shown = None
+	while True:
+		now = time.monotonic()
+		cap = read(BATTERY + "/capacity", "?")
+		# (the charger reports Full for a moment now and then)
+		full = read(BATTERY + "/status") == "Full" and cap == "100"
+		text = ("Charged" if full else f"Charging {cap}%") + \
+			" - hold the power key to start"
+		if text != shown:
+			message(text)
+			shown = text
+
+		if on_charger():
+			unplugged = None
+		elif unplugged is None:
+			unplugged = now
+		elif now - unplugged >= UNPLUGGED:
+			message("Charger removed: switching off")
+			subprocess.run(["systemctl", "poweroff"], check=False)
+			return
+
+		if pressed is not None and now - pressed >= HOLD:
+			start_system(screen)
+			return
+		screen.tick()
+
+		# once a second, more often while the power key is held
+		wait = 0.1 if pressed is not None else 1
+		ready = select.select([key], [], [], wait)[0] if key is not None else time.sleep(wait)
+		if not ready:
+			continue
+		try:
+			data = os.read(key, EVENT.size * 16)
+		except BlockingIOError:
+			continue
+		for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
+			sec, usec, etype, code, value = EVENT.unpack_from(data, i)
+			if etype != EV_KEY or code != KEY_POWER:
+				continue
+			stamp = sec + usec / 1e6
+			if value == 1:
+				print("power key down", flush=True)
+				pressed = time.monotonic()
+				down = stamp
+				screen.wake()
+			elif value == 0 and pressed is not None:
+				held = stamp - down
+				print(f"power key up after {held:.1f} s", flush=True)
+				pressed = None
+				if held >= HOLD:
+					start_system(screen)
+					return
+
+
+if __name__ == "__main__":
+	main()
